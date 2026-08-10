@@ -142,23 +142,48 @@ async function resolveLinks(links) {
  */
 const SHOT_MAX_PX = 20000;
 
+/* Firefox lists captureTab on the tabs namespace but only materialises it once the extension
+ * holds host permission — activeTab is enough for scripting.executeScript, which is why text
+ * capture works without it, but not for reading pixels. The grant is optional and requested
+ * from the popup, since permissions.request needs a real user gesture. */
+async function hasSiteAccess() {
+  try {
+    return await browser.permissions.contains({ origins: ["*://*/*"] });
+  } catch (e) {
+    return false;
+  }
+}
+
+// The compositor will not render an image beyond roughly 32k pixels on a side.
+const SHOT_MAX_DEVICE_PX = 32000;
+
 async function screenshot(tabId, slug) {
   if (!browser.downloads) throw new Error("no downloads permission — reload the extension");
-  if (!browser.tabs.captureTab) throw new Error("captureTab unavailable in this Firefox");
+  if (!browser.tabs.captureTab) {
+    throw new Error(await hasSiteAccess()
+      ? "captureTab still missing with site access granted — reload the extension"
+      : "needs site access: click 'Keep + screenshot' in the popup once to grant it");
+  }
 
   const [dims] = await browser.scripting.executeScript({
     target: { tabId },
     func: () => ({
       w: Math.min(document.documentElement.scrollWidth, window.innerWidth),
       h: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0),
+      dpr: window.devicePixelRatio || 1,
     }),
   });
-  const { w, h } = dims?.result || {};
+  const { w, h, dpr = 1 } = dims?.result || {};
   if (!w || !h) return null;
 
+  // Keep the display's pixel ratio for a crisp image, backing off only if that would exceed
+  // what the compositor can render.
+  const height = Math.min(h, SHOT_MAX_PX);
+  const scale = Math.min(dpr, SHOT_MAX_DEVICE_PX / height);
+
   const dataUrl = await browser.tabs.captureTab(tabId, {
-    rect: { x: 0, y: 0, width: w, height: Math.min(h, SHOT_MAX_PX) },
-    scale: 1,
+    rect: { x: 0, y: 0, width: w, height },
+    scale,
   });
 
   // A data: URL is not reliably downloadable in Firefox; a blob URL is.
@@ -171,7 +196,7 @@ async function screenshot(tabId, slug) {
     // Revoking immediately can cancel the download; give it a moment to start.
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
-  return { filename, width: w, height: Math.min(h, SHOT_MAX_PX), truncated: h > SHOT_MAX_PX };
+  return { filename, width: Math.round(w * scale), height: Math.round(height * scale), scale, truncated: h > SHOT_MAX_PX };
 }
 
 function slugFor(record, tab) {

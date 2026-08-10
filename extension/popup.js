@@ -76,7 +76,20 @@ async function keep(withShot) {
 }
 
 $("keep").onclick = () => keep(false);
-$("keep-shot").onclick = () => keep(true);
+
+/* permissions.request only works from a real user gesture, so the grant has to happen here in
+ * the popup rather than in the background where the capture runs. Returns true immediately if
+ * already granted, so this is a no-op after the first time. */
+$("keep-shot").onclick = async () => {
+  let granted = false;
+  try {
+    granted = await browser.permissions.request({ origins: ["*://*/*"] });
+  } catch (e) {
+    return say(`could not request permission: ${e.message}`, "bad");
+  }
+  if (!granted) return say("screenshots need site access — declined, text capture still works", "bad");
+  keep(true);
+};
 
 $("next").onclick = async () => {
   const res = await send({ type: "next" });
