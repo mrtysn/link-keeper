@@ -75,8 +75,14 @@ const LK = (() => {
     };
     collect(article.querySelector('div[data-testid="tweetText"]'));
     collect(article.querySelector('div[data-testid="card.wrapper"]'));
+    collect(article.querySelector(ARTICLE_BODY));
     return out;
   }
+
+  /* Long-form "Articles" reuse the tweet element for author and timestamp but put the title
+   * and body in their own nodes, and have no tweetText at all. */
+  const ARTICLE_BODY = '[data-testid="twitterArticleRichTextView"], [data-testid="longformRichTextComponent"]';
+  const ARTICLE_TITLE = '[data-testid="twitter-article-title"]';
 
   function tweet() {
     const article = primaryArticle();
@@ -93,13 +99,20 @@ const LK = (() => {
     const quotedBlock = [...article.querySelectorAll('div[role="link"]')]
       .find(d => d.querySelector('div[data-testid="User-Name"]'));
 
+    const articleTitle = txt(article.querySelector(ARTICLE_TITLE));
+    const articleBody = article.querySelector(ARTICLE_BODY);
+    const isLongform = !!(articleTitle || articleBody);
+
     return {
-      kind: "tweet",
+      kind: isLongform ? "x-article" : "tweet",
       url: permalink.split("?")[0],
       status_id: statusId(permalink) || statusId(location.pathname),
       author: { name, handle },
-      title: handle ? `${handle} on X` : "X post",
-      text: txt(article.querySelector('div[data-testid="tweetText"]')),
+      // An article has a real headline worth keeping; a plain tweet does not, so its own text
+      // carries the meaning and the title is just an identifier.
+      title: articleTitle || (handle ? `${handle} on X` : "X post"),
+      text: txt(article.querySelector('div[data-testid="tweetText"]'))
+        || (articleBody ? txt(articleBody).slice(0, 4000) : null),
       posted: timeEl?.getAttribute("datetime") || null,
       links: tweetLinks(article),
       quoted: quotedBlock && {

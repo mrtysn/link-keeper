@@ -174,12 +174,52 @@ async function captureActive(note = "") {
 
 /* --- commands ------------------------------------------------------------------- */
 
+async function queueActiveTab() {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (tab?.url) return addItems([tab.url.split("#")[0]]);
+  return { ok: false, error: "no active tab" };
+}
+
 browser.commands.onCommand.addListener(async name => {
   if (name === "capture-page") await captureActive();
   else if (name === "next-link") await openNext(1);
-  else if (name === "queue-page") {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (tab?.url) await addItems([tab.url.split("#")[0]]);
+  else if (name === "queue-page") await queueActiveTab();
+});
+
+/* --- right-click menu -----------------------------------------------------------
+ * Same actions as the popup, for when reaching for a shortcut is not what you want.
+ * "page" context covers a plain right-click; "link" lets you queue a link without
+ * visiting it, which is the one thing the keyboard cannot do.
+ */
+
+const MENU = [
+  { id: "menu-keep", title: "Keep this page", contexts: ["page", "selection", "image"] },
+  { id: "menu-next", title: "Next link in the list", contexts: ["page", "selection", "image"] },
+  { id: "menu-queue", title: "Add this page to the list", contexts: ["page", "selection", "image"] },
+  { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
+  { id: "menu-list", title: "See the whole list", contexts: ["page", "selection", "image"] },
+  { id: "menu-queue-link", title: "Add this link to Link Keeper", contexts: ["link"] },
+];
+
+function buildMenus() {
+  browser.menus.removeAll().then(() => {
+    for (const item of MENU) browser.menus.create(item);
+  });
+}
+
+browser.runtime.onInstalled.addListener(buildMenus);
+browser.runtime.onStartup.addListener(buildMenus);
+buildMenus();
+
+browser.menus.onClicked.addListener(async (info, tab) => {
+  switch (info.menuItemId) {
+    case "menu-keep": await captureActive(); break;
+    case "menu-next": await openNext(1); break;
+    case "menu-queue": await queueActiveTab(); break;
+    case "menu-list": await browser.tabs.create({ url: browser.runtime.getURL("list.html") }); break;
+    case "menu-queue-link":
+      if (info.linkUrl) await addItems([info.linkUrl.split("#")[0]]);
+      break;
   }
 });
 

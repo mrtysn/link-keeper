@@ -35,6 +35,10 @@ Three keys, and you never leave the tab you are in.
 | `Ctrl+Shift+K` | keep this page — read it and store the capture |
 | `Ctrl+Shift+U` | add the page you are on to the list |
 
+Every one of these is also a **popup button** and a **right-click menu** item, so the keyboard
+is optional. Right-clicking a *link* offers "Add this link to Link Keeper" — queueing something
+without visiting it, which the keyboard cannot do.
+
 So the loop is: `Ctrl+Shift+J`, read it, `Ctrl+Shift+K` if it is worth keeping, `Ctrl+Shift+J`
 again. Stop whenever. The list remembers where you were, across restarts.
 
@@ -90,6 +94,7 @@ nothing degrades to the generic result rather than failing the capture.
 | Site | Beyond title and description |
 |---|---|
 | x.com, twitter.com | author, handle, full tweet text, posted time, quoted tweet, media kinds, embedded links |
+| x.com Articles | the headline and the long-form body, which live in different nodes from a normal tweet and have no `tweetText` at all |
 | github.com | repo or issue, owner, description, stars, language |
 | news.ycombinator.com | the story's own outbound URL, points, submitter |
 | youtube.com | channel, description, duration |
