@@ -94,7 +94,7 @@ nothing degrades to the generic result rather than failing the capture.
 | Site | Beyond title and description |
 |---|---|
 | x.com, twitter.com | author, handle, full tweet text, posted time, quoted tweet, media kinds, embedded links |
-| x.com Articles | the headline and the long-form body, which live in different nodes from a normal tweet and have no `tweetText` at all |
+| x.com Articles | the headline and the whole long-form body with its line breaks intact, plus each code block separately. These live in different nodes from a normal tweet and have no `tweetText` at all |
 | github.com | repo or issue, owner, description, stars, language |
 | news.ycombinator.com | the story's own outbound URL, points, submitter |
 | youtube.com | channel, description, duration |
@@ -155,6 +155,9 @@ than a watcher.
   when Firefox puts it to sleep.
 - *Reset progress* returns everything you only looked at to unvisited. Kept items stay kept.
 - Clearing is irreversible and asks first. Export before you clear.
+- Article bodies are read with `innerText`, not `textContent`, so paragraph breaks and code
+  blocks survive. Plain tweets collapse whitespace, which is fine at that length.
+- Images are not captured — text only. A chart in an article is lost; its surrounding prose is not.
 - x.com's markup is read through `data-testid` attributes, the most stable handle it exposes.
   If a capture comes back thin, x.com renamed something; `fallback_text` holds the visible
   article text so the capture is still worth keeping, and the fix is one selector.

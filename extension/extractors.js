@@ -12,6 +12,12 @@
 
 const LK = (() => {
   const txt = node => (node ? node.textContent.replace(/\s+/g, " ").trim() || null : null);
+
+  /* Like txt() but keeps the rendered line structure. innerText respects block boundaries,
+   * which is the difference between a readable article and one long unbroken line — and it
+   * is the only way code blocks survive as code. */
+  const blockText = node =>
+    node ? node.innerText.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() || null : null;
   const attr = (sel, name = "content") => document.querySelector(sel)?.getAttribute(name) || null;
   const meta = name =>
     attr(`meta[property="${name}"]`) || attr(`meta[name="${name}"]`);
@@ -111,8 +117,12 @@ const LK = (() => {
       // An article has a real headline worth keeping; a plain tweet does not, so its own text
       // carries the meaning and the title is just an identifier.
       title: articleTitle || (handle ? `${handle} on X` : "X post"),
+      // A long-form body is kept whole, with its line structure, up to a bound that no real
+      // article reaches. A plain tweet is short enough that collapsing whitespace is fine.
       text: txt(article.querySelector('div[data-testid="tweetText"]'))
-        || (articleBody ? txt(articleBody).slice(0, 4000) : null),
+        || (articleBody ? blockText(articleBody)?.slice(0, 60000) : null),
+      code_blocks: [...article.querySelectorAll('[data-testid="markdown-code-block"]')]
+        .map(blockText).filter(Boolean),
       posted: timeEl?.getAttribute("datetime") || null,
       links: tweetLinks(article),
       quoted: quotedBlock && {
