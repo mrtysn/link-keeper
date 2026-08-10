@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Link Keeper",
-  "version": "1.0",
-  "description": "Capture the page you are on — title, author, body and embedded URLs — into a local JSONL log. Manual trigger only.",
+  "version": "1.1",
+  "description": "Walk a list of saved links one at a time in your own tab, capture the ones worth keeping, export the lot as a file.",
 
   "browser_specific_settings": {
     "gecko": {
@@ -11,11 +11,9 @@
     }
   },
 
-  "permissions": ["storage", "unlimitedStorage", "alarms", "tabs", "scripting", "activeTab"],
+  "permissions": ["storage", "unlimitedStorage", "tabs", "scripting", "activeTab"],
 
   "host_permissions": ["*://t.co/*"],
-
-  "optional_host_permissions": ["*://*/*"],
 
   "background": {
     "scripts": ["background.js"]
@@ -23,7 +21,7 @@
 
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Link Keeper — capture this page",
+    "default_title": "Link Keeper",
     "default_icon": "icon.svg"
   },
 
@@ -32,7 +30,15 @@
   "commands": {
     "capture-page": {
       "suggested_key": { "default": "Ctrl+Shift+K" },
-      "description": "Capture the current page"
+      "description": "Keep this page"
+    },
+    "next-link": {
+      "suggested_key": { "default": "Ctrl+Shift+J" },
+      "description": "Go to the next link in the list"
+    },
+    "queue-page": {
+      "suggested_key": { "default": "Ctrl+Shift+U" },
+      "description": "Add this page to the list"
     }
   }
 }

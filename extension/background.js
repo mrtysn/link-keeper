@@ -1,48 +1,112 @@
-/* Capture on demand, keep it in the extension, hand it over as a file when asked.
+/* A worklist of links you walk at your own pace, and a capture store you export as a file.
  *
- * Manual trigger only: a hotkey press or popup click is a user gesture, which grants
- * activeTab, which is the only host access needed to read the page you are looking at.
- * There are no content scripts — extractors.js is injected into that one tab and nowhere
- * else, so the extension has no way to see a page you did not ask about.
+ * Two lists in storage.local:
+ *   items    — the worklist. Each entry is pending, seen (opened, not kept) or kept.
+ *   captures — what you actually decided to keep, with the page data read off the DOM.
  *
- * Captures live in storage.local until you export them. Nothing is sent anywhere; the one
- * outbound request is a HEAD to t.co to find out where a shortened link actually points.
+ * Manual trigger throughout. Opening the next link navigates the tab you are in; capturing
+ * reads that tab under activeTab, which your keypress grants. There are no content scripts
+ * and no background tabs, so the extension can neither observe pages you did not ask about
+ * nor go off browsing on its own.
  *
- * MV3 background scripts are event pages that get suspended when idle, so no state lives in
- * a module variable: the capture list and the sweep cursor are both in storage.local, and an
- * alarm recovers a sweep that suspension interrupted.
+ * MV3 background scripts are event pages that get suspended when idle, so nothing lives in a
+ * module variable — every read goes to storage.
  */
-
-const PACE_MS = 2500;
-const TAB_TIMEOUT_MS = 20000;
-const TICK = "tick";
 
 /* --- store ---------------------------------------------------------------------- */
 
-async function getCaptures() {
-  const { captures } = await browser.storage.local.get("captures");
-  return Array.isArray(captures) ? captures : [];
+async function read(key, fallback) {
+  const got = await browser.storage.local.get(key);
+  return got[key] ?? fallback;
+}
+
+const getItems = () => read("items", []);
+const getCaptures = () => read("captures", []);
+const getCurrent = () => read("current", null);
+
+async function setItems(items) {
+  await browser.storage.local.set({ items });
+  await paintBadge(items);
 }
 
 async function setCaptures(captures) {
   await browser.storage.local.set({ captures });
-  await browser.action.setBadgeText({ text: captures.length ? String(captures.length) : "" });
+}
+
+/* The badge is the pending count — what is left to go through. */
+async function paintBadge(items) {
+  const pending = (items || await getItems()).filter(i => i.status === "pending").length;
+  await browser.action.setBadgeText({ text: pending ? String(pending) : "" });
   await browser.action.setBadgeBackgroundColor({ color: "#7a5cff" });
 }
 
-async function getSweep() {
-  const { sweep } = await browser.storage.local.get("sweep");
-  return sweep || null;
+/* --- worklist ------------------------------------------------------------------- */
+
+/* Same normalisation on both sides of a comparison: x.com/i/status/<id> and
+ * x.com/<handle>/status/<id> are the same post, and a trailing slash is never meaningful. */
+function keyOf(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    const status = u.pathname.match(/\/status\/(\d+)/);
+    if (/^(x|twitter)\.com$/.test(host) && status) return `status:${status[1]}`;
+    return host + u.pathname.replace(/\/$/, "") + u.search;
+  } catch (e) {
+    return String(url);
+  }
 }
 
-async function setSweep(sweep) {
-  await browser.storage.local.set({ sweep });
+async function addItems(urls, note = "") {
+  const items = await getItems();
+  const known = new Set(items.map(i => keyOf(i.url)));
+  let added = 0;
+  for (const url of urls) {
+    if (known.has(keyOf(url))) continue;
+    known.add(keyOf(url));
+    items.push({ url, status: "pending", added_at: new Date().toISOString(), note: note || undefined });
+    added++;
+  }
+  await setItems(items);
+  return { ok: true, added, skipped: urls.length - added, total: items.length };
 }
 
-/* --- extraction ----------------------------------------------------------------- */
+async function markCurrent(status) {
+  const current = await getCurrent();
+  if (!current) return;
+  const items = await getItems();
+  const item = items.find(i => keyOf(i.url) === current.key);
+  if (item && item.status !== "kept") {
+    item.status = status;
+    item[status === "kept" ? "kept_at" : "seen_at"] = new Date().toISOString();
+    await setItems(items);
+  }
+}
 
-/* Injected into the target tab. extractors.js returns null while a single-page app is
- * still hydrating, so poll briefly rather than capture an empty shell. */
+/* Open the next pending link in the tab you are in. Opening counts as seen; capturing is
+ * what upgrades it to kept. */
+async function openNext(direction = 1) {
+  const items = await getItems();
+  const pending = items.filter(i => i.status === "pending");
+  const target = direction > 0 ? pending[0] : [...items].reverse().find(i => i.status !== "pending");
+  if (!target) return { ok: false, error: "nothing left in the list" };
+
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return { ok: false, error: "no active tab" };
+
+  await browser.storage.local.set({
+    current: { key: keyOf(target.url), url: target.url, at: new Date().toISOString() },
+  });
+  if (target.status === "pending") await markCurrent("seen");
+  await browser.tabs.update(tab.id, { url: target.url });
+
+  const remaining = (await getItems()).filter(i => i.status === "pending").length;
+  return { ok: true, url: target.url, remaining };
+}
+
+/* --- capture -------------------------------------------------------------------- */
+
+/* Injected into the target tab. extractors.js returns null while a single-page app is still
+ * hydrating, so poll briefly rather than capture an empty shell. */
 async function runExtractor() {
   for (let i = 0; i < 12; i++) {
     const record = LK.extract();
@@ -50,16 +114,6 @@ async function runExtractor() {
     await new Promise(r => setTimeout(r, 250));
   }
   return { kind: "page", title: document.title || null, url: location.href, incomplete: true };
-}
-
-async function extractFrom(tabId) {
-  await browser.scripting.executeScript({ target: { tabId }, files: ["extractors.js"] });
-  const [result] = await browser.scripting.executeScript({ target: { tabId }, func: runExtractor });
-  const record = result?.result;
-  if (!record) return null;
-  record.url = (record.url || record.canonical || "").split("#")[0] || null;
-  record.captured_at = record.captured_at || new Date().toISOString();
-  return record.url ? record : null;
 }
 
 /* t.co hides the destination, and the destination is half the reason to keep a tweet. */
@@ -80,104 +134,52 @@ async function resolveLinks(links) {
   );
 }
 
-async function store(record) {
-  record.links = await resolveLinks(record.links);
-  const captures = await getCaptures();
-  const key = record.status_id || record.url;
-  // Re-capturing the same thing replaces the old copy rather than duplicating it.
-  await setCaptures([...captures.filter(r => (r.status_id || r.url) !== key), record]);
-  return { ok: true, total: (await getCaptures()).length };
-}
-
 async function captureActive(note = "") {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "no active tab" };
   if (/^(about|moz-extension|view-source):/.test(tab.url || "")) {
     return { ok: false, error: "nothing to capture on a browser page" };
   }
+
+  let record;
   try {
-    const record = await extractFrom(tab.id);
-    if (!record) return { ok: false, error: "could not read that page" };
-    if (note) record.note = note;
-    const res = await store(record);
-    return { ok: true, record, total: res.total };
+    await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["extractors.js"] });
+    const [result] = await browser.scripting.executeScript({ target: { tabId: tab.id }, func: runExtractor });
+    record = result?.result;
   } catch (e) {
     // Usually activeTab not granted for this tab — trigger again from the page itself.
     return { ok: false, error: String(e.message || e) };
   }
+  if (!record) return { ok: false, error: "could not read that page" };
+
+  record.url = (record.url || record.canonical || tab.url || "").split("#")[0];
+  record.captured_at = new Date().toISOString();
+  if (note) record.note = note;
+  record.links = await resolveLinks(record.links);
+
+  // A capture arriving while a worklist item is open is that item's verdict. The URL is
+  // matched loosely because x.com rewrites /i/status/<id> to /<handle>/status/<id> on load.
+  const current = await getCurrent();
+  if (current && (keyOf(record.url) === current.key || keyOf(tab.url || "") === current.key)) {
+    record.from_worklist = current.url;
+    await markCurrent("kept");
+  }
+
+  const captures = await getCaptures();
+  const key = keyOf(record.url);
+  await setCaptures([...captures.filter(r => keyOf(r.url) !== key), record]);
+
+  return { ok: true, record, total: (await getCaptures()).length };
 }
 
-browser.commands.onCommand.addListener(name => {
-  if (name === "capture-page") captureActive();
-});
+/* --- commands ------------------------------------------------------------------- */
 
-/* --- sweep ----------------------------------------------------------------------
- * Explicitly started from the popup over a pasted list. Each URL opens in a background
- * tab, is read, and closes. This needs host access to those origins, which the popup
- * requests first: reading a tab you are not looking at is exactly what activeTab does not
- * cover.
- */
-
-async function sweepAdvance() {
-  const sweep = await getSweep();
-  if (!sweep || sweep.stopped || sweep.done) return;
-
-  if (sweep.tabId != null) {
-    await browser.tabs.remove(sweep.tabId).catch(() => {});
-    sweep.tabId = null;
-  }
-
-  if (sweep.index >= sweep.urls.length) {
-    sweep.done = true;
-    await setSweep(sweep);
-    return;
-  }
-
-  const url = sweep.urls[sweep.index++];
-  try {
-    const tab = await browser.tabs.create({ url, active: false });
-    sweep.tabId = tab.id;
-    sweep.startedAt = Date.now();
-  } catch (e) {
-    sweep.errors.push({ url, error: String(e.message || e) });
-  }
-  await setSweep(sweep);
-}
-
-/* Driven by page-load rather than a timer, so a suspended event page cannot lose the
- * thread — onUpdated wakes it back up. */
-browser.tabs.onUpdated.addListener(async (tabId, changed) => {
-  if (changed.status !== "complete") return;
-  const sweep = await getSweep();
-  if (!sweep || sweep.stopped || sweep.done || sweep.tabId !== tabId) return;
-
-  const url = sweep.urls[sweep.index - 1];
-  try {
-    const record = await extractFrom(tabId);
-    if (record) {
-      record.via = "sweep";
-      await store(record);
-    } else {
-      sweep.errors.push({ url, error: "nothing extractable" });
-      await setSweep(sweep);
-    }
-  } catch (e) {
-    sweep.errors.push({ url, error: String(e.message || e) });
-    await setSweep(sweep);
-  }
-  setTimeout(sweepAdvance, PACE_MS);
-});
-
-/* Unstick a sweep whose tab never finished loading. */
-browser.alarms.create(TICK, { periodInMinutes: 1 });
-browser.alarms.onAlarm.addListener(async alarm => {
-  if (alarm.name !== TICK) return;
-  const sweep = await getSweep();
-  if (!sweep || sweep.stopped || sweep.done || !sweep.startedAt) return;
-  if (Date.now() - sweep.startedAt > TAB_TIMEOUT_MS) {
-    sweep.errors.push({ url: sweep.urls[sweep.index - 1], error: "timed out" });
-    await setSweep(sweep);
-    await sweepAdvance();
+browser.commands.onCommand.addListener(async name => {
+  if (name === "capture-page") await captureActive();
+  else if (name === "next-link") await openNext(1);
+  else if (name === "queue-page") {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tab?.url) await addItems([tab.url.split("#")[0]]);
   }
 });
 
@@ -185,51 +187,67 @@ browser.alarms.onAlarm.addListener(async alarm => {
 
 browser.runtime.onMessage.addListener(async msg => {
   switch (msg.type) {
-    case "capture-active":
-      return captureActive(msg.note);
-
     case "status": {
+      const items = await getItems();
       const captures = await getCaptures();
-      const sweep = await getSweep();
+      const current = await getCurrent();
+      const counts = { pending: 0, seen: 0, kept: 0 };
+      for (const i of items) counts[i.status] = (counts[i.status] || 0) + 1;
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       return {
-        total: captures.length,
-        recent: captures.slice(-5).reverse().map(r => ({
-          title: r.title, handle: r.author?.handle, url: r.url, kind: r.kind,
-          links: r.links?.length || 0,
+        counts,
+        total: items.length,
+        captures: captures.length,
+        current: current && { url: current.url, isOpen: keyOf(tab?.url || "") === current.key },
+        next: items.find(i => i.status === "pending")?.url || null,
+        upcoming: items.filter(i => i.status === "pending").slice(0, 5).map(i => i.url),
+        recent: captures.slice(-4).reverse().map(r => ({
+          title: r.title, handle: r.author?.handle, url: r.url, links: r.links?.length || 0,
         })),
-        sweep: sweep && {
-          index: sweep.index, total: sweep.urls.length,
-          errors: sweep.errors.length, done: !!sweep.done, stopped: !!sweep.stopped,
-        },
       };
     }
+
+    case "add":
+      return addItems(msg.urls, msg.note);
+
+    case "queue-active": {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.url) return { ok: false, error: "no active tab" };
+      return addItems([tab.url.split("#")[0]], msg.note);
+    }
+
+    case "next":
+      return openNext(1);
+
+    case "skip":
+      await markCurrent("seen");
+      return openNext(1);
+
+    case "capture-active":
+      return captureActive(msg.note);
 
     case "export":
       return { captures: await getCaptures() };
 
-    case "clear":
+    case "export-list":
+      return { items: await getItems() };
+
+    case "clear-captures":
       await setCaptures([]);
       return { ok: true };
 
-    case "sweep-start":
-      await setSweep({ urls: msg.urls, index: 0, tabId: null, errors: [], startedAt: 0 });
-      await sweepAdvance();
-      return { ok: true, total: msg.urls.length };
-
-    case "sweep-stop": {
-      const sweep = await getSweep();
-      if (sweep) {
-        sweep.stopped = true;
-        if (sweep.tabId != null) await browser.tabs.remove(sweep.tabId).catch(() => {});
-        sweep.tabId = null;
-        await setSweep(sweep);
-      }
+    case "clear-list":
+      await setItems([]);
+      await browser.storage.local.set({ current: null });
       return { ok: true };
-    }
 
-    case "sweep-errors": {
-      const sweep = await getSweep();
-      return { errors: sweep?.errors || [] };
+    case "reset-progress": {
+      const items = await getItems();
+      for (const i of items) {
+        if (i.status !== "kept") { i.status = "pending"; delete i.seen_at; }
+      }
+      await setItems(items);
+      return { ok: true };
     }
 
     default:
@@ -237,4 +255,4 @@ browser.runtime.onMessage.addListener(async msg => {
   }
 });
 
-getCaptures().then(setCaptures).catch(() => {});
+paintBadge().catch(() => {});

@@ -1,15 +1,17 @@
 # Link Keeper
 
-A Firefox extension that captures the page you are on — title, author, body text and any URLs
-embedded in it — and holds it until you export the lot as a file.
+A Firefox extension for working through a pile of saved links. It holds a list, sends you to
+the next one **in the tab you are already looking at**, and captures the ones worth keeping —
+title, author, body text, and any URLs embedded in the page. Export the result as a file when
+you are done.
 
 It exists for the case an export cannot solve. A saved `x.com/i/status/123` is a dead link on
 paper: no title, no author, nothing, because X shows none of that to an unauthenticated
-fetch. Your logged-in browser is the only place that URL means anything, so the capture
+fetch. Your logged-in browser is the only place that URL means anything, so the reading
 happens there.
 
-**Manual trigger only.** Nothing is captured unless you press the hotkey or click the button.
-There are no content scripts and no standing site permissions.
+**Everything is manual.** No page is read, and no link is opened, unless you press a key.
+There are no content scripts, no background tabs, and no automation of your browsing.
 
 ## Install
 
@@ -25,15 +27,35 @@ Edition or Nightly with `xpinstall.signatures.required=false`.
 
 ## Use
 
-- **`Ctrl+Shift+K`** captures the page you are looking at.
-- **The toolbar button** does the same, and lets you attach a note first.
-- **Export as file** writes `link-captures.jsonl` to your Downloads folder.
-- **Sweep** takes a list of URLs, opens each in a background tab, reads it, and closes it —
-  the bulk path for links you already have sitting in a list somewhere.
+Three keys, and you never leave the tab you are in.
 
-Captures accumulate in the extension's own storage and survive restarts. The badge shows how
-many are held. Nothing leaves your machine until you export, and the export is a plain file
-you can read, grep, or hand to a script.
+| Key | What it does |
+|---|---|
+| `Ctrl+Shift+J` | load the next link from the list in the current tab |
+| `Ctrl+Shift+K` | keep this page — read it and store the capture |
+| `Ctrl+Shift+U` | add the page you are on to the list |
+
+So the loop is: `Ctrl+Shift+J`, read it, `Ctrl+Shift+K` if it is worth keeping, `Ctrl+Shift+J`
+again. Stop whenever. The list remembers where you were, across restarts.
+
+Loading a link marks it **seen**. Keeping it marks it **kept**. Skipping is just pressing next
+without keeping — nothing to declare.
+
+The popup shows the same actions as buttons, a progress bar, what is coming next, and a box
+for attaching a note to the next thing you keep.
+
+### Filling the list
+
+- **`Ctrl+Shift+U`** or *Add the page I'm on* — queue something for later while browsing.
+- **Paste URLs**, one per line, into *Add links to the list*. Duplicates are ignored, so
+  pasting the same list twice is harmless.
+
+### Getting the data out
+
+*Export captures* writes `link-captures.jsonl` to Downloads. *Export list* writes the worklist
+with each entry's status, if you want to see what you skipped.
+
+Captures stay in the extension until you clear them, so exporting twice is fine.
 
 ## What gets extracted
 
@@ -52,8 +74,7 @@ nothing degrades to the generic result rather than failing the capture.
 Adding a site is one object in `REGISTRY`.
 
 `t.co` links are resolved to their destination in the background — the destination is usually
-the reason the tweet was worth keeping in the first place. This is the only outbound request
-the extension makes.
+the reason the tweet was worth keeping. This is the only outbound request the extension makes.
 
 ## Output
 
@@ -65,6 +86,7 @@ One JSON object per line. A tweet capture:
   "url": "https://x.com/somehandle/status/2009295329057702081",
   "source_url": "https://x.com/i/status/2009295329057702081",
   "status_id": "2009295329057702081",
+  "from_worklist": "https://x.com/i/status/2009295329057702081",
   "author": { "name": "Some One", "handle": "@somehandle" },
   "text": "A thread about a tool I built. Repo below.",
   "posted": "2026-08-09T14:50:00.000Z",
@@ -75,33 +97,34 @@ One JSON object per line. A tweet capture:
 }
 ```
 
-`source_url` is kept alongside `url` deliberately: it is what lets a capture be matched back
-to a link saved somewhere else, since `x.com/i/status/<id>` and `x.com/<handle>/status/<id>`
-are the same post under different paths. Join on `status_id`.
+`source_url` and `from_worklist` are kept alongside `url` deliberately: they are what let a
+capture be matched back to the link you originally saved, since `x.com/i/status/<id>` and
+`x.com/<handle>/status/<id>` are the same post under different paths. Join on `status_id`.
 
-JSONL rather than a JSON array so exports concatenate — `cat` two of them together and the
-result is still valid.
+JSONL rather than a JSON array so exports concatenate — `cat` two together and the result is
+still valid.
 
 ## Permissions, and why each one
 
 | Permission | Why |
 |---|---|
-| `activeTab` | read the tab you triggered on — granted per gesture, no standing access |
+| `activeTab` | read the tab you triggered on — granted per keypress, no standing access |
 | `scripting` | inject `extractors.js` into that one tab |
-| `storage`, `unlimitedStorage` | hold captures between restarts |
+| `tabs` | point the current tab at the next link |
+| `storage`, `unlimitedStorage` | hold the list and the captures between restarts |
 | `*://t.co/*` | resolve shortened links |
-| `optional_host_permissions` | requested only when you start a sweep, because reading a tab you are not looking at is outside `activeTab`. Revocable in `about:addons` |
 
-No content scripts means there is no mechanism by which the extension could observe pages you
-did not ask it about. That is the reason it is trigger-only rather than a watcher.
+No content scripts, and no host permissions beyond `t.co`. There is no mechanism by which the
+extension could read a page you did not ask about — which is why it is trigger-only rather
+than a watcher.
 
 ## Notes
 
-- The background script is an MV3 event page and is suspended when idle. The capture list and
-  the sweep cursor live in `storage.local` for that reason, and a one-minute alarm resumes a
-  sweep that suspension interrupted — a sweep can pause for up to a minute but does not lose
-  its place.
-- Clearing captures is irreversible and the popup asks first. Export before you clear.
+- The background script is an MV3 event page and is suspended when idle. The list, the
+  captures and your position all live in `storage.local` for that reason, so nothing is lost
+  when Firefox puts it to sleep.
+- *Reset progress* returns everything you only looked at to unvisited. Kept items stay kept.
+- Clearing is irreversible and asks first. Export before you clear.
 - x.com's markup is read through `data-testid` attributes, the most stable handle it exposes.
   If a capture comes back thin, x.com renamed something; `fallback_text` holds the visible
   article text so the capture is still worth keeping, and the fix is one selector.
