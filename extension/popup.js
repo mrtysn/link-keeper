@@ -60,19 +60,23 @@ async function refresh() {
   $("export").disabled = !s.captures;
 }
 
-$("keep").onclick = async () => {
-  say("reading page…");
-  const res = await send({ type: "capture-active", note: $("note").value.trim() });
+async function keep(withShot) {
+  say(withShot ? "reading page and shooting…" : "reading page…");
+  const res = await send({ type: "capture-active", note: $("note").value.trim(), withShot });
   if (res?.ok) {
     const r = res.record;
     const inner = r.links?.length ? ` (+${r.links.length} link${r.links.length > 1 ? "s" : ""})` : "";
-    say(`kept: ${label({ title: r.title, handle: r.author?.handle, url: r.url })}${inner}`.slice(0, 110), "ok");
+    const shot = r.screenshot ? " + png" : r.screenshot_error ? " (screenshot failed)" : "";
+    say(`kept: ${label({ title: r.title, handle: r.author?.handle, url: r.url })}${inner}${shot}`.slice(0, 110), "ok");
     $("note").value = "";
   } else {
     say(res?.error || "could not keep that page", "bad");
   }
   refresh();
-};
+}
+
+$("keep").onclick = () => keep(false);
+$("keep-shot").onclick = () => keep(true);
 
 $("next").onclick = async () => {
   const res = await send({ type: "next" });

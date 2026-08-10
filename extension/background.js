@@ -134,7 +134,54 @@ async function resolveLinks(links) {
   );
 }
 
-async function captureActive(note = "") {
+/* Full-page PNG beside the text, never inside it — a base64 image in the JSONL would make the
+ * log unreadable and ungreppable. captureTab is Firefox-only and, unlike Chrome's
+ * captureVisibleTab, accepts a rect larger than the viewport, so the whole article fits in one
+ * image without scroll-and-stitch. Height is clamped because very long pages exceed what the
+ * compositor will render.
+ */
+const SHOT_MAX_PX = 20000;
+
+async function screenshot(tabId, slug) {
+  const [dims] = await browser.scripting.executeScript({
+    target: { tabId },
+    func: () => ({
+      w: Math.min(document.documentElement.scrollWidth, window.innerWidth),
+      h: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0),
+    }),
+  });
+  const { w, h } = dims?.result || {};
+  if (!w || !h) return null;
+
+  const dataUrl = await browser.tabs.captureTab(tabId, {
+    rect: { x: 0, y: 0, width: w, height: Math.min(h, SHOT_MAX_PX) },
+    scale: 1,
+  });
+
+  // A data: URL is not reliably downloadable in Firefox; a blob URL is.
+  const blob = await (await fetch(dataUrl)).blob();
+  const url = URL.createObjectURL(blob);
+  const filename = `link-keeper/${slug}.png`;
+  try {
+    await browser.downloads.download({ url, filename, saveAs: false });
+  } finally {
+    // Revoking immediately can cancel the download; give it a moment to start.
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+  return { filename, width: w, height: Math.min(h, SHOT_MAX_PX), truncated: h > SHOT_MAX_PX };
+}
+
+function slugFor(record, tab) {
+  if (record.status_id) return `x-${record.status_id}`;
+  const host = (() => {
+    try { return new URL(record.url || tab.url).hostname.replace(/^www\./, ""); }
+    catch (e) { return "page"; }
+  })();
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  return `${host}-${stamp}`;
+}
+
+async function captureActive(note = "", withShot = false) {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "no active tab" };
   if (/^(about|moz-extension|view-source):/.test(tab.url || "")) {
@@ -156,6 +203,14 @@ async function captureActive(note = "") {
   record.captured_at = new Date().toISOString();
   if (note) record.note = note;
   record.links = await resolveLinks(record.links);
+
+  if (withShot) {
+    try {
+      record.screenshot = await screenshot(tab.id, slugFor(record, tab));
+    } catch (e) {
+      record.screenshot_error = String(e.message || e);
+    }
+  }
 
   // A capture arriving while a worklist item is open is that item's verdict. The URL is
   // matched loosely because x.com rewrites /i/status/<id> to /<handle>/status/<id> on load.
@@ -194,6 +249,7 @@ browser.commands.onCommand.addListener(async name => {
 
 const MENU = [
   { id: "menu-keep", title: "Keep this page", contexts: ["page", "selection", "image"] },
+  { id: "menu-shot", title: "Keep this page + screenshot", contexts: ["page", "selection", "image"] },
   { id: "menu-next", title: "Next link in the list", contexts: ["page", "selection", "image"] },
   { id: "menu-queue", title: "Add this page to the list", contexts: ["page", "selection", "image"] },
   { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
@@ -214,6 +270,7 @@ buildMenus();
 browser.menus.onClicked.addListener(async (info, tab) => {
   switch (info.menuItemId) {
     case "menu-keep": await captureActive(); break;
+    case "menu-shot": await captureActive("", true); break;
     case "menu-next": await openNext(1); break;
     case "menu-queue": await queueActiveTab(); break;
     case "menu-list": await browser.tabs.create({ url: browser.runtime.getURL("list.html") }); break;
@@ -340,7 +397,7 @@ browser.runtime.onMessage.addListener(async msg => {
       return openNext(1);
 
     case "capture-active":
-      return captureActive(msg.note);
+      return captureActive(msg.note, !!msg.withShot);
 
     case "export":
       return { captures: await getCaptures() };

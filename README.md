@@ -79,6 +79,24 @@ there attaches the capture to the right list entry.
 - **Paste URLs**, one per line, into *Add links to the list*. Duplicates are ignored, so
   pasting the same list twice is harmless.
 
+### Screenshots
+
+*Keep + screenshot* in the popup, or **Keep this page + screenshot** in the right-click menu,
+saves a full-page PNG to `~/Downloads/link-keeper/` alongside the normal capture. The capture
+records the filename, the pixel dimensions, and whether the page was too tall to fit.
+
+Text lives in the JSONL, images live beside it as files, and the two are joined by filename. A
+base64 image inlined into the log would make it unreadable and ungreppable, which defeats the
+point of keeping text in the first place.
+
+`tabs.captureTab` is Firefox-only and accepts a rect larger than the viewport, so a long
+article comes out as one tall image rather than needing scroll-and-stitch. Pages over 20,000px
+are cut off, and the capture says so with `truncated: true`.
+
+Image URLs are recorded on every capture regardless, in `images` — for x.com they are rewritten
+to `name=orig` so they point at the unresized original rather than whatever size the layout
+happened to use.
+
 ### Getting the data out
 
 *Export captures* writes `link-captures.jsonl` to Downloads. *Export list* writes the worklist
@@ -142,6 +160,8 @@ still valid.
 | `scripting` | inject `extractors.js` into that one tab |
 | `tabs` | point the current tab at the next link |
 | `storage`, `unlimitedStorage` | hold the list and the captures between restarts |
+| `menus` | the right-click actions |
+| `downloads` | write screenshot PNGs and the exported JSONL |
 | `*://t.co/*` | resolve shortened links |
 
 No content scripts, and no host permissions beyond `t.co`. There is no mechanism by which the
