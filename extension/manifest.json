@@ -29,15 +29,15 @@
 
   "commands": {
     "capture-page": {
-      "suggested_key": { "default": "Ctrl+Shift+K" },
+      "suggested_key": { "default": "Ctrl+Shift+K", "mac": "MacCtrl+Shift+K" },
       "description": "Keep this page"
     },
     "next-link": {
-      "suggested_key": { "default": "Ctrl+Shift+J" },
+      "suggested_key": { "default": "Ctrl+Shift+J", "mac": "MacCtrl+Shift+J" },
       "description": "Go to the next link in the list"
     },
     "queue-page": {
-      "suggested_key": { "default": "Ctrl+Shift+U" },
+      "suggested_key": { "default": "Ctrl+Shift+U", "mac": "MacCtrl+Shift+U" },
       "description": "Add this page to the list"
     }
   }

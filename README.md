@@ -38,6 +38,11 @@ Three keys, and you never leave the tab you are in.
 So the loop is: `Ctrl+Shift+J`, read it, `Ctrl+Shift+K` if it is worth keeping, `Ctrl+Shift+J`
 again. Stop whenever. The list remembers where you were, across restarts.
 
+On macOS these are bound with `MacCtrl`, so they are the literal **Control** key — not Command.
+`"Ctrl"` in a WebExtension `suggested_key` means Command on macOS, and `Cmd+Shift+J` is
+Firefox's own Browser Console, so Control is both freer and less surprising. Rebind any of them
+in `about:addons` → gear → *Manage Extension Shortcuts*.
+
 Loading a link marks it **seen**. Keeping it marks it **kept**. Skipping is just pressing next
 without keeping — nothing to declare.
 
