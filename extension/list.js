@@ -43,7 +43,7 @@ async function load() {
 function matches(row, term) {
   if (filter !== "all" && row.status !== filter) return false;
   if (!term) return true;
-  const hay = [row.url, labelOf(row), row.cap?.text, row.note, ...(row.cap?.links || [])]
+  const hay = [row.url, labelOf(row), row.cap?.text, row.note, row.cap?.screenshot, ...(row.cap?.links || [])]
     .filter(Boolean).join(" ").toLowerCase();
   return hay.includes(term);
 }
@@ -123,6 +123,33 @@ function rowEl(row) {
       inner.append(chip);
     }
     main.append(inner);
+  }
+
+  // Actual thumbnails, not URLs — the point of keeping image links is to see them.
+  if (row.cap?.images?.length) {
+    const shots = document.createElement("div");
+    shots.className = "shots";
+    for (const src of row.cap.images.slice(0, 4)) {
+      const a = document.createElement("a");
+      a.href = src;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      const img = document.createElement("img");
+      img.src = src;
+      img.loading = "lazy";
+      img.alt = "";
+      a.append(img);
+      shots.append(a);
+    }
+    main.append(shots);
+  }
+
+  if (row.cap?.screenshot) {
+    const tag = document.createElement("span");
+    tag.className = "png";
+    tag.textContent = `📄 ${row.cap.screenshot}`;
+    tag.title = "saved under your Downloads folder";
+    main.append(document.createElement("div")).append(tag);
   }
 
   li.append(main);

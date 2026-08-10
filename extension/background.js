@@ -466,6 +466,8 @@ browser.runtime.onMessage.addListener(async msg => {
               text: cap.text || null,
               kind: cap.kind,
               links: (cap.links || []).map(l => l.resolved || l.href).filter(Boolean),
+              images: cap.images || [],
+              screenshot: cap.screenshot?.filename || null,
             },
           };
         }),
@@ -484,6 +486,8 @@ browser.runtime.onMessage.addListener(async msg => {
               text: c.text || null,
               kind: c.kind,
               links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean),
+              images: c.images || [],
+              screenshot: c.screenshot?.filename || null,
             },
           })),
       };

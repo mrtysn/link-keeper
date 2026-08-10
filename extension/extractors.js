@@ -74,8 +74,10 @@ const LK = (() => {
       for (const a of root.querySelectorAll("a[href]")) {
         const href = a.href;
         if (!href || seen.has(href)) continue;
-        // Drop in-app navigation: mentions, hashtags, the permalink itself.
-        if (/^https?:\/\/(x|twitter)\.com\/(hashtag\/|i\/|[^/]+\/status\/|[^/]+$)/.test(href)) continue;
+        // Drop in-app navigation. Beyond mentions, hashtags and the permalink, article images
+        // are wrapped in links to x.com's own media viewer — those are pictures, not
+        // destinations, and belong in `images` rather than inflating the link count.
+        if (/^https?:\/\/(x|twitter)\.com\/(hashtag\/|i\/|[^/]+$|[^/]+\/(status|article|photo)\/)/.test(href)) continue;
         seen.add(href);
         out.push({ href, display: txt(a), resolved: null });
       }

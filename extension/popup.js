@@ -4,7 +4,18 @@ const send = msg => browser.runtime.sendMessage(msg);
 function say(text, cls = "") {
   $("msg").textContent = text;
   $("msg").className = cls;
+  $("copy-msg").hidden = !text;
 }
+
+$("copy-msg").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("msg").textContent);
+    $("copy-msg").textContent = "copied";
+  } catch (e) {
+    $("copy-msg").textContent = "blocked";
+  }
+  setTimeout(() => ($("copy-msg").textContent = "copy"), 1200);
+};
 
 function short(url) {
   return String(url).replace(/^https?:\/\/(www\.)?/, "");

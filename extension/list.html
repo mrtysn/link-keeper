@@ -84,6 +84,16 @@
     border-radius: 1rem; padding: .12rem .5rem; max-width: 22rem; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
   }
+  .shots { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .35rem; }
+  .shots img {
+    height: 5.5rem; width: auto; max-width: 12rem; object-fit: cover; border-radius: .35rem;
+    border: 1px solid var(--line); background: var(--chip);
+  }
+  .shots a { line-height: 0; }
+  .png {
+    font-size: .78rem; color: var(--dim); background: var(--chip); border-radius: .3rem;
+    padding: .1rem .4rem; font-family: ui-monospace, Menlo, monospace;
+  }
   .note { font-size: .82rem; background: var(--chip); border-radius: .3rem; padding: .1rem .4rem; display: inline-block; }
   .acts { display: flex; gap: .25rem; opacity: 0; }
   ul.rows li:hover .acts, ul.rows li:focus-within .acts { opacity: 1; }
