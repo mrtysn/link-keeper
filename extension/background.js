@@ -56,18 +56,48 @@ function keyOf(url) {
   }
 }
 
-async function addItems(urls, note = "") {
+/* When the link was originally saved, wherever it came from — not when it was pasted here. That
+ * distinction is the whole point: a Telegram export spans years, and "added_at" would flatten it
+ * all to the minute of the paste. */
+function dateOf(item) {
+  return item?.saved_at || item?.added_at || "";
+}
+
+const byNewest = (a, b) => String(dateOf(b)).localeCompare(String(dateOf(a)));
+
+async function addItems(entries, note = "") {
   const items = await getItems();
-  const known = new Set(items.map(i => keyOf(i.url)));
-  let added = 0;
-  for (const url of urls) {
-    if (known.has(keyOf(url))) continue;
-    known.add(keyOf(url));
-    items.push({ url, status: "pending", added_at: new Date().toISOString(), note: note || undefined });
+  const byId = new Map(items.map(i => [keyOf(i.url), i]));
+  let added = 0, updated = 0, skipped = 0;
+
+  for (const raw of entries) {
+    const { url, saved_at } = typeof raw === "string" ? { url: raw } : raw;
+    if (!url) continue;
+    const existing = byId.get(keyOf(url));
+    if (existing) {
+      // Re-pasting a list to backfill dates must not be a no-op.
+      if (saved_at && existing.saved_at !== saved_at) {
+        existing.saved_at = saved_at;
+        updated++;
+      } else {
+        skipped++;
+      }
+      continue;
+    }
+    const item = {
+      url,
+      status: "pending",
+      added_at: new Date().toISOString(),
+      saved_at: saved_at || undefined,
+      note: note || undefined,
+    };
+    items.push(item);
+    byId.set(keyOf(url), item);
     added++;
   }
+
   await setItems(items);
-  return { ok: true, added, skipped: urls.length - added, total: items.length };
+  return { ok: true, added, updated, skipped, total: items.length };
 }
 
 async function markCurrent(status) {
@@ -86,8 +116,10 @@ async function markCurrent(status) {
  * what upgrades it to kept. */
 async function openNext(direction = 1) {
   const items = await getItems();
-  const pending = items.filter(i => i.status === "pending");
-  const target = direction > 0 ? pending[0] : [...items].reverse().find(i => i.status !== "pending");
+  const ordered = [...items].sort(byNewest);
+  const target = direction > 0
+    ? ordered.find(i => i.status === "pending")
+    : [...ordered].reverse().find(i => i.status !== "pending");
   if (!target) return { ok: false, error: "nothing left in the list" };
 
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -456,6 +488,7 @@ const MENU = [
   { id: "menu-keep", title: "Keep this page", contexts: ["page", "selection", "image"] },
   { id: "menu-shot", title: "Keep this page + full-page screenshot", contexts: ["page", "selection", "image"] },
   { id: "menu-next", title: "Next link in the list", contexts: ["page", "selection", "image"] },
+  { id: "menu-skip", title: "Skip this one and go to the next", contexts: ["page", "selection", "image"] },
   { id: "menu-queue", title: "Add this page to the list", contexts: ["page", "selection", "image"] },
   { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
   { id: "menu-list", title: "See the whole list", contexts: ["page", "selection", "image"] },
@@ -481,6 +514,12 @@ browser.menus.onClicked.addListener(async (info, tab) => {
       await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
       break;
     }
+    case "menu-skip": {
+      await markCurrent("skipped");
+      const res = await openNext(1);
+      await notify(res.ok ? `skipped · ${res.remaining} left` : `failed: ${res.error}`);
+      break;
+    }
     case "menu-queue": {
       const res = await queueActiveTab();
       await notify(res.added ? "added to the list" : "already on the list");
@@ -489,7 +528,7 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     case "menu-list": await browser.tabs.create({ url: browser.runtime.getURL("list.html") }); break;
     case "menu-queue-link":
       if (info.linkUrl) {
-        const res = await addItems([info.linkUrl.split("#")[0]]);
+        const res = await addItems([{ url: info.linkUrl.split("#")[0], saved_at: new Date().toISOString() }]);
         await notify(res.added ? "link added to the list" : "already on the list");
       }
       break;
@@ -534,6 +573,7 @@ browser.runtime.onMessage.addListener(async msg => {
             url: i.url,
             status: i.status,
             added_at: i.added_at,
+            saved_at: i.saved_at || null,
             note: i.note || cap?.note || null,
             current: current?.key === keyOf(i.url),
             cap: cap && {
@@ -556,6 +596,7 @@ browser.runtime.onMessage.addListener(async msg => {
             url: c.url,
             status: "kept",
             added_at: c.captured_at,
+            saved_at: c.posted || null,
             note: c.note || null,
             current: false,
             cap: {
@@ -639,14 +680,15 @@ browser.runtime.onMessage.addListener(async msg => {
     case "queue-active": {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       if (!tab?.url) return { ok: false, error: "no active tab" };
-      return addItems([tab.url.split("#")[0]], msg.note);
+      // Queued from the browser, so "now" genuinely is when it was saved.
+      return addItems([{ url: tab.url.split("#")[0], saved_at: new Date().toISOString() }], msg.note);
     }
 
     case "next":
       return openNext(1);
 
     case "skip":
-      await markCurrent("seen");
+      await markCurrent("skipped");
       return openNext(1);
 
     case "capture-active":

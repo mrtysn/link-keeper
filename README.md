@@ -34,6 +34,7 @@ Three keys, and you never leave the tab you are in.
 | `Ctrl+Shift+J` | load the next link from the list in the current tab |
 | `Ctrl+Shift+K` | keep this page — read it and store the capture |
 | `Ctrl+Shift+U` | add the page you are on to the list |
+| `Ctrl+Shift+X` | skip this one — an explicit rejection — and advance |
 
 Every one of these is also a **popup button** and a **right-click menu** item, so the keyboard
 is optional. Right-clicking a *link* offers "Add this link to Link Keeper" — queueing something
@@ -47,8 +48,8 @@ On macOS these are bound with `MacCtrl`, so they are the literal **Control** key
 Firefox's own Browser Console, so Control is both freer and less surprising. Rebind any of them
 in `about:addons` → gear → *Manage Extension Shortcuts*.
 
-Loading a link marks it **seen**. Keeping it marks it **kept**. Skipping is just pressing next
-without keeping — nothing to declare.
+Loading a link marks it **seen**. Keeping it marks it **kept**. **Skip** marks it `skipped`, which
+is a deliberate rejection rather than "opened it, moved on" — the list filters the two separately.
 
 The popup shows the same actions as buttons, a progress bar, what is coming next, and a box
 for attaching a note to the next thing you keep.
@@ -60,7 +61,8 @@ hundreds of entries, rather than a 22rem popup.
 
 - Grouped **by domain** by default, or by status, or flat newest-first.
 - Filter box searches URLs, captured titles, tweet text, notes and embedded links.
-- Status chips narrow to what is left, what you have seen, or what you kept.
+- Status chips narrow to what is left, seen, skipped, or kept.
+- Rows show the date the link was saved; a dimmed date means only the paste date is known.
 - A coloured dot per row: grey pending, amber seen, green kept. The current item is marked
   down its left edge.
 - Rows show the captured title, the post's text and any links found inside it, so a tweet you
@@ -75,9 +77,21 @@ there attaches the capture to the right list entry.
 
 ### Filling the list
 
-- **`Ctrl+Shift+U`** or *Add the page I'm on* — queue something for later while browsing.
-- **Paste URLs**, one per line, into *Add links to the list*. Duplicates are ignored, so
-  pasting the same list twice is harmless.
+- **`Ctrl+Shift+U`** or *This page* — queue something for later while browsing.
+- **Paste URLs** into *Add links*, one per line. Each line may carry the date the link was
+  originally saved, tab or space separated:
+
+  ```
+  https://x.com/i/status/2086188444317819246	2026-08-09
+  https://news.ycombinator.com/item?id=49139102	2026-08-10
+  ```
+
+  A whole JSON object per line works too, so an exported list round-trips.
+
+Dates matter: without one, a link's only timestamp is the moment you pasted it, which flattens
+years of saved links to a single minute. The queue and the list are both ordered **newest first**
+by that date, so re-pasting a list with dates is not a no-op — it backfills them onto entries that
+already exist.
 
 ### Screenshots
 

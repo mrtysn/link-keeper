@@ -20,6 +20,10 @@ function hostOf(url) {
 
 function shortUrl(url) { return String(url).replace(/^https?:\/\/(www\.)?/, ""); }
 
+/* The date the link was saved, not when it was pasted in — a Telegram export spans years. */
+function savedOn(row) { return row.saved_at || row.added_at || ""; }
+const byNewest = (a, b) => String(savedOn(b)).localeCompare(String(savedOn(a)));
+
 function labelOf(row) {
   const cap = row.cap;
   if (!cap) return null;
@@ -48,20 +52,24 @@ async function load() {
 function matches(row, term) {
   if (filter !== "all" && row.status !== filter) return false;
   if (!term) return true;
-  const hay = [row.url, labelOf(row), row.cap?.text, row.note, row.cap?.screenshot, ...(row.cap?.links || [])]
+  const hay = [row.url, labelOf(row), row.cap?.text, row.note, row.cap?.screenshot, savedOn(row), ...(row.cap?.links || [])]
     .filter(Boolean).join(" ").toLowerCase();
   return hay.includes(term);
 }
 
 function groupRows(visible, mode) {
-  if (mode === "flat") {
-    return [["", [...visible].sort((a, b) => String(b.added_at).localeCompare(String(a.added_at)))]];
-  }
+  if (mode === "flat") return [["", [...visible].sort(byNewest)]];
+  if (mode === "oldest") return [["", [...visible].sort(byNewest).reverse()]];
   if (mode === "status") {
-    const order = ["pending", "seen", "kept"];
-    const names = { pending: "left to go through", seen: "seen, not kept", kept: "kept" };
+    const order = ["pending", "seen", "skipped", "kept"];
+    const names = {
+      pending: "left to go through",
+      seen: "opened, undecided",
+      skipped: "skipped",
+      kept: "kept",
+    };
     return order
-      .map(s => [names[s], visible.filter(r => r.status === s)])
+      .map(s => [names[s], visible.filter(r => r.status === s).sort(byNewest)])
       .filter(([, list]) => list.length);
   }
   const byHost = new Map();
@@ -70,6 +78,7 @@ function groupRows(visible, mode) {
     if (!byHost.has(host)) byHost.set(host, []);
     byHost.get(host).push(row);
   }
+  for (const list of byHost.values()) list.sort(byNewest);
   return [...byHost.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
 }
 
@@ -97,6 +106,15 @@ function rowEl(row) {
   const meta = document.createElement("div");
   meta.className = "meta";
   meta.append(Object.assign(document.createElement("span"), { textContent: hostOf(row.url) }));
+  const when = savedOn(row);
+  if (when) {
+    const t = document.createElement("time");
+    t.dateTime = when;
+    t.textContent = when.slice(0, 10);
+    t.title = row.saved_at ? "saved on this date" : "added to the list on this date (original date unknown)";
+    if (!row.saved_at) t.style.opacity = ".6";
+    meta.append(t);
+  }
   if (row.cap?.kind && row.cap.kind !== "page") {
     meta.append(Object.assign(document.createElement("span"), { textContent: row.cap.kind }));
   }
@@ -195,6 +213,8 @@ function rowEl(row) {
       .then(() => browser.tabs.update({ url: row.url })).then(load)],
     [row.status === "kept" ? "unkeep" : "kept", "Toggle kept",
       () => send({ type: "mark", url: row.url, status: row.status === "kept" ? "seen" : "kept" }).then(load)],
+    [row.status === "skipped" ? "unskip" : "skip", "Toggle skipped",
+      () => send({ type: "mark", url: row.url, status: row.status === "skipped" ? "seen" : "skipped" }).then(load)],
     ["remove", "Remove from the list",
       () => send({ type: "remove", urls: [row.url] }).then(load)],
   ];
@@ -211,19 +231,21 @@ function rowEl(row) {
 
 function render() {
   const term = $("q").value.trim().toLowerCase();
-  const counts = { pending: 0, seen: 0, kept: 0 };
+  const counts = { pending: 0, seen: 0, kept: 0, skipped: 0 };
   for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
   const total = rows.length;
 
   $("sub").textContent = total
-    ? `${total} links · ${counts.kept} kept · ${counts.seen} seen · ${counts.pending} left`
+    ? `${total} links · ${counts.kept} kept · ${counts.skipped} skipped · ${counts.seen} seen · ${counts.pending} left`
     : "nothing on the list yet";
   $("bar-kept").style.width = total ? `${counts.kept / total * 100}%` : "0";
   $("bar-seen").style.width = total ? `${counts.seen / total * 100}%` : "0";
+  $("bar-skipped").style.width = total ? `${counts.skipped / total * 100}%` : "0";
   $("f-all").textContent = `all ${total}`;
   $("f-pending").textContent = `left ${counts.pending}`;
   $("f-seen").textContent = `seen ${counts.seen}`;
   $("f-kept").textContent = `kept ${counts.kept}`;
+  $("f-skipped").textContent = `skipped ${counts.skipped}`;
 
   const visible = rows.filter(r => matches(r, term));
   const out = $("out");
@@ -281,10 +303,11 @@ function render() {
 $("q").addEventListener("input", render);
 $("groupby").addEventListener("change", render);
 
-for (const which of ["all", "pending", "seen", "kept"]) {
+const FILTERS = ["all", "pending", "seen", "skipped", "kept"];
+for (const which of FILTERS) {
   $(`f-${which}`).onclick = () => {
     filter = which;
-    for (const other of ["all", "pending", "seen", "kept"]) {
+    for (const other of FILTERS) {
       $(`f-${other}`).setAttribute("aria-pressed", String(other === which));
     }
     render();

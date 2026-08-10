@@ -41,13 +41,16 @@ function download(name, body, type) {
 
 async function refresh() {
   const s = await send({ type: "status" });
-  const { pending = 0, seen = 0, kept = 0 } = s.counts;
+  const { pending = 0, seen = 0, kept = 0, skipped = 0 } = s.counts;
 
   $("tally").innerHTML = "";
   $("tally").append(document.createTextNode(""));
-  $("tally").textContent = s.total ? `${kept} kept · ${pending} left of ${s.total}` : "no links yet";
+  $("tally").textContent = s.total
+    ? `${kept} kept${skipped ? ` · ${skipped} skipped` : ""} · ${pending} left of ${s.total}`
+    : "no links yet";
   $("bar-kept").style.width = s.total ? `${kept / s.total * 100}%` : "0";
   $("bar-seen").style.width = s.total ? `${seen / s.total * 100}%` : "0";
+  $("bar-skipped").style.width = s.total ? `${skipped / s.total * 100}%` : "0";
 
   // Show what you are on if it came from the list, otherwise what is coming next.
   if (s.current?.isOpen) {
@@ -114,6 +117,12 @@ $("keep-shot").onclick = async () => {
   keep(true);
 };
 
+$("skip").onclick = async () => {
+  const res = await send({ type: "skip" });
+  say(res.ok ? `skipped · ${res.remaining} left` : res.error, res.ok ? "" : "bad");
+  refresh();
+};
+
 $("next").onclick = async () => {
   const res = await send({ type: "next" });
   say(res.ok ? `${res.remaining} left after this` : res.error, res.ok ? "" : "bad");
@@ -133,11 +142,35 @@ $("queue").onclick = async () => {
   refresh();
 };
 
+/* Each line is a URL, optionally followed by the date it was saved — tab or space separated, or a
+ * whole JSON object for round-tripping an exported list. Re-pasting with dates backfills them. */
+function parseLine(line) {
+  const text = line.trim();
+  if (!text) return null;
+  if (text.startsWith("{")) {
+    try {
+      const o = JSON.parse(text);
+      return o.url ? { url: o.url, saved_at: o.saved_at || o.date || o.posted || undefined } : null;
+    } catch (e) { return null; }
+  }
+  const [url, ...rest] = text.split(/[\s\t]+/);
+  if (!/^https?:\/\//.test(url)) return null;
+  const stamp = rest.join(" ").trim();
+  const saved_at = stamp && !Number.isNaN(Date.parse(stamp))
+    ? new Date(stamp).toISOString()
+    : undefined;
+  return { url, saved_at };
+}
+
 $("add").onclick = async () => {
-  const urls = $("urls").value.split("\n").map(s => s.trim()).filter(s => /^https?:\/\//.test(s));
-  if (!urls.length) return say("no usable URLs in that box", "bad");
-  const res = await send({ type: "add", urls });
-  say(`added ${res.added}${res.skipped ? `, ${res.skipped} already known` : ""} — ${res.total} on the list`, "ok");
+  const entries = $("urls").value.split("\n").map(parseLine).filter(Boolean);
+  if (!entries.length) return say("no usable URLs in that box", "bad");
+  const dated = entries.filter(e => e.saved_at).length;
+  const res = await send({ type: "add", urls: entries });
+  const bits = [`added ${res.added}`];
+  if (res.updated) bits.push(`${res.updated} dated`);
+  if (res.skipped) bits.push(`${res.skipped} unchanged`);
+  say(`${bits.join(", ")} — ${res.total} on the list${dated ? "" : "\nno dates in that paste"}`, "ok");
   $("urls").value = "";
   refresh();
 };

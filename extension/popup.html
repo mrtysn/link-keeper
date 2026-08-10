@@ -28,6 +28,7 @@
   .meter { height: 4px; background: var(--chip); border-radius: 2px; overflow: hidden; display: flex; }
   .meter i { height: 100%; transition: width .25s ease; }
   .meter .k { background: var(--ok); } .meter .s { background: var(--seen); }
+  .meter .x { background: var(--bad); }
 
   .now {
     margin: .55rem 0; padding: .4rem .55rem; background: var(--panel);
@@ -89,7 +90,7 @@
     <span id="tally"></span>
   </header>
 
-  <div class="meter"><i class="k" id="bar-kept"></i><i class="s" id="bar-seen"></i></div>
+  <div class="meter"><i class="k" id="bar-kept"></i><i class="s" id="bar-seen"></i><i class="x" id="bar-skipped"></i></div>
 
   <button class="go top" id="open-list">Open list</button>
 
@@ -102,10 +103,11 @@
     <input class="wide" id="note" placeholder="note for the next keep (optional)">
     <button class="keep" id="keep" title="Ctrl+Shift+K">Keep</button>
     <button id="keep-shot" title="Keep, then scroll and stitch a full-page PNG">Keep + shot</button>
-    <button class="wide big" id="next" title="Ctrl+Shift+J">Next link →</button>
+    <button id="skip" title="Ctrl+Shift+X — mark as rejected, then advance">Skip</button>
+    <button class="big" id="next" title="Ctrl+Shift+J — advance without judging">Next →</button>
   </div>
 
-  <p class="keys"><kbd>⌃⇧K</kbd> keep · <kbd>⌃⇧J</kbd> next · <kbd>⌃⇧U</kbd> queue · next also skips</p>
+  <p class="keys"><kbd>⌃⇧K</kbd> keep · <kbd>⌃⇧J</kbd> next · <kbd>⌃⇧U</kbd> queue · <kbd>⌃⇧X</kbd> skip</p>
 
   <div id="msg-row">
     <div id="msg"></div>
