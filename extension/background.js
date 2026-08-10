@@ -143,6 +143,9 @@ async function resolveLinks(links) {
 const SHOT_MAX_PX = 20000;
 
 async function screenshot(tabId, slug) {
+  if (!browser.downloads) throw new Error("no downloads permission — reload the extension");
+  if (!browser.tabs.captureTab) throw new Error("captureTab unavailable in this Firefox");
+
   const [dims] = await browser.scripting.executeScript({
     target: { tabId },
     func: () => ({
@@ -229,6 +232,33 @@ async function captureActive(note = "", withShot = false) {
 
 /* --- commands ------------------------------------------------------------------- */
 
+/* The popup reports inline, but a keyboard or right-click action has nowhere to say anything —
+ * and a silent failure is indistinguishable from success. Everything triggered outside the
+ * popup gets a notification, including the reason when it fails.
+ */
+async function notify(message) {
+  try {
+    await browser.notifications.create({
+      type: "basic",
+      iconUrl: browser.runtime.getURL("icon.svg"),
+      title: "Link Keeper",
+      message: String(message).slice(0, 300),
+    });
+  } catch (e) { /* notifications denied at the OS level — nothing to fall back to */ }
+}
+
+function describe(res) {
+  if (!res?.ok) return `failed: ${res?.error || "unknown error"}`;
+  const r = res.record;
+  if (!r) return "done";
+  const who = r.author?.handle ? `${r.author.handle} — ` : "";
+  const shot = r.screenshot
+    ? ` · png saved${r.screenshot.truncated ? " (cut at 20000px)" : ""}`
+    : r.screenshot_error ? ` · screenshot failed: ${r.screenshot_error}` : "";
+  const links = r.links?.length ? ` · +${r.links.length} link${r.links.length > 1 ? "s" : ""}` : "";
+  return `kept ${who}${r.title || r.url}${links}${shot}`;
+}
+
 async function queueActiveTab() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab?.url) return addItems([tab.url.split("#")[0]]);
@@ -236,9 +266,14 @@ async function queueActiveTab() {
 }
 
 browser.commands.onCommand.addListener(async name => {
-  if (name === "capture-page") await captureActive();
-  else if (name === "next-link") await openNext(1);
-  else if (name === "queue-page") await queueActiveTab();
+  if (name === "capture-page") await notify(describe(await captureActive()));
+  else if (name === "next-link") {
+    const res = await openNext(1);
+    await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
+  } else if (name === "queue-page") {
+    const res = await queueActiveTab();
+    await notify(res.added ? "added to the list" : "already on the list");
+  }
 });
 
 /* --- right-click menu -----------------------------------------------------------
@@ -269,13 +304,24 @@ buildMenus();
 
 browser.menus.onClicked.addListener(async (info, tab) => {
   switch (info.menuItemId) {
-    case "menu-keep": await captureActive(); break;
-    case "menu-shot": await captureActive("", true); break;
-    case "menu-next": await openNext(1); break;
-    case "menu-queue": await queueActiveTab(); break;
+    case "menu-keep": await notify(describe(await captureActive())); break;
+    case "menu-shot": await notify(describe(await captureActive("", true))); break;
+    case "menu-next": {
+      const res = await openNext(1);
+      await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
+      break;
+    }
+    case "menu-queue": {
+      const res = await queueActiveTab();
+      await notify(res.added ? "added to the list" : "already on the list");
+      break;
+    }
     case "menu-list": await browser.tabs.create({ url: browser.runtime.getURL("list.html") }); break;
     case "menu-queue-link":
-      if (info.linkUrl) await addItems([info.linkUrl.split("#")[0]]);
+      if (info.linkUrl) {
+        const res = await addItems([info.linkUrl.split("#")[0]]);
+        await notify(res.added ? "link added to the list" : "already on the list");
+      }
       break;
   }
 });
