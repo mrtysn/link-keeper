@@ -207,6 +207,82 @@ browser.runtime.onMessage.addListener(async msg => {
       };
     }
 
+    /* Everything the list page needs, joined here where keyOf lives. */
+    case "dump": {
+      const items = await getItems();
+      const captures = await getCaptures();
+      const byKey = new Map(captures.map(c => [keyOf(c.url), c]));
+      const current = await getCurrent();
+      return {
+        items: items.map(i => {
+          const cap = byKey.get(keyOf(i.url)) || null;
+          return {
+            url: i.url,
+            status: i.status,
+            added_at: i.added_at,
+            note: i.note || cap?.note || null,
+            current: current?.key === keyOf(i.url),
+            cap: cap && {
+              title: cap.title,
+              handle: cap.author?.handle || null,
+              text: cap.text || null,
+              kind: cap.kind,
+              links: (cap.links || []).map(l => l.resolved || l.href).filter(Boolean),
+            },
+          };
+        }),
+        // Captures with no matching list entry — kept from a page you just happened to be on.
+        loose: captures
+          .filter(c => !items.some(i => keyOf(i.url) === keyOf(c.url)))
+          .map(c => ({
+            url: c.url,
+            status: "kept",
+            added_at: c.captured_at,
+            note: c.note || null,
+            current: false,
+            cap: {
+              title: c.title,
+              handle: c.author?.handle || null,
+              text: c.text || null,
+              kind: c.kind,
+              links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean),
+            },
+          })),
+      };
+    }
+
+    case "set-current": {
+      await browser.storage.local.set({
+        current: { key: keyOf(msg.url), url: msg.url, at: new Date().toISOString() },
+      });
+      await markCurrent("seen");
+      return { ok: true };
+    }
+
+    case "remove": {
+      const drop = new Set(msg.urls.map(keyOf));
+      const items = await getItems();
+      await setItems(items.filter(i => !drop.has(keyOf(i.url))));
+      if (msg.alsoCaptures) {
+        const captures = await getCaptures();
+        await setCaptures(captures.filter(c => !drop.has(keyOf(c.url))));
+      }
+      return { ok: true, removed: drop.size };
+    }
+
+    case "mark": {
+      const items = await getItems();
+      const item = items.find(i => keyOf(i.url) === keyOf(msg.url));
+      if (!item) return { ok: false, error: "not on the list" };
+      item.status = msg.status;
+      await setItems(items);
+      return { ok: true };
+    }
+
+    case "open-list":
+      await browser.tabs.create({ url: browser.runtime.getURL("list.html") });
+      return { ok: true };
+
     case "add":
       return addItems(msg.urls, msg.note);
 

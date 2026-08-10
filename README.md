@@ -44,6 +44,26 @@ without keeping — nothing to declare.
 The popup shows the same actions as buttons, a progress bar, what is coming next, and a box
 for attaching a note to the next thing you keep.
 
+### Seeing the whole list
+
+*See the whole list* in the popup opens a full page — the readable view when there are
+hundreds of entries, rather than a 22rem popup.
+
+- Grouped **by domain** by default, or by status, or flat newest-first.
+- Filter box searches URLs, captured titles, tweet text, notes and embedded links.
+- Status chips narrow to what is left, what you have seen, or what you kept.
+- A coloured dot per row: grey pending, amber seen, green kept. The current item is marked
+  down its left edge.
+- Rows show the captured title, the post's text and any links found inside it, so a tweet you
+  already read is legible without opening it again.
+- Per row on hover: **open** (loads it in this window and makes it current), **kept** to
+  toggle the verdict by hand, **remove** to drop it from the list.
+- **remove all** per group, and **Tidy** to clear every finished entry at once. Neither
+  touches your captures.
+
+Clicking a title opens it in a new tab and marks that entry current, so a `Ctrl+Shift+K`
+there attaches the capture to the right list entry.
+
 ### Filling the list
 
 - **`Ctrl+Shift+U`** or *Add the page I'm on* — queue something for later while browsing.

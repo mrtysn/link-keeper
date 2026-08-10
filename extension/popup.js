@@ -80,6 +80,11 @@ $("next").onclick = async () => {
   refresh();
 };
 
+$("open-list").onclick = async () => {
+  await send({ type: "open-list" });
+  window.close();
+};
+
 $("queue").onclick = async () => {
   const res = await send({ type: "queue-active", note: $("note").value.trim() });
   say(res.ok
