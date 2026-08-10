@@ -18,21 +18,17 @@
     width: 22rem; margin: 0; padding: .9rem; background: var(--bg); color: var(--ink);
     font: 13px/1.5 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
   }
-  h1 { font-size: .95rem; margin: 0 0 .6rem; }
+  h1 { font-size: .95rem; margin: 0 0 .1rem; }
+  .count { font-size: 1.8rem; font-weight: 700; letter-spacing: -.02em; }
+  .count span { font-size: .8rem; font-weight: 400; color: var(--dim); letter-spacing: 0; }
   .row { display: flex; gap: .4rem; align-items: center; }
-  .stat {
-    display: flex; justify-content: space-between; gap: .5rem; padding: .35rem 0;
-    border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums;
-  }
-  .stat span { color: var(--dim); }
-  .dot { width: .55rem; height: .55rem; border-radius: 50%; display: inline-block; }
-  .dot.on { background: var(--ok); } .dot.off { background: var(--bad); }
   button {
     font: inherit; cursor: pointer; background: var(--panel); color: var(--ink);
     border: 1px solid var(--line); border-radius: .4rem; padding: .4rem .7rem;
   }
   button:hover { border-color: var(--accent); }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.danger:hover { border-color: var(--bad); color: var(--bad); }
   input, textarea {
     font: inherit; width: 100%; background: var(--panel); color: var(--ink);
     border: 1px solid var(--line); border-radius: .4rem; padding: .35rem .5rem;
@@ -48,26 +44,37 @@
     background: var(--chip); border: 1px solid var(--line); border-bottom-width: 2px;
     border-radius: .25rem; padding: 0 .25rem; font: inherit; font-size: .72rem;
   }
+  ul.recent { list-style: none; margin: .5rem 0 0; padding: 0; font-size: .78rem; }
+  ul.recent li {
+    padding: .25rem 0; border-top: 1px solid var(--line); color: var(--dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  ul.recent b { color: var(--ink); font-weight: 600; }
 </style>
 </head>
 <body>
   <h1>Link Keeper</h1>
-
-  <div class="stat"><span>sink</span><b id="s-sink"><span class="dot off"></span> checking…</b></div>
-  <div class="stat"><span>queued</span><b id="s-queued">0</b></div>
-  <div class="stat"><span>sent this session</span><b id="s-sent">0</b></div>
-  <div class="stat"><span>in log file</span><b id="s-file">—</b></div>
+  <div class="count"><b id="total">0</b> <span>captures held</span></div>
 
   <label for="note">Note for this capture (optional)</label>
   <input id="note" placeholder="why you're keeping it">
 
   <div class="row" style="margin-top:.5rem">
     <button class="primary" id="capture" style="flex:1">Capture this page</button>
-    <button id="flush" title="Retry sending the queue">Flush</button>
   </div>
-  <p class="hint"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> does the same from any page. Nothing is captured unless you trigger it.</p>
+  <p class="hint"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> does the same from any page.
+  Nothing is captured unless you trigger it.</p>
 
   <div id="msg"></div>
+
+  <ul class="recent" id="recent"></ul>
+
+  <div class="row" style="margin-top:.7rem">
+    <button class="primary" id="export" style="flex:1">Export as file</button>
+    <button class="danger" id="clear">Clear</button>
+  </div>
+  <p class="hint">Export writes <code>link-captures.jsonl</code> to your Downloads folder.
+  Captures stay here until you clear them.</p>
 
   <details>
     <summary>Sweep a list of URLs</summary>
@@ -78,20 +85,8 @@
       <button id="bf-stop">Stop</button>
       <button id="errors" title="Copy the URLs that failed">Failures</button>
     </div>
-    <p class="hint">Firefox will ask for access to those sites first — reading a tab you are not
+    <p class="hint">Firefox asks for access to those sites first — reading a tab you are not
     looking at is outside <code>activeTab</code>. One every few seconds; leave the window alone.</p>
-  </details>
-
-  <details>
-    <summary>Sink settings</summary>
-    <label for="sink">Sink URL</label>
-    <input id="sink" placeholder="http://127.0.0.1:8788/capture">
-    <label for="token">Token — printed by <code>link-sink.py</code> at startup</label>
-    <input id="token" type="password" placeholder="paste once">
-    <div class="row" style="margin-top:.4rem">
-      <button class="primary" id="save" style="flex:1">Save</button>
-      <button id="export" title="Download the queue if the sink is unavailable">Export queue</button>
-    </div>
   </details>
 
   <script src="popup.js"></script>

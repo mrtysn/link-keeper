@@ -6,14 +6,14 @@
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "link-keeper@notebook.local",
+      "id": "link-keeper@mrtysn.github.io",
       "strict_min_version": "128.0"
     }
   },
 
-  "permissions": ["storage", "alarms", "tabs", "scripting", "activeTab"],
+  "permissions": ["storage", "unlimitedStorage", "alarms", "tabs", "scripting", "activeTab"],
 
-  "host_permissions": ["http://127.0.0.1/*", "*://t.co/*"],
+  "host_permissions": ["*://t.co/*"],
 
   "optional_host_permissions": ["*://*/*"],
 

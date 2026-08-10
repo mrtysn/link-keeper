@@ -1,43 +1,37 @@
-/* Capture on demand, queue durably, POST to the local sink.
+/* Capture on demand, keep it in the extension, hand it over as a file when asked.
  *
  * Manual trigger only: a hotkey press or popup click is a user gesture, which grants
  * activeTab, which is the only host access needed to read the page you are looking at.
  * There are no content scripts — extractors.js is injected into that one tab and nowhere
- * else, so the extension cannot see a page you did not ask about.
+ * else, so the extension has no way to see a page you did not ask about.
  *
- * MV3 background scripts are event pages that get suspended when idle, so nothing lives in
- * a module variable across steps: the queue and the backfill cursor are both in
- * storage.local, and an alarm recovers a sweep that suspension interrupted.
+ * Captures live in storage.local until you export them. Nothing is sent anywhere; the one
+ * outbound request is a HEAD to t.co to find out where a shortened link actually points.
+ *
+ * MV3 background scripts are event pages that get suspended when idle, so no state lives in
+ * a module variable: the capture list and the sweep cursor are both in storage.local, and an
+ * alarm recovers a sweep that suspension interrupted.
  */
 
-const DEFAULTS = { sinkUrl: "http://127.0.0.1:8788/capture", token: "" };
-const TICK = "tick";
 const PACE_MS = 2500;
 const TAB_TIMEOUT_MS = 20000;
+const TICK = "tick";
 
-/* --- state ---------------------------------------------------------------------- */
+/* --- store ---------------------------------------------------------------------- */
 
-async function get(keys) {
-  return browser.storage.local.get(keys);
+async function getCaptures() {
+  const { captures } = await browser.storage.local.get("captures");
+  return Array.isArray(captures) ? captures : [];
 }
 
-async function config() {
-  return { ...DEFAULTS, ...(await get(["sinkUrl", "token"])) };
-}
-
-async function getQueue() {
-  const { queue } = await get("queue");
-  return Array.isArray(queue) ? queue : [];
-}
-
-async function setQueue(queue) {
-  await browser.storage.local.set({ queue });
-  await browser.action.setBadgeText({ text: queue.length ? String(queue.length) : "" });
-  await browser.action.setBadgeBackgroundColor({ color: queue.length ? "#c2422f" : "#17915c" });
+async function setCaptures(captures) {
+  await browser.storage.local.set({ captures });
+  await browser.action.setBadgeText({ text: captures.length ? String(captures.length) : "" });
+  await browser.action.setBadgeBackgroundColor({ color: "#7a5cff" });
 }
 
 async function getSweep() {
-  const { sweep } = await get("sweep");
+  const { sweep } = await browser.storage.local.get("sweep");
   return sweep || null;
 }
 
@@ -68,14 +62,14 @@ async function extractFrom(tabId) {
   return record.url ? record : null;
 }
 
-/* --- sending -------------------------------------------------------------------- */
-
 /* t.co hides the destination, and the destination is half the reason to keep a tweet. */
 async function resolveLinks(links) {
   if (!links?.length) return links || [];
   return Promise.all(
     links.map(async link => {
-      if (!/^https?:\/\/t\.co\//.test(link.href || "")) return { ...link, resolved: link.resolved || link.href };
+      if (!/^https?:\/\/t\.co\//.test(link.href || "")) {
+        return { ...link, resolved: link.resolved || link.href };
+      }
       try {
         const res = await fetch(link.href, { method: "HEAD", redirect: "follow" });
         return { ...link, resolved: res.url || null };
@@ -86,43 +80,13 @@ async function resolveLinks(links) {
   );
 }
 
-async function enqueue(record) {
+async function store(record) {
   record.links = await resolveLinks(record.links);
-  const queue = await getQueue();
+  const captures = await getCaptures();
   const key = record.status_id || record.url;
-  // Re-capturing the same thing replaces the pending copy rather than duplicating it.
-  await setQueue([...queue.filter(r => (r.status_id || r.url) !== key), record]);
-  return flush();
-}
-
-async function flush() {
-  const queue = await getQueue();
-  if (!queue.length) return { ok: true, sent: 0 };
-
-  const { sinkUrl, token } = await config();
-  if (!token) return { ok: false, error: "no token set — see Sink settings" };
-
-  try {
-    const res = await fetch(sinkUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Sink-Token": token },
-      body: JSON.stringify(queue),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      const error = `sink ${res.status} ${detail.slice(0, 120)}`;
-      await browser.storage.local.set({ lastError: error });
-      return { ok: false, error };
-    }
-    const { sent = 0 } = await get("sent");
-    await setQueue([]);
-    await browser.storage.local.set({ sent: sent + queue.length, lastError: "" });
-    return { ok: true, sent: queue.length };
-  } catch (e) {
-    const error = String(e.message || e);
-    await browser.storage.local.set({ lastError: error });
-    return { ok: false, error };
-  }
+  // Re-capturing the same thing replaces the old copy rather than duplicating it.
+  await setCaptures([...captures.filter(r => (r.status_id || r.url) !== key), record]);
+  return { ok: true, total: (await getCaptures()).length };
 }
 
 async function captureActive(note = "") {
@@ -135,10 +99,10 @@ async function captureActive(note = "") {
     const record = await extractFrom(tab.id);
     if (!record) return { ok: false, error: "could not read that page" };
     if (note) record.note = note;
-    const res = await enqueue(record);
-    return { ok: true, record, sent: res.ok, error: res.ok ? "" : res.error };
+    const res = await store(record);
+    return { ok: true, record, total: res.total };
   } catch (e) {
-    // Almost always activeTab not being granted for this tab — re-trigger from the page.
+    // Usually activeTab not granted for this tab — trigger again from the page itself.
     return { ok: false, error: String(e.message || e) };
   }
 }
@@ -147,14 +111,14 @@ browser.commands.onCommand.addListener(name => {
   if (name === "capture-page") captureActive();
 });
 
-/* --- backfill sweep -------------------------------------------------------------
+/* --- sweep ----------------------------------------------------------------------
  * Explicitly started from the popup over a pasted list. Each URL opens in a background
- * tab, is scraped, and closes. This needs host access to those origins, which the popup
- * requests before starting; injection into a tab you are not looking at is exactly what
- * activeTab does not cover.
+ * tab, is read, and closes. This needs host access to those origins, which the popup
+ * requests first: reading a tab you are not looking at is exactly what activeTab does not
+ * cover.
  */
 
-async function sweepAdvance(reason) {
+async function sweepAdvance() {
   const sweep = await getSweep();
   if (!sweep || sweep.stopped || sweep.done) return;
 
@@ -166,7 +130,6 @@ async function sweepAdvance(reason) {
   if (sweep.index >= sweep.urls.length) {
     sweep.done = true;
     await setSweep(sweep);
-    await flush();
     return;
   }
 
@@ -188,34 +151,33 @@ browser.tabs.onUpdated.addListener(async (tabId, changed) => {
   const sweep = await getSweep();
   if (!sweep || sweep.stopped || sweep.done || sweep.tabId !== tabId) return;
 
+  const url = sweep.urls[sweep.index - 1];
   try {
     const record = await extractFrom(tabId);
     if (record) {
-      record.via = "backfill";
-      await enqueue(record);
+      record.via = "sweep";
+      await store(record);
     } else {
-      sweep.errors.push({ url: sweep.urls[sweep.index - 1], error: "nothing extractable" });
+      sweep.errors.push({ url, error: "nothing extractable" });
       await setSweep(sweep);
     }
   } catch (e) {
-    sweep.errors.push({ url: sweep.urls[sweep.index - 1], error: String(e.message || e) });
+    sweep.errors.push({ url, error: String(e.message || e) });
     await setSweep(sweep);
   }
-  setTimeout(() => sweepAdvance("captured"), PACE_MS);
+  setTimeout(sweepAdvance, PACE_MS);
 });
 
-/* Retry the queue, and unstick a sweep whose tab never finished loading. */
+/* Unstick a sweep whose tab never finished loading. */
 browser.alarms.create(TICK, { periodInMinutes: 1 });
 browser.alarms.onAlarm.addListener(async alarm => {
   if (alarm.name !== TICK) return;
-  await flush();
   const sweep = await getSweep();
-  if (sweep && !sweep.stopped && !sweep.done && sweep.startedAt) {
-    if (Date.now() - sweep.startedAt > TAB_TIMEOUT_MS) {
-      sweep.errors.push({ url: sweep.urls[sweep.index - 1], error: "timed out" });
-      await setSweep(sweep);
-      await sweepAdvance("timeout");
-    }
+  if (!sweep || sweep.stopped || sweep.done || !sweep.startedAt) return;
+  if (Date.now() - sweep.startedAt > TAB_TIMEOUT_MS) {
+    sweep.errors.push({ url: sweep.urls[sweep.index - 1], error: "timed out" });
+    await setSweep(sweep);
+    await sweepAdvance();
   }
 });
 
@@ -227,17 +189,14 @@ browser.runtime.onMessage.addListener(async msg => {
       return captureActive(msg.note);
 
     case "status": {
-      const { sent = 0, lastError = "" } = await get(["sent", "lastError"]);
-      const { sinkUrl, token } = await config();
+      const captures = await getCaptures();
       const sweep = await getSweep();
-      let reachable = false, captures = null;
-      try {
-        const res = await fetch(sinkUrl.replace(/\/capture$/, "/health"));
-        if (res.ok) { reachable = true; captures = (await res.json()).captures; }
-      } catch (e) { /* sink not running */ }
       return {
-        queued: (await getQueue()).length,
-        sent, lastError, reachable, captures, sinkUrl, hasToken: !!token,
+        total: captures.length,
+        recent: captures.slice(-5).reverse().map(r => ({
+          title: r.title, handle: r.author?.handle, url: r.url, kind: r.kind,
+          links: r.links?.length || 0,
+        })),
         sweep: sweep && {
           index: sweep.index, total: sweep.urls.length,
           errors: sweep.errors.length, done: !!sweep.done, stopped: !!sweep.stopped,
@@ -245,19 +204,16 @@ browser.runtime.onMessage.addListener(async msg => {
       };
     }
 
-    case "save-config":
-      await browser.storage.local.set({
-        sinkUrl: msg.sinkUrl || DEFAULTS.sinkUrl,
-        token: msg.token || (await config()).token,
-      });
-      return flush();
+    case "export":
+      return { captures: await getCaptures() };
 
-    case "flush":
-      return flush();
+    case "clear":
+      await setCaptures([]);
+      return { ok: true };
 
     case "sweep-start":
       await setSweep({ urls: msg.urls, index: 0, tabId: null, errors: [], startedAt: 0 });
-      await sweepAdvance("start");
+      await sweepAdvance();
       return { ok: true, total: msg.urls.length };
 
     case "sweep-stop": {
@@ -276,12 +232,9 @@ browser.runtime.onMessage.addListener(async msg => {
       return { errors: sweep?.errors || [] };
     }
 
-    case "export-queue":
-      return { queue: await getQueue() };
-
     default:
       return { ok: false, error: `unknown message ${msg.type}` };
   }
 });
 
-getQueue().then(setQueue).catch(() => {});
+getCaptures().then(setCaptures).catch(() => {});

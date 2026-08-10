@@ -1,7 +1,7 @@
 # Link Keeper
 
-A Firefox extension that reads the page you are on — title, author, body text and any URLs
-embedded in it — and appends it to a local JSONL file on your own machine.
+A Firefox extension that captures the page you are on — title, author, body text and any URLs
+embedded in it — and holds it until you export the lot as a file.
 
 It exists for the case an export cannot solve. A saved `x.com/i/status/123` is a dead link on
 paper: no title, no author, nothing, because X shows none of that to an unauthenticated
@@ -11,52 +11,34 @@ happens there.
 **Manual trigger only.** Nothing is captured unless you press the hotkey or click the button.
 There are no content scripts and no standing site permissions.
 
-## How it fits together
+## Install
 
-| Path | Role |
-|---|---|
-| `extension/` | the add-on — `manifest.json`, `background.js`, `extractors.js`, `popup.*` |
-| `link-sink.py` | loopback HTTP listener that appends captures to `link-captures.jsonl` |
+Requires Firefox 128 or newer. No build step, no dependencies.
 
-The extension holds captures in a queue and POSTs them to the sink. If the sink is not
-running the queue simply waits, so you can browse first and start the sink later.
+`about:debugging#/runtime/this-firefox` → *Load Temporary Add-on* → select
+`extension/manifest.json`.
 
-## Setup
-
-Requires Firefox 128+ and Python 3.10+. No dependencies.
-
-1. **Start the sink** in whichever directory you want the log to live:
-
-   ```
-   ./link-sink.py
-   ```
-
-   It prints a token and writes `./link-captures.jsonl`. Leave it running.
-
-2. **Load the extension.** Go to `about:debugging#/runtime/this-firefox` → *Load Temporary
-   Add-on* → select `extension/manifest.json`.
-
-   Temporary add-ons unload when Firefox restarts. For a permanent install, submit the
-   `extension/` directory to [AMO](https://addons.mozilla.org/developers/) as an unlisted
-   add-on and install the signed `.xpi` it gives back. Unsigned permanent installs work only
-   in Developer Edition or Nightly with `xpinstall.signatures.required=false`.
-
-3. **Paste the token** into the popup under *Sink settings* → Save. Once only.
+Temporary add-ons unload when Firefox restarts. For a permanent install, submit the
+`extension/` directory to [AMO](https://addons.mozilla.org/developers/) as an unlisted add-on
+and install the signed `.xpi` it returns. Unsigned permanent installs work only in Developer
+Edition or Nightly with `xpinstall.signatures.required=false`.
 
 ## Use
 
-- **`Ctrl+Shift+K`** captures the current page.
-- **The toolbar button** does the same and lets you attach a note first.
-- **Sweep** takes a list of URLs, opens each in a background tab, reads it, and closes it.
-  This is the path for a pile of links you already have.
+- **`Ctrl+Shift+K`** captures the page you are looking at.
+- **The toolbar button** does the same, and lets you attach a note first.
+- **Export as file** writes `link-captures.jsonl` to your Downloads folder.
+- **Sweep** takes a list of URLs, opens each in a background tab, reads it, and closes it —
+  the bulk path for links you already have sitting in a list somewhere.
 
-If the sink is down the badge turns red and captures wait locally; they send themselves once
-it is back. *Export queue* writes them out as JSONL to append by hand instead.
+Captures accumulate in the extension's own storage and survive restarts. The badge shows how
+many are held. Nothing leaves your machine until you export, and the export is a plain file
+you can read, grep, or hand to a script.
 
 ## What gets extracted
 
-`extractors.js` is a registry of site handlers with a generic fallback. A handler that
-returns nothing degrades to the generic result rather than failing the capture.
+`extractors.js` is a registry of site handlers with a generic fallback. A handler that returns
+nothing degrades to the generic result rather than failing the capture.
 
 | Site | Beyond title and description |
 |---|---|
@@ -69,12 +51,13 @@ returns nothing degrades to the generic result rather than failing the capture.
 
 Adding a site is one object in `REGISTRY`.
 
-`t.co` links are resolved to their destination by the background script — the destination is
-usually the reason the tweet was worth keeping.
+`t.co` links are resolved to their destination in the background — the destination is usually
+the reason the tweet was worth keeping in the first place. This is the only outbound request
+the extension makes.
 
 ## Output
 
-One JSON object per line. A tweet capture looks like:
+One JSON object per line. A tweet capture:
 
 ```json
 {
@@ -87,13 +70,17 @@ One JSON object per line. A tweet capture looks like:
   "posted": "2026-08-09T14:50:00.000Z",
   "links": [{ "href": "https://t.co/x", "display": "github.com/a/b", "resolved": "https://github.com/a/b" }],
   "media": ["card"],
+  "note": "the launcher I wanted",
   "captured_at": "2026-08-10T17:00:00Z"
 }
 ```
 
-`source_url` is kept alongside `url` on purpose: it is what lets a capture be matched back
-to a link you saved elsewhere, since `x.com/i/status/<id>` and
-`x.com/<handle>/status/<id>` are the same post under different paths. Join on `status_id`.
+`source_url` is kept alongside `url` deliberately: it is what lets a capture be matched back
+to a link saved somewhere else, since `x.com/i/status/<id>` and `x.com/<handle>/status/<id>`
+are the same post under different paths. Join on `status_id`.
+
+JSONL rather than a JSON array so exports concatenate — `cat` two of them together and the
+result is still valid.
 
 ## Permissions, and why each one
 
@@ -101,24 +88,23 @@ to a link you saved elsewhere, since `x.com/i/status/<id>` and
 |---|---|
 | `activeTab` | read the tab you triggered on — granted per gesture, no standing access |
 | `scripting` | inject `extractors.js` into that one tab |
-| `http://127.0.0.1/*` | POST to the sink |
+| `storage`, `unlimitedStorage` | hold captures between restarts |
 | `*://t.co/*` | resolve shortened links |
 | `optional_host_permissions` | requested only when you start a sweep, because reading a tab you are not looking at is outside `activeTab`. Revocable in `about:addons` |
 
-No content scripts means the extension has no mechanism for observing pages you did not ask
-it about. That is the reason it is trigger-only rather than a watcher.
+No content scripts means there is no mechanism by which the extension could observe pages you
+did not ask it about. That is the reason it is trigger-only rather than a watcher.
 
 ## Notes
 
-- The background script is an MV3 event page and is suspended when idle. The queue and the
-  sweep cursor live in `storage.local` for that reason, and a one-minute alarm resumes a
+- The background script is an MV3 event page and is suspended when idle. The capture list and
+  the sweep cursor live in `storage.local` for that reason, and a one-minute alarm resumes a
   sweep that suspension interrupted — a sweep can pause for up to a minute but does not lose
   its place.
-- The sink requires its token on every write. Any page you have open could otherwise POST to
-  a known loopback port.
-- x.com's markup is read through `data-testid` attributes, the most stable handle it
-  exposes. If a capture comes back thin, x.com renamed something; `fallback_text` holds the
-  visible article text so the capture is still worth keeping, and the fix is one selector.
+- Clearing captures is irreversible and the popup asks first. Export before you clear.
+- x.com's markup is read through `data-testid` attributes, the most stable handle it exposes.
+  If a capture comes back thin, x.com renamed something; `fallback_text` holds the visible
+  article text so the capture is still worth keeping, and the fix is one selector.
 
 ## Licence
 
