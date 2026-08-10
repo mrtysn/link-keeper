@@ -404,16 +404,29 @@ async function notify(message) {
   } catch (e) { /* notifications denied at the OS level — nothing to fall back to */ }
 }
 
+/* A plain tweet's title is only its handle — "@someone on X" says nothing about what you kept.
+ * Its text is the content, so lead with that and keep the title for pages that have a real one. */
+function summarise(r) {
+  const body = (r.text || "").replace(/\s+/g, " ").trim();
+  const titleIsFiller = !r.title || /^@?\S+ on X$|^X post$/.test(r.title);
+  if (titleIsFiller && body) {
+    const who = r.author?.handle ? `${r.author.handle}: ` : "";
+    return who + (body.length > 90 ? body.slice(0, 90) + "…" : body);
+  }
+  return (r.author?.handle && r.title && !r.title.includes(r.author.handle)
+    ? `${r.author.handle} — ${r.title}`
+    : r.title || r.url);
+}
+
 function describe(res) {
   if (!res?.ok) return `failed: ${res?.error || "unknown error"}`;
   const r = res.record;
   if (!r) return "done";
-  const who = r.author?.handle ? `${r.author.handle} — ` : "";
   const shot = r.screenshot
     ? ` · png ${r.screenshot.width}×${r.screenshot.height}${r.screenshot.truncated ? " (cut short)" : ""}`
     : r.screenshot_error ? ` · screenshot failed: ${r.screenshot_error}` : "";
   const links = r.links?.length ? ` · +${r.links.length} link${r.links.length > 1 ? "s" : ""}` : "";
-  return `kept ${who}${r.title || r.url}${links}${shot}`;
+  return `kept ${summarise(r)}${links}${shot}`;
 }
 
 async function queueActiveTab() {

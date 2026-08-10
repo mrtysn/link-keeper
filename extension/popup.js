@@ -21,7 +21,12 @@ function short(url) {
   return String(url).replace(/^https?:\/\/(www\.)?/, "");
 }
 
+/* A plain tweet's title is only its handle, so its text is what identifies it. */
 function label(r) {
+  const body = (r.text || "").replace(/\s+/g, " ").trim();
+  if (body && (!r.title || /^@?\S+ on X$|^X post$/.test(r.title))) {
+    return (r.handle ? `${r.handle}: ` : "") + (body.length > 90 ? body.slice(0, 90) + "…" : body);
+  }
   if (r.handle && r.title && !r.title.includes(r.handle)) return `${r.handle} — ${r.title}`;
   return r.title || r.handle || short(r.url);
 }
@@ -78,7 +83,7 @@ async function keep(withShot = false) {
     const inner = r.links?.length ? ` (+${r.links.length} link${r.links.length > 1 ? "s" : ""})` : "";
     // Truncate the title, never the diagnostic — the reason a screenshot failed is the whole
     // point of showing anything at all.
-    const head = `kept: ${label({ title: r.title, handle: r.author?.handle, url: r.url })}${inner}`.slice(0, 110);
+    const head = `kept: ${label({ title: r.title, handle: r.author?.handle, url: r.url, text: r.text })}${inner}`.slice(0, 140);
     if (r.screenshot) {
       const s = r.screenshot;
       say(`${head}\npng ${s.width}×${s.height}${s.tiles ? ` from ${s.tiles} tiles` : ""} → ${s.filename}`, "ok");

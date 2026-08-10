@@ -23,6 +23,11 @@ function shortUrl(url) { return String(url).replace(/^https?:\/\/(www\.)?/, "");
 function labelOf(row) {
   const cap = row.cap;
   if (!cap) return null;
+  // A plain tweet's title is only its handle; its text is what identifies it.
+  const body = (cap.text || "").replace(/\s+/g, " ").trim();
+  if (body && (!cap.title || /^@?\S+ on X$|^X post$/.test(cap.title))) {
+    return (cap.handle ? `${cap.handle}: ` : "") + (body.length > 120 ? body.slice(0, 120) + "…" : body);
+  }
   if (cap.handle && cap.title && !cap.title.includes(cap.handle)) return `${cap.handle} — ${cap.title}`;
   return cap.title || cap.handle || null;
 }
