@@ -48,6 +48,9 @@
   button:disabled { opacity: .4; cursor: default; }
   button.wide, input.wide { grid-column: 1 / -1; }
   button.go { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.top { width: 100%; margin-top: .55rem; }
+  /* Next is pressed once per link — the biggest target, and the one the eye lands on. */
+  button.big { padding: .55rem .5rem; font-size: .88rem; font-weight: 600; }
   button.keep { color: var(--ok); font-weight: 600; }
   button.danger:hover { border-color: var(--bad); color: var(--bad); }
 
@@ -88,20 +91,21 @@
 
   <div class="meter"><i class="k" id="bar-kept"></i><i class="s" id="bar-seen"></i></div>
 
+  <button class="go top" id="open-list">Open list</button>
+
   <div class="now">
     <div class="lbl" id="now-lbl">next</div>
     <div class="url" id="now-url">list is empty</div>
   </div>
 
   <div class="grid">
+    <input class="wide" id="note" placeholder="note for the next keep (optional)">
     <button class="keep" id="keep" title="Ctrl+Shift+K">Keep</button>
-    <button id="next" title="Ctrl+Shift+J">Next →</button>
-    <button class="wide" id="keep-shot" title="Keep, then scroll and stitch a full-page PNG into Downloads">Keep + shot</button>
-    <input class="wide" id="note" placeholder="note (optional)">
-    <button class="go wide" id="open-list">Open list</button>
+    <button id="keep-shot" title="Keep, then scroll and stitch a full-page PNG">Keep + shot</button>
+    <button class="wide big" id="next" title="Ctrl+Shift+J">Next link →</button>
   </div>
 
-  <p class="keys"><kbd>⌃⇧K</kbd> keep · <kbd>⌃⇧J</kbd> next · <kbd>⌃⇧U</kbd> queue</p>
+  <p class="keys"><kbd>⌃⇧K</kbd> keep · <kbd>⌃⇧J</kbd> next · <kbd>⌃⇧U</kbd> queue · next also skips</p>
 
   <div id="msg-row">
     <div id="msg"></div>
