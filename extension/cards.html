@@ -66,6 +66,13 @@
     -webkit-box-orient: vertical; overflow: hidden;
   }
   .note { background: var(--chip); border-radius: .5rem; padding: .5rem .7rem; font-size: .88rem; }
+  .inner { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .inner a {
+    font-size: .8rem; color: var(--accent); text-decoration: none; background: var(--chip);
+    border-radius: 1rem; padding: .15rem .55rem; max-width: 100%; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .done kbd { background: var(--chip); border: 1px solid var(--line); border-radius: .3rem; padding: 0 .25rem; }
   .thumbs { display: flex; gap: .35rem; flex-wrap: wrap; }
   .thumbs img {
     height: 4rem; max-width: 8rem; object-fit: cover; border-radius: .3rem; border: 1px solid var(--line);
@@ -110,7 +117,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Cards</h1>
+    <h1>Judge what you have read</h1>
     <a href="list.html">the whole list →</a>
   </header>
 
@@ -118,20 +125,20 @@
   <div class="tally">
     <span id="pos">—</span>
     <span class="k">kept <b id="t-kept">0</b></span>
-    <span class="x">skipped <b id="t-skipped">0</b></span>
+    <span class="x">dropped <b id="t-skipped">0</b></span>
     <span>left <b id="t-left">0</b></span>
   </div>
 
   <div id="stage"></div>
 
   <div class="actions">
-    <button class="no" id="skip">← Skip</button>
+    <button class="no" id="skip">← Drop</button>
     <button id="later">↑ Later</button>
     <button id="undo">Undo</button>
     <button class="yes" id="keep">Keep →</button>
   </div>
   <p class="keys">
-    Drag the card, or <kbd>←</kbd> skip · <kbd>→</kbd> keep · <kbd>↑</kbd> later ·
+    Drag the card, or <kbd>←</kbd> drop · <kbd>→</kbd> keep · <kbd>↑</kbd> later ·
     <kbd>o</kbd> open · <kbd>u</kbd> undo
   </p>
   <div id="msg"></div>

@@ -54,20 +54,26 @@ is a deliberate rejection rather than "opened it, moved on" — the list filters
 The popup shows the same actions as buttons, a progress bar, what is coming next, and a box
 for attaching a note to the next thing you keep.
 
-### Cards
+### Cards — judging what you have read
 
-*Cards* — from the popup, the right-click menu, or the list page — deals the links still awaiting a
-verdict as a shuffled deck, one at a time. Drag the card or use the arrow keys: right keeps, left
-skips, up defers. `o` opens the link in a tab, `u` undoes.
+Two stages, in this order, because the order is forced:
 
-Cards judge **URLs**, not pages. Reading a page's text needs that page open in your tab, which is
-what *Keep* in the popup does — so a card marked kept records the verdict without a capture, and
-*Open ↗* is there for the ones you cannot judge from the URL alone. Any capture a link already has
-shows on its card: title, text, images, and the screenshot preview.
+1. **Read.** Walk the list with `Ctrl+Shift+J` and press `Ctrl+Shift+K` on anything worth reading.
+   This is an ingest, not a verdict — it pulls the page's author, text, links and images into the
+   store.
+2. **Judge.** Open *Cards* and go through what you have read as a shuffled deck. Right keeps, left
+   drops, up defers to the next session. `o` opens, `u` undoes.
 
-The deck is shuffled fresh each visit. Ordered by date it would be 133 x.com cards in a row, and
-mixing the domains keeps each card an actual decision. Verdicts save as you go, so closing the tab
-mid-deck loses only the shuffle.
+The deck runs over **captures**, never over bare URLs. A card has to be judgeable, and
+`x.com/i/status/2086188444317819246` tells you nothing — that opacity is the entire reason this
+extension exists. So a card only appears once the page behind it has been read, and then it carries
+the headline, the text, the embedded links, the images and the screenshot preview.
+
+A verdict never deletes anything. Dropping sets a flag, visible in the list as `✕ drop`, and one
+click reverses it. Deferring records nothing, so the card returns next session.
+
+The deck is shuffled fresh each visit: ordered by date it would be 133 x.com cards in a row, and
+mixing the domains keeps each card an actual decision.
 
 ### Seeing the whole list
 

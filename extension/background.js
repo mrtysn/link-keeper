@@ -562,6 +562,49 @@ browser.runtime.onMessage.addListener(async msg => {
     }
 
     /* Everything the list page needs, joined here where keyOf lives. */
+    /* Captures that have been read but not yet judged — the card deck. A card needs the page's
+     * content to be judgeable at all, so the deck runs over captures rather than bare URLs. */
+    case "deck": {
+      const captures = await getCaptures();
+      const thumbs = await read("thumbs", {});
+      const items = await getItems();
+      const savedBy = new Map(items.map(i => [keyOf(i.url), i.saved_at || i.added_at]));
+      return {
+        cards: captures
+          .filter(c => !c.verdict)
+          .map(c => ({
+            url: c.url,
+            kind: c.kind,
+            title: c.title || null,
+            handle: c.author?.handle || null,
+            name: c.author?.name || null,
+            text: c.text || null,
+            note: c.note || null,
+            posted: c.posted || null,
+            saved_at: savedBy.get(keyOf(c.url)) || c.captured_at || null,
+            images: c.images || [],
+            links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean),
+            shotThumb: thumbs[c.screenshot?.filename] || null,
+            code_blocks: (c.code_blocks || []).length,
+          })),
+        judged: captures.filter(c => c.verdict).length,
+        keep: captures.filter(c => c.verdict === "keep").length,
+        drop: captures.filter(c => c.verdict === "drop").length,
+      };
+    }
+
+    /* A verdict is reversible and never deletes the capture: passing null clears it. */
+    case "judge": {
+      const captures = await getCaptures();
+      const target = captures.find(c => keyOf(c.url) === keyOf(msg.url));
+      if (!target) return { ok: false, error: "no capture for that link" };
+      if (msg.verdict) target.verdict = msg.verdict;
+      else delete target.verdict;
+      target.judged_at = msg.verdict ? new Date().toISOString() : undefined;
+      await setCaptures(captures);
+      return { ok: true };
+    }
+
     case "dump": {
       const items = await getItems();
       const captures = await getCaptures();
@@ -588,6 +631,7 @@ browser.runtime.onMessage.addListener(async msg => {
               screenshot: cap.screenshot?.filename || null,
               shotThumb: thumbs[cap.screenshot?.filename] || null,
               shotId: cap.screenshot?.downloadId ?? null,
+              verdict: cap.verdict || null,
             },
           };
         }),
@@ -611,6 +655,7 @@ browser.runtime.onMessage.addListener(async msg => {
               screenshot: c.screenshot?.filename || null,
               shotThumb: thumbs[c.screenshot?.filename] || null,
               shotId: c.screenshot?.downloadId ?? null,
+              verdict: c.verdict || null,
             },
           })),
       };

@@ -52,7 +52,8 @@ async function load() {
 function matches(row, term) {
   if (filter !== "all" && row.status !== filter) return false;
   if (!term) return true;
-  const hay = [row.url, labelOf(row), row.cap?.text, row.note, row.cap?.screenshot, savedOn(row), ...(row.cap?.links || [])]
+  const hay = [row.url, labelOf(row), row.cap?.text, row.note, row.cap?.screenshot, savedOn(row),
+    row.cap?.verdict, ...(row.cap?.links || [])]
     .filter(Boolean).join(" ").toLowerCase();
   return hay.includes(term);
 }
@@ -119,6 +120,13 @@ function rowEl(row) {
     meta.append(Object.assign(document.createElement("span"), { textContent: row.cap.kind }));
   }
   if (!row.cap) meta.append(Object.assign(document.createElement("span"), { textContent: "not read yet" }));
+  if (row.cap?.verdict) {
+    const v = document.createElement("span");
+    v.className = "png";
+    v.textContent = row.cap.verdict === "keep" ? "✓ keep" : "✕ drop";
+    v.style.color = row.cap.verdict === "keep" ? "var(--ok)" : "var(--bad)";
+    meta.append(v);
+  }
   if (row.note) {
     const note = document.createElement("span");
     note.className = "note";

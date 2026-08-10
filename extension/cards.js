@@ -1,11 +1,13 @@
-/* A shuffled deck of the links still waiting for a verdict.
+/* A shuffled deck of everything you have read but not yet judged.
  *
- * Cards judge URLs, they do not read pages: reading a page's DOM needs that page open in your tab,
- * which is what Keep in the popup is for. So right means "worth keeping", left means "no", up means
- * "not now" — and Open loads it in a tab for the ones you cannot judge from the URL alone.
+ * The deck runs over *captures*, never over bare URLs. A card has to be judgeable, and
+ * `x.com/i/status/2086188444317819246` tells you nothing — the whole reason this extension exists
+ * is that the URL is opaque and only the page has the content. So reading comes first (walk the
+ * list, Keep as you go, which is an ingest and not a verdict) and the deck comes after, when every
+ * card carries an author, a title, text, images and a screenshot.
  *
- * The deck is shuffled once per visit and held in memory. Verdicts go straight to storage through
- * the background, so closing this tab mid-deck loses nothing but the shuffle order.
+ * Keep and drop are verdicts on the capture. Neither deletes anything: a drop is a flag, so a
+ * change of mind costs one click in the list.
  */
 
 const $ = id => document.getElementById(id);
@@ -13,10 +15,10 @@ const send = msg => browser.runtime.sendMessage(msg);
 
 const THRESHOLD = 105;
 
-let deck = [];        // pending rows, shuffled
-let index = 0;        // how far into the deck
-let counts = {};
-const undo = [];      // {url, prev} — one entry per verdict, newest last
+let deck = [];
+let index = 0;
+let tally = { keep: 0, drop: 0 };
+const undo = [];
 
 function say(text) { $("msg").textContent = text; }
 
@@ -25,12 +27,7 @@ function hostOf(url) {
   catch (e) { return "(unparseable)"; }
 }
 
-function pathOf(url) {
-  try {
-    const u = new URL(url);
-    return (u.pathname.replace(/\/$/, "") + u.search) || "/";
-  } catch (e) { return String(url); }
-}
+function shortUrl(url) { return String(url).replace(/^https?:\/\/(www\.)?/, ""); }
 
 /* Stable hue per domain, so the same site always wears the same colour. */
 function hue(str) {
@@ -39,19 +36,18 @@ function hue(str) {
   return h;
 }
 
-function labelOf(row) {
-  const cap = row.cap;
-  if (!cap) return null;
-  const body = (cap.text || "").replace(/\s+/g, " ").trim();
-  if (body && (!cap.title || /^@?\S+ on X$|^X post$/.test(cap.title))) {
-    return (cap.handle ? `${cap.handle}: ` : "") + (body.length > 100 ? body.slice(0, 100) + "…" : body);
+/* A plain tweet's title is only its handle, so its text is what identifies it. */
+function headline(card) {
+  const body = (card.text || "").replace(/\s+/g, " ").trim();
+  if (card.title && !/^@?\S+ on X$|^X post$/.test(card.title)) {
+    return card.handle && !card.title.includes(card.handle)
+      ? `${card.handle} — ${card.title}`
+      : card.title;
   }
-  if (cap.handle && cap.title && !cap.title.includes(cap.handle)) return `${cap.handle} — ${cap.title}`;
-  return cap.title || cap.handle || null;
+  if (body) return (card.handle ? `${card.handle}: ` : "") + body;
+  return card.handle || shortUrl(card.url);
 }
 
-/* Fisher-Yates. Shuffled rather than ordered because a deck of 133 x.com cards in a row is a
- * chore; mixing the domains keeps each card a fresh decision. */
 function shuffle(list) {
   const out = [...list];
   for (let i = out.length - 1; i > 0; i--) {
@@ -62,53 +58,67 @@ function shuffle(list) {
 }
 
 async function load() {
-  const { items } = await send({ type: "dump" });
-  counts = { kept: 0, skipped: 0, seen: 0, pending: 0 };
-  for (const row of items) counts[row.status] = (counts[row.status] || 0) + 1;
-  deck = shuffle(items.filter(r => r.status === "pending"));
+  const res = await send({ type: "deck" });
+  tally = { keep: res.keep || 0, drop: res.drop || 0 };
+  deck = shuffle(res.cards || []);
   index = 0;
   render();
 }
 
-function cardEl(row, top) {
+function cardEl(card, top) {
   const el = document.createElement("article");
   el.className = "card" + (top ? " top" : "");
-  const host = hostOf(row.url);
-  const initial = (host.match(/[a-z0-9]/i) || ["?"])[0].toUpperCase();
+  const host = hostOf(card.url);
 
   const head = document.createElement("div");
   head.className = "head";
   const mono = document.createElement("div");
   mono.className = "mono";
   mono.style.background = `hsl(${hue(host)} 58% 45%)`;
-  mono.textContent = initial;
+  mono.textContent = (host.match(/[a-z0-9]/i) || ["?"])[0].toUpperCase();
   const names = document.createElement("div");
-  names.append(Object.assign(document.createElement("div"), { className: "host", textContent: host }));
-  const when = row.saved_at || row.added_at;
   names.append(Object.assign(document.createElement("div"), {
-    className: "when",
-    textContent: when ? `saved ${String(when).slice(0, 10)}` : "date unknown",
+    className: "host",
+    textContent: card.name ? `${card.name} · ${host}` : host,
+  }));
+  const bits = [];
+  if (card.saved_at) bits.push(`saved ${String(card.saved_at).slice(0, 10)}`);
+  if (card.kind && card.kind !== "page") bits.push(card.kind);
+  if (card.code_blocks) bits.push(`${card.code_blocks} code block${card.code_blocks > 1 ? "s" : ""}`);
+  names.append(Object.assign(document.createElement("div"), {
+    className: "when", textContent: bits.join(" · "),
   }));
   head.append(mono, names);
   el.append(head);
 
-  const label = labelOf(row);
-  if (label) {
-    el.append(Object.assign(document.createElement("div"), { className: "title", textContent: label }));
-  }
-  if (row.cap?.text && label !== row.cap.text) {
-    el.append(Object.assign(document.createElement("div"), {
-      className: "body", textContent: row.cap.text,
-    }));
-  }
-  el.append(Object.assign(document.createElement("div"), { className: "path", textContent: pathOf(row.url) }));
+  el.append(Object.assign(document.createElement("div"), {
+    className: "title", textContent: headline(card),
+  }));
 
-  if (row.note) {
-    el.append(Object.assign(document.createElement("div"), { className: "note", textContent: row.note }));
+  const body = (card.text || "").replace(/\s+/g, " ").trim();
+  if (body && !headline(card).includes(body.slice(0, 40))) {
+    el.append(Object.assign(document.createElement("div"), { className: "body", textContent: body }));
   }
 
-  const pics = [...(row.cap?.images || [])].slice(0, 3);
-  if (row.cap?.shotThumb) pics.unshift(row.cap.shotThumb);
+  if (card.note) {
+    el.append(Object.assign(document.createElement("div"), { className: "note", textContent: card.note }));
+  }
+
+  if (card.links.length) {
+    const inner = document.createElement("div");
+    inner.className = "inner";
+    for (const url of card.links.slice(0, 4)) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = shortUrl(url);
+      inner.append(a);
+    }
+    el.append(inner);
+  }
+
+  const pics = [...(card.shotThumb ? [card.shotThumb] : []), ...card.images.slice(0, 3)];
   if (pics.length) {
     const thumbs = document.createElement("div");
     thumbs.className = "thumbs";
@@ -126,20 +136,17 @@ function cardEl(row, top) {
   foot.className = "foot";
   const open = document.createElement("a");
   open.className = "open";
-  open.href = row.url;
+  open.href = card.url;
   open.target = "_blank";
   open.rel = "noopener noreferrer";
   open.textContent = "Open ↗";
-  open.addEventListener("click", () => send({ type: "set-current", url: row.url }));
-  const same = deck.filter(r => hostOf(r.url) === host).length - 1;
   foot.append(open, Object.assign(document.createElement("span"), {
-    className: "siblings",
-    textContent: same > 0 ? `${same} more from ${host} in the deck` : `only one from ${host}`,
+    className: "siblings", textContent: shortUrl(card.url).slice(0, 60),
   }));
   el.append(foot);
 
   el.append(Object.assign(document.createElement("div"), { className: "stamp keep", textContent: "keep" }));
-  el.append(Object.assign(document.createElement("div"), { className: "stamp skip", textContent: "skip" }));
+  el.append(Object.assign(document.createElement("div"), { className: "stamp skip", textContent: "drop" }));
   return el;
 }
 
@@ -147,9 +154,9 @@ function render() {
   const total = deck.length;
   const left = total - index;
   $("bar").style.width = total ? `${index / total * 100}%` : "100%";
-  $("pos").textContent = total ? `${index} of ${total} this session` : "nothing pending";
-  $("t-kept").textContent = counts.kept || 0;
-  $("t-skipped").textContent = counts.skipped || 0;
+  $("pos").textContent = total ? `${index} of ${total} this session` : "nothing to judge";
+  $("t-kept").textContent = tally.keep;
+  $("t-skipped").textContent = tally.drop;
   $("t-left").textContent = left;
   $("undo").disabled = undo.length === 0;
   for (const id of ["skip", "later", "keep"]) $(id).disabled = left === 0;
@@ -161,16 +168,17 @@ function render() {
     const box = document.createElement("div");
     box.className = "done";
     box.innerHTML = total
-      ? '<b>Deck finished.</b>Reload for another pass, or see <a href="list.html">the whole list</a>.'
-      : '<b>Nothing pending.</b>Every link has a verdict — <a href="list.html">the whole list</a>.';
+      ? '<b>Deck finished.</b>Read some more links, then come back — or see <a href="list.html">the whole list</a>.'
+      : '<b>Nothing captured yet to judge.</b>Cards need a page\'s content to be judgeable at all. '
+        + 'Walk your list with <kbd>⌃⇧J</kbd> and press <kbd>⌃⇧K</kbd> on anything worth reading, '
+        + 'then come back. <a href="list.html">The whole list →</a>';
     stage.append(box);
     return;
   }
 
-  // Two ghosts behind the live card give the stack depth without animating them.
-  deck.slice(index, index + 3).reverse().forEach((row, i, arr) => {
+  deck.slice(index, index + 3).reverse().forEach((card, i, arr) => {
     const depth = arr.length - 1 - i;
-    const el = cardEl(row, depth === 0);
+    const el = cardEl(card, depth === 0);
     el.style.transform = `translateY(${depth * 9}px) scale(${1 - depth * 0.035})`;
     el.style.opacity = depth > 1 ? ".55" : "1";
     el.style.zIndex = String(10 - depth);
@@ -182,106 +190,100 @@ function render() {
 
 /* --- verdicts --- */
 
-async function commit(row, status, card, xdir = 0, ydir = 0) {
-  undo.push({ url: row.url, prev: row.status });
-  if (status !== "pending") {
-    row.status = status;
-    counts[status] = (counts[status] || 0) + 1;
-    await send({ type: "mark", url: row.url, status });
+async function commit(card, verdict, el, xdir = 0, ydir = 0) {
+  undo.push({ url: card.url, verdict });
+  if (verdict) {
+    tally[verdict]++;
+    await send({ type: "judge", url: card.url, verdict });
   }
   index++;
-  if (card) {
-    card.style.transition = "transform .28s ease-out, opacity .28s ease-out";
-    card.style.transform =
+  if (el) {
+    el.style.transition = "transform .28s ease-out, opacity .28s ease-out";
+    el.style.transform =
       `translate(${xdir * 620}px, ${ydir * 620 + (ydir ? 0 : 40)}px) rotate(${xdir * 22}deg)`;
-    card.style.opacity = "0";
+    el.style.opacity = "0";
     setTimeout(render, 190);
   } else {
     render();
   }
 }
 
-function decide(status) {
-  const row = deck[index];
-  if (!row) return;
-  const dir = status === "kept" ? 1 : status === "skipped" ? -1 : 0;
-  commit(row, status, $("stage").querySelector(".card.top"), dir, status === "pending" ? -1 : 0);
+function decide(verdict) {
+  const card = deck[index];
+  if (!card) return;
+  const dir = verdict === "keep" ? 1 : verdict === "drop" ? -1 : 0;
+  commit(card, verdict, $("stage").querySelector(".card.top"), dir, verdict ? 0 : -1);
 }
 
 async function undoLast() {
   const last = undo.pop();
   if (!last) return;
   index = Math.max(0, index - 1);
-  const row = deck[index];
-  if (row && row.status !== last.prev) {
-    counts[row.status] = Math.max(0, (counts[row.status] || 0) - 1);
-    row.status = last.prev;
-    await send({ type: "mark", url: last.url, status: last.prev });
+  if (last.verdict) {
+    tally[last.verdict] = Math.max(0, tally[last.verdict] - 1);
+    await send({ type: "judge", url: last.url, verdict: null });
   }
   render();
 }
 
 /* --- drag --- */
 
-function arm(card, row) {
-  if (!card) return;
+function arm(el, card) {
+  if (!el) return;
   let startX = 0, startY = 0, dx = 0, dy = 0, dragging = false;
 
-  card.addEventListener("pointerdown", e => {
-    if (e.target.closest(".open")) return;   // let the link through
+  el.addEventListener("pointerdown", e => {
+    if (e.target.closest("a")) return;   // let links through
     dragging = true;
     startX = e.clientX; startY = e.clientY;
-    card.setPointerCapture(e.pointerId);
-    card.style.transition = "none";
+    el.setPointerCapture(e.pointerId);
+    el.style.transition = "none";
   });
 
-  card.addEventListener("pointermove", e => {
+  el.addEventListener("pointermove", e => {
     if (!dragging) return;
     dx = e.clientX - startX; dy = e.clientY - startY;
-    card.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 22}deg)`;
+    el.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 22}deg)`;
     const p = Math.min(Math.abs(dx) / THRESHOLD, 1);
-    card.querySelector(".stamp.keep").style.opacity = dx > 0 ? p : 0;
-    card.querySelector(".stamp.skip").style.opacity = dx < 0 ? p : 0;
+    el.querySelector(".stamp.keep").style.opacity = dx > 0 ? p : 0;
+    el.querySelector(".stamp.skip").style.opacity = dx < 0 ? p : 0;
   });
 
-  card.addEventListener("pointerup", () => {
+  el.addEventListener("pointerup", () => {
     if (!dragging) return;
     dragging = false;
-    card.style.transition = "transform .28s ease-out, opacity .28s ease-out";
+    el.style.transition = "transform .28s ease-out, opacity .28s ease-out";
     if (Math.abs(dx) >= THRESHOLD) {
-      commit(row, dx > 0 ? "kept" : "skipped", card, dx > 0 ? 1 : -1);
+      commit(card, dx > 0 ? "keep" : "drop", el, dx > 0 ? 1 : -1);
     } else if (dy < -THRESHOLD) {
-      commit(row, "pending", card, 0, -1);   // later: no verdict recorded
+      commit(card, null, el, 0, -1);   // later: no verdict recorded, comes back next session
     } else {
-      card.style.transform = "";
-      card.querySelectorAll(".stamp").forEach(s => (s.style.opacity = 0));
+      el.style.transform = "";
+      el.querySelectorAll(".stamp").forEach(s => (s.style.opacity = 0));
     }
   });
 
-  card.addEventListener("pointercancel", () => {
+  el.addEventListener("pointercancel", () => {
     dragging = false;
-    card.style.transform = "";
+    el.style.transform = "";
   });
 }
 
-$("keep").onclick = () => decide("kept");
-$("skip").onclick = () => decide("skipped");
-$("later").onclick = () => decide("pending");
+$("keep").onclick = () => decide("keep");
+$("skip").onclick = () => decide("drop");
+$("later").onclick = () => decide(null);
 $("undo").onclick = undoLast;
 
 document.addEventListener("keydown", e => {
   if (e.target.matches("input, textarea")) return;
   const k = e.key.toLowerCase();
-  if (e.key === "ArrowRight" || k === "k") { e.preventDefault(); decide("kept"); }
-  else if (e.key === "ArrowLeft" || k === "d") { e.preventDefault(); decide("skipped"); }
-  else if (e.key === "ArrowUp" || k === "s") { e.preventDefault(); decide("pending"); }
+  if (e.key === "ArrowRight" || k === "k") { e.preventDefault(); decide("keep"); }
+  else if (e.key === "ArrowLeft" || k === "d") { e.preventDefault(); decide("drop"); }
+  else if (e.key === "ArrowUp" || k === "s") { e.preventDefault(); decide(null); }
   else if (k === "u" || (k === "z" && (e.metaKey || e.ctrlKey))) { e.preventDefault(); undoLast(); }
   else if (k === "o") {
-    const row = deck[index];
-    if (row) {
-      send({ type: "set-current", url: row.url });
-      window.open(row.url, "_blank", "noopener");
-    }
+    const card = deck[index];
+    if (card) window.open(card.url, "_blank", "noopener");
   }
 });
 
