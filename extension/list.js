@@ -149,7 +149,9 @@ function rowEl(row) {
     tag.className = "png";
     tag.textContent = `📄 ${row.cap.screenshot}`;
     tag.title = "saved under your Downloads folder";
-    main.append(document.createElement("div")).append(tag);
+    const line = document.createElement("div");
+    line.append(tag);
+    main.append(line);
   }
 
   li.append(main);
@@ -225,7 +227,20 @@ function render() {
     }
     const ul = document.createElement("ul");
     ul.className = "rows";
-    for (const row of list) ul.append(rowEl(row));
+    for (const row of list) {
+      try {
+        ul.append(rowEl(row));
+      } catch (e) {
+        // One malformed row must not blank the page; fall back to the bare URL.
+        const li = document.createElement("li");
+        li.dataset.status = row.status;
+        li.append(document.createElement("span"), Object.assign(document.createElement("div"), {
+          className: "main", textContent: `${shortUrl(row.url)} — could not render: ${e.message}`,
+        }));
+        ul.append(li);
+        console.error("row failed", row.url, e);
+      }
+    }
     section.append(ul);
     out.append(section);
   }
