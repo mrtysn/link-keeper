@@ -173,5 +173,20 @@ $("clear-list").onclick = async () => {
   refresh();
 };
 
+/* The subfolder is committed on blur or Enter, so every keystroke is not a write. */
+send({ type: "get-folder" }).then(({ folder, fallback }) => {
+  $("folder").value = folder;
+  $("folder-echo").textContent = folder || fallback;
+});
+
+async function saveFolder() {
+  const { folder } = await send({ type: "set-folder", folder: $("folder").value });
+  $("folder").value = folder;
+  $("folder-echo").textContent = folder || "";
+  say(folder ? `screenshots → Downloads/${folder}/` : "screenshots → Downloads/", "ok");
+}
+$("folder").onchange = saveFolder;
+$("folder").onkeydown = e => { if (e.key === "Enter") saveFolder(); };
+
 refresh();
 setInterval(refresh, 1500);

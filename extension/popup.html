@@ -76,6 +76,8 @@
   summary { cursor: pointer; color: var(--dim); font-size: .78rem; }
   details .grid { margin-top: .4rem; }
   details p { color: var(--dim); font-size: .72rem; margin: .35rem 0 0; }
+  details input { margin-top: .35rem; }
+  code { background: var(--chip); padding: 0 .2rem; border-radius: .2rem; }
 </style>
 </head>
 <body>
@@ -126,7 +128,10 @@
       <button class="danger" id="clear-captures">Clear captures</button>
       <button class="danger wide" id="clear-list">Clear list</button>
     </div>
-    <p>Exports land in Downloads as JSONL. Reset clears “seen”, never “kept”.</p>
+    <input id="folder" placeholder="link-keeper" title="Subfolder inside Downloads for screenshots">
+    <p>Screenshots go to <code>Downloads/<span id="folder-echo">link-keeper</span>/</code> — extensions
+    cannot write elsewhere; symlink it if you need to. Exports land in Downloads as JSONL. Reset
+    clears “seen”, never “kept”.</p>
   </details>
 
   <script src="popup.js"></script>

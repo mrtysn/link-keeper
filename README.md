@@ -81,9 +81,17 @@ there attaches the capture to the right list entry.
 
 ### Screenshots
 
-**Keep + full-page screenshot** — one action. It reads the page, then scrolls it a screenful at a
-time, shoots each viewport, and stitches the tiles into a single PNG in `~/Downloads/link-keeper/`
-named after the post. Leave the tab alone for a second while it walks the page.
+**Keep + shot** — one action. It reads the page, then scrolls it a screenful at a time, shoots each
+viewport, and stitches the tiles into a single PNG named after the post. Leave the tab alone for a
+second while it walks the page.
+
+Files land in `~/Downloads/link-keeper/`, and the subfolder is configurable under *Export &
+housekeeping*. It cannot be moved out of Downloads: the `downloads` API resolves filenames against
+the browser's download directory and rejects `..`, so no extension can write elsewhere. If the
+files need to live somewhere else, make that subfolder a symlink — Firefox writes through it.
+
+Re-keeping the same page overwrites its PNG rather than leaving a `(1)` beside it, so the filename
+in the record always names the current shot.
 
 MV3 does not expose `captureTab`, which would have taken the whole page in one call — the schema
 lists it but it never materialises, with or without host permission. `captureVisibleTab` is
@@ -169,6 +177,7 @@ still valid.
 | `tabs` | point the current tab at the next link |
 | `storage`, `unlimitedStorage` | hold the list and the captures between restarts |
 | `menus` | the right-click actions |
+| `downloads.open` | opening a screenshot from the list page, since a `file://` image cannot be loaded there |
 | `downloads` | write screenshot PNGs and the exported JSONL |
 | `notifications` | report the result of keyboard and menu actions, which have nowhere else to speak |
 | `*://*/*` *(optional)* | reading pixels for a screenshot; requested on first use, revocable, and not needed for text |

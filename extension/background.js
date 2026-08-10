@@ -190,6 +190,20 @@ async function inject(tabId, func, args = []) {
  * its own key, deliberately *not* on the capture record: the exported JSONL stays plain text,
  * and the list page still has something to show.
  */
+/* The downloads API resolves filenames against the browser's download directory and rejects
+ * "..", so writing outside Downloads is not possible for an extension. The subfolder is the one
+ * part that is ours to choose. Point it at a symlink if the files need to live elsewhere. */
+const FOLDER_DEFAULT = "link-keeper";
+
+function cleanFolder(raw) {
+  const folder = String(raw ?? FOLDER_DEFAULT)
+    .replace(/\.\./g, "")
+    .replace(/[^A-Za-z0-9 _\-/]/g, "")
+    .replace(/\/{2,}/g, "/")
+    .replace(/^[\s/]+|[\s/]+$/g, "");
+  return folder;
+}
+
 const THUMB_W = 480;
 const THUMB_H = 300;
 
@@ -270,7 +284,8 @@ async function fullPageShot(tab, slug) {
     }
 
     const url = URL.createObjectURL(await canvas.convertToBlob({ type: "image/png" }));
-    const filename = `link-keeper/${slug}.png`;
+    const folder = cleanFolder(await read("folder", FOLDER_DEFAULT));
+    const filename = folder ? `${folder}/${slug}.png` : `${slug}.png`;
     // Same slug means the same page, so replace rather than let Firefox uniquify to "(1)" —
     // otherwise re-keeping leaves the record naming a file that is now the older shot.
     const downloadId = await browser.downloads.download({
@@ -590,6 +605,15 @@ browser.runtime.onMessage.addListener(async msg => {
         }
       }
       return { ok: true };
+    }
+
+    case "get-folder":
+      return { folder: cleanFolder(await read("folder", FOLDER_DEFAULT)), fallback: FOLDER_DEFAULT };
+
+    case "set-folder": {
+      const folder = cleanFolder(msg.folder);
+      await browser.storage.local.set({ folder });
+      return { ok: true, folder };
     }
 
     case "open-list":
