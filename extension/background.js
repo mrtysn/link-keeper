@@ -251,6 +251,7 @@ async function fullPageShot(tab, slug) {
     if (!w || !h || !vh) throw new Error("could not measure the page");
 
     const scale = Math.min(dpr, SHOT_MAX_DEVICE_PX / h);
+    const scaledDown = scale < dpr;   // the page was too tall to render at full resolution
     const tiles = [];
     for (let y = 0, n = 0; y < h && n < SHOT_MAX_TILES; y += vh, n++) {
       const at = await inject(tab.id, yy => { window.scrollTo(0, yy); return window.scrollY; }, [y]);
@@ -287,7 +288,10 @@ async function fullPageShot(tab, slug) {
       width: canvas.width,
       height: canvas.height,
       tiles: tiles.length,
-      truncated: captured < h,
+      // Only a real limit counts as truncation. A final scroll that clamps short of the
+      // measured height simply means the bottom was reached — often because making sticky
+      // elements static shortened the document after it was measured.
+      truncated: tiles.length >= SHOT_MAX_TILES || scaledDown,
       via: "stitched",
     };
   } finally {
@@ -329,6 +333,11 @@ async function captureActive(note = "", withShot = false) {
   if (!record) return { ok: false, error: "could not read that page" };
 
   record.url = (record.url || record.canonical || tab.url || "").split("#")[0];
+  // What you actually visited, kept when it differs from the canonical permalink — x.com
+  // rewrites /i/status/<id> to /<handle>/status/<id>, and the original is what a saved link
+  // elsewhere will look like.
+  const visited = (tab.url || "").split("#")[0];
+  record.source_url = visited && visited !== record.url ? visited : null;
   record.captured_at = new Date().toISOString();
   if (note) record.note = note;
   record.links = await resolveLinks(record.links);
