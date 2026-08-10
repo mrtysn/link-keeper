@@ -155,6 +155,16 @@ function rowEl(row) {
     main.append(shots);
   }
 
+  if (row.cap?.screenshot && !row.cap.shotThumb) {
+    // No preview stored — Firefox's own screenshot, or one taken before previews existed.
+    const tag = document.createElement("span");
+    tag.className = "png";
+    tag.textContent = `📄 ${row.cap.screenshot}`;
+    const line = document.createElement("div");
+    line.append(tag);
+    main.append(line);
+  }
+
   if (row.cap?.shotThumb) {
     const wrap = document.createElement("div");
     wrap.className = "shots";
@@ -174,16 +184,6 @@ function rowEl(row) {
     };
     wrap.append(btn);
     main.append(wrap);
-  }
-
-  if (row.cap?.screenshot) {
-    const tag = document.createElement("span");
-    tag.className = "png";
-    tag.textContent = `📄 ${row.cap.screenshot}`;
-    tag.title = "saved under your Downloads folder";
-    const line = document.createElement("div");
-    line.append(tag);
-    main.append(line);
   }
 
   li.append(main);
