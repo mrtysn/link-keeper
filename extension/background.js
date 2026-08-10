@@ -185,6 +185,35 @@ async function inject(tabId, func, args = []) {
   return res?.result;
 }
 
+/* The PNG lives in Downloads, which an extension page cannot load — file:// is blocked from
+ * moz-extension pages. So a small JPEG preview of the top of the page is kept in storage under
+ * its own key, deliberately *not* on the capture record: the exported JSONL stays plain text,
+ * and the list page still has something to show.
+ */
+const THUMB_W = 480;
+const THUMB_H = 300;
+
+async function makeThumb(canvas) {
+  const c = new OffscreenCanvas(THUMB_W, THUMB_H);
+  const ctx = c.getContext("2d");
+  const scale = THUMB_W / canvas.width;
+  const srcH = Math.min(canvas.height, THUMB_H / scale);
+  ctx.drawImage(canvas, 0, 0, canvas.width, srcH, 0, 0, THUMB_W, Math.min(THUMB_H, canvas.height * scale));
+  const blob = await c.convertToBlob({ type: "image/jpeg", quality: 0.72 });
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function saveThumb(filename, dataUrl) {
+  const thumbs = await read("thumbs", {});
+  thumbs[filename] = dataUrl;
+  await browser.storage.local.set({ thumbs });
+}
+
 async function fullPageShot(tab, slug) {
   if (!browser.downloads) throw new Error("no downloads permission — reload the extension");
   if (!browser.tabs.captureVisibleTab) {
@@ -243,6 +272,10 @@ async function fullPageShot(tab, slug) {
     const filename = `link-keeper/${slug}.png`;
     await browser.downloads.download({ url, filename, saveAs: false });
     setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+    try {
+      await saveThumb(filename, await makeThumb(canvas));
+    } catch (e) { /* a missing preview is cosmetic; the PNG is already saved */ }
 
     return {
       filename,
@@ -450,6 +483,7 @@ browser.runtime.onMessage.addListener(async msg => {
       const items = await getItems();
       const captures = await getCaptures();
       const byKey = new Map(captures.map(c => [keyOf(c.url), c]));
+      const thumbs = await read("thumbs", {});
       const current = await getCurrent();
       return {
         items: items.map(i => {
@@ -468,6 +502,7 @@ browser.runtime.onMessage.addListener(async msg => {
               links: (cap.links || []).map(l => l.resolved || l.href).filter(Boolean),
               images: cap.images || [],
               screenshot: cap.screenshot?.filename || null,
+              shotThumb: thumbs[cap.screenshot?.filename] || null,
             },
           };
         }),
@@ -488,6 +523,7 @@ browser.runtime.onMessage.addListener(async msg => {
               links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean),
               images: c.images || [],
               screenshot: c.screenshot?.filename || null,
+              shotThumb: thumbs[c.screenshot?.filename] || null,
             },
           })),
       };
@@ -552,6 +588,7 @@ browser.runtime.onMessage.addListener(async msg => {
 
     case "clear-captures":
       await setCaptures([]);
+      await browser.storage.local.set({ thumbs: {} });
       return { ok: true };
 
     case "clear-list":

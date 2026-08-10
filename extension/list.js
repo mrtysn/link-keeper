@@ -144,6 +144,19 @@ function rowEl(row) {
     main.append(shots);
   }
 
+  if (row.cap?.shotThumb) {
+    const wrap = document.createElement("div");
+    wrap.className = "shots";
+    const img = document.createElement("img");
+    img.src = row.cap.shotThumb;
+    img.className = "shot-preview";
+    img.loading = "lazy";
+    img.alt = "";
+    img.title = `full-page screenshot: ${row.cap.screenshot}`;
+    wrap.append(img);
+    main.append(wrap);
+  }
+
   if (row.cap?.screenshot) {
     const tag = document.createElement("span");
     tag.className = "png";
