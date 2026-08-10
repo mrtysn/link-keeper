@@ -47,6 +47,7 @@ const LK = (() => {
       posted: meta("article:published_time") || ld.datePublished || attr("time[datetime]", "datetime"),
       site: meta("og:site_name") || location.hostname,
       canonical: attr('link[rel="canonical"]', "href"),
+      images: [meta("og:image")].filter(Boolean),
     };
   }
 
@@ -83,6 +84,17 @@ const LK = (() => {
     collect(article.querySelector('div[data-testid="card.wrapper"]'));
     collect(article.querySelector(ARTICLE_BODY));
     return out;
+  }
+
+  /* Content images only — avatars live under /profile_images/ and emoji under /emoji/, and
+   * neither is worth keeping. `name=orig` asks X's CDN for the unresized original, since the
+   * src in the DOM is whatever size the layout happened to need. */
+  function tweetImages(root) {
+    const urls = [...root.querySelectorAll("img[src]")]
+      .map(img => img.src)
+      .filter(src => /pbs\.twimg\.com\/(media|card_img)\//.test(src))
+      .map(src => (/[?&]name=/.test(src) ? src.replace(/([?&])name=[^&]*/, "$1name=orig") : src));
+    return [...new Set(urls)];
   }
 
   /* Long-form "Articles" reuse the tweet element for author and timestamp but put the title
@@ -123,6 +135,7 @@ const LK = (() => {
         || (articleBody ? blockText(articleBody)?.slice(0, 60000) : null),
       code_blocks: [...article.querySelectorAll('[data-testid="markdown-code-block"]')]
         .map(blockText).filter(Boolean),
+      images: tweetImages(article),
       posted: timeEl?.getAttribute("datetime") || null,
       links: tweetLinks(article),
       quoted: quotedBlock && {
