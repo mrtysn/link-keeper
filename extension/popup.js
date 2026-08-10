@@ -66,8 +66,16 @@ async function keep(withShot) {
   if (res?.ok) {
     const r = res.record;
     const inner = r.links?.length ? ` (+${r.links.length} link${r.links.length > 1 ? "s" : ""})` : "";
-    const shot = r.screenshot ? " + png" : r.screenshot_error ? " (screenshot failed)" : "";
-    say(`kept: ${label({ title: r.title, handle: r.author?.handle, url: r.url })}${inner}${shot}`.slice(0, 110), "ok");
+    // Truncate the title, never the diagnostic — the reason a screenshot failed is the whole
+    // point of showing anything at all.
+    const head = `kept: ${label({ title: r.title, handle: r.author?.handle, url: r.url })}${inner}`.slice(0, 110);
+    if (r.screenshot) {
+      say(`${head} · png ${r.screenshot.width}×${r.screenshot.height}`, "ok");
+    } else if (r.screenshot_error) {
+      say(`${head}\nscreenshot failed: ${r.screenshot_error}`, "bad");
+    } else {
+      say(head, "ok");
+    }
     $("note").value = "";
   } else {
     say(res?.error || "could not keep that page", "bad");
