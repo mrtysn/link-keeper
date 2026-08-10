@@ -77,7 +77,7 @@ mixing the domains keeps each card an actual decision.
 
 ### Seeing the whole list
 
-*See the whole list* in the popup opens a full page — the readable view when there are
+*Open list* in the popup opens a full page — the readable view when there are
 hundreds of entries, rather than a 22rem popup.
 
 - Grouped **by domain** by default, or by status, or flat newest-first.

@@ -114,12 +114,9 @@ async function markCurrent(status) {
 
 /* Open the next pending link in the tab you are in. Opening counts as seen; capturing is
  * what upgrades it to kept. */
-async function openNext(direction = 1) {
+async function openNext() {
   const items = await getItems();
-  const ordered = [...items].sort(byNewest);
-  const target = direction > 0
-    ? ordered.find(i => i.status === "pending")
-    : [...ordered].reverse().find(i => i.status !== "pending");
+  const target = [...items].sort(byNewest).find(i => i.status === "pending");
   if (!target) return { ok: false, error: "nothing left in the list" };
 
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -470,7 +467,7 @@ async function queueActiveTab() {
 browser.commands.onCommand.addListener(async name => {
   if (name === "capture-page") await notify(describe(await captureActive()));
   else if (name === "next-link") {
-    const res = await openNext(1);
+    const res = await openNext();
     await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
   } else if (name === "queue-page") {
     const res = await queueActiveTab();
@@ -511,13 +508,13 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     case "menu-keep": await notify(describe(await captureActive())); break;
     case "menu-shot": await notify(describe(await captureActive("", true))); break;
     case "menu-next": {
-      const res = await openNext(1);
+      const res = await openNext();
       await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
       break;
     }
     case "menu-skip": {
       await markCurrent("skipped");
-      const res = await openNext(1);
+      const res = await openNext();
       await notify(res.ok ? `skipped · ${res.remaining} left` : `failed: ${res.error}`);
       break;
     }
@@ -736,11 +733,11 @@ browser.runtime.onMessage.addListener(async msg => {
     }
 
     case "next":
-      return openNext(1);
+      return openNext();
 
     case "skip":
       await markCurrent("skipped");
-      return openNext(1);
+      return openNext();
 
     case "capture-active":
       return captureActive(msg.note, !!msg.withShot);
