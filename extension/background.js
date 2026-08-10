@@ -272,7 +272,9 @@ async function fullPageShot(tab, slug) {
     const filename = `link-keeper/${slug}.png`;
     // Same slug means the same page, so replace rather than let Firefox uniquify to "(1)" —
     // otherwise re-keeping leaves the record naming a file that is now the older shot.
-    await browser.downloads.download({ url, filename, saveAs: false, conflictAction: "overwrite" });
+    const downloadId = await browser.downloads.download({
+      url, filename, saveAs: false, conflictAction: "overwrite",
+    });
     setTimeout(() => URL.revokeObjectURL(url), 30000);
 
     try {
@@ -281,6 +283,7 @@ async function fullPageShot(tab, slug) {
 
     return {
       filename,
+      downloadId,
       width: canvas.width,
       height: canvas.height,
       tiles: tiles.length,
@@ -505,6 +508,7 @@ browser.runtime.onMessage.addListener(async msg => {
               images: cap.images || [],
               screenshot: cap.screenshot?.filename || null,
               shotThumb: thumbs[cap.screenshot?.filename] || null,
+              shotId: cap.screenshot?.downloadId ?? null,
             },
           };
         }),
@@ -526,6 +530,7 @@ browser.runtime.onMessage.addListener(async msg => {
               images: c.images || [],
               screenshot: c.screenshot?.filename || null,
               shotThumb: thumbs[c.screenshot?.filename] || null,
+              shotId: c.screenshot?.downloadId ?? null,
             },
           })),
       };
@@ -556,6 +561,25 @@ browser.runtime.onMessage.addListener(async msg => {
       if (!item) return { ok: false, error: "not on the list" };
       item.status = msg.status;
       await setItems(items);
+      return { ok: true };
+    }
+
+    case "open-shot": {
+      let id = msg.id;
+      if (id == null && msg.filename) {
+        const hits = await browser.downloads.search({ filenameRegex: msg.filename.split("/").pop() + "$" });
+        id = hits.sort((a, b) => String(b.startTime).localeCompare(String(a.startTime)))[0]?.id;
+      }
+      if (id == null) return { ok: false, error: "that download is no longer in Firefox's history" };
+      try {
+        await browser.downloads.open(id);
+      } catch (e) {
+        try {
+          await browser.downloads.show(id);
+        } catch (e2) {
+          return { ok: false, error: String(e2.message || e2) };
+        }
+      }
       return { ok: true };
     }
 

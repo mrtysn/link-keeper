@@ -158,8 +158,16 @@ function rowEl(row) {
     img.className = "shot-preview";
     img.loading = "lazy";
     img.alt = "";
-    img.title = `full-page screenshot: ${row.cap.screenshot}`;
-    wrap.append(img);
+    // The PNG itself lives in Downloads, which this page cannot load; the downloads API opens it.
+    const btn = document.createElement("button");
+    btn.className = "shot-btn";
+    btn.title = `open ${row.cap.screenshot}`;
+    btn.append(img);
+    btn.onclick = async () => {
+      const res = await send({ type: "open-shot", id: row.cap.shotId, filename: row.cap.screenshot });
+      if (!res?.ok) say(res?.error || "could not open it");
+    };
+    wrap.append(btn);
     main.append(wrap);
   }
 
