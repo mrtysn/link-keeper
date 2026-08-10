@@ -134,6 +134,11 @@ $("open-list").onclick = async () => {
   window.close();
 };
 
+$("open-cards").onclick = async () => {
+  await send({ type: "open-cards" });
+  window.close();
+};
+
 $("queue").onclick = async () => {
   const res = await send({ type: "queue-active", note: $("note").value.trim() });
   say(res.ok

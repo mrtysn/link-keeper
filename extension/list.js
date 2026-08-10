@@ -326,6 +326,8 @@ $("export").onclick = async () => {
   say(`exported ${captures.length} captures to Downloads`);
 };
 
+$("to-cards").onclick = () => { location.href = "cards.html"; };
+
 $("tidy").onclick = async () => {
   const done = rows.filter(r => r.status !== "pending").map(r => r.url);
   if (!done.length) return say("nothing to tidy — everything is still pending");

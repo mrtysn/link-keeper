@@ -54,6 +54,21 @@ is a deliberate rejection rather than "opened it, moved on" — the list filters
 The popup shows the same actions as buttons, a progress bar, what is coming next, and a box
 for attaching a note to the next thing you keep.
 
+### Cards
+
+*Cards* — from the popup, the right-click menu, or the list page — deals the links still awaiting a
+verdict as a shuffled deck, one at a time. Drag the card or use the arrow keys: right keeps, left
+skips, up defers. `o` opens the link in a tab, `u` undoes.
+
+Cards judge **URLs**, not pages. Reading a page's text needs that page open in your tab, which is
+what *Keep* in the popup does — so a card marked kept records the verdict without a capture, and
+*Open ↗* is there for the ones you cannot judge from the URL alone. Any capture a link already has
+shows on its card: title, text, images, and the screenshot preview.
+
+The deck is shuffled fresh each visit. Ordered by date it would be 133 x.com cards in a row, and
+mixing the domains keeps each card an actual decision. Verdicts save as you go, so closing the tab
+mid-deck loses only the shuffle.
+
 ### Seeing the whole list
 
 *See the whole list* in the popup opens a full page — the readable view when there are

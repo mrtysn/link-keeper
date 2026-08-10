@@ -492,6 +492,7 @@ const MENU = [
   { id: "menu-queue", title: "Add this page to the list", contexts: ["page", "selection", "image"] },
   { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
   { id: "menu-list", title: "See the whole list", contexts: ["page", "selection", "image"] },
+  { id: "menu-cards", title: "Judge links as cards", contexts: ["page", "selection", "image"] },
   { id: "menu-queue-link", title: "Add this link to Link Keeper", contexts: ["link"] },
 ];
 
@@ -526,6 +527,7 @@ browser.menus.onClicked.addListener(async (info, tab) => {
       break;
     }
     case "menu-list": await browser.tabs.create({ url: browser.runtime.getURL("list.html") }); break;
+    case "menu-cards": await browser.tabs.create({ url: browser.runtime.getURL("cards.html") }); break;
     case "menu-queue-link":
       if (info.linkUrl) {
         const res = await addItems([{ url: info.linkUrl.split("#")[0], saved_at: new Date().toISOString() }]);
@@ -672,6 +674,10 @@ browser.runtime.onMessage.addListener(async msg => {
 
     case "open-list":
       await browser.tabs.create({ url: browser.runtime.getURL("list.html") });
+      return { ok: true };
+
+    case "open-cards":
+      await browser.tabs.create({ url: browser.runtime.getURL("cards.html") });
       return { ok: true };
 
     case "add":
