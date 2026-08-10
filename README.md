@@ -81,26 +81,16 @@ there attaches the capture to the right list entry.
 
 ### Screenshots
 
-*Keep + screenshot* in the popup, or **Keep this page + screenshot** in the right-click menu,
-saves a full-page PNG to `~/Downloads/link-keeper/` alongside the normal capture. The capture
-records the filename, the pixel dimensions, and whether the page was too tall to fit.
+The extension does not take them — Firefox does it better, and MV3 does not expose `captureTab`
+at all. The schema lists it, but it never materialises, with or without host permission.
 
-Text lives in the JSONL, images live beside it as files, and the two are joined by filename. A
-base64 image inlined into the log would make it unreadable and ungreppable, which defeats the
-point of keeping text in the first place.
+So: right-click → **Take Screenshot** → *Save full page*, whenever you want one. If it lands
+within two minutes of a keep, the extension notices the download and attaches the filename to
+that capture. Order does not matter — shoot before or after.
 
-`tabs.captureTab` is Firefox-only and accepts a rect larger than the viewport, so a long article
-comes out as one tall image rather than needing scroll-and-stitch. Pages over 20,000 CSS pixels
-are cut off, and the capture says so with `truncated: true`. The image is rendered at your
-display's pixel ratio, backing off only if that would exceed what the compositor can draw.
-
-**Screenshots need one extra permission.** Firefox lists `captureTab` but only makes it callable
-once the extension holds host access — `activeTab` unlocks reading a page's text, not its pixels.
-So `*://*/*` is declared *optional* and requested the first time you press **Keep + screenshot**
-in the popup, which is the only place a permission prompt can legally come from. Decline it and
-text capture carries on unaffected; grant it and you can revoke it later in `about:addons`.
-Nothing about this makes the extension a watcher: there are still no content scripts, and no page
-is read unless you trigger it.
+Only the filename is recorded, in `screenshot`. The PNG stays wherever Firefox put it. Text in
+the JSONL, images beside it, joined by name: a base64 image inlined into the log would make it
+unreadable and ungreppable.
 
 Image URLs are recorded on every capture regardless, in `images` — for x.com they are rewritten
 to `name=orig` so they point at the unresized original rather than whatever size the layout
@@ -172,7 +162,6 @@ still valid.
 | `menus` | the right-click actions |
 | `downloads` | write screenshot PNGs and the exported JSONL |
 | `notifications` | report the result of keyboard and menu actions, which have nowhere else to speak |
-| `*://*/*` *(optional)* | only to make `captureTab` callable for screenshots; requested on first use, revocable |
 | `*://t.co/*` | resolve shortened links |
 
 No content scripts, and no host permissions beyond `t.co`. There is no mechanism by which the

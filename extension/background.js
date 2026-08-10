@@ -134,82 +134,40 @@ async function resolveLinks(links) {
   );
 }
 
-/* Full-page PNG beside the text, never inside it — a base64 image in the JSONL would make the
- * log unreadable and ungreppable. captureTab is Firefox-only and, unlike Chrome's
- * captureVisibleTab, accepts a rect larger than the viewport, so the whole article fits in one
- * image without scroll-and-stitch. Height is clamped because very long pages exceed what the
- * compositor will render.
+/* Images stay beside the text, never inside it — a base64 PNG in the JSONL would make the log
+ * unreadable and ungreppable, which defeats the point of keeping text at all.
+ *
+ * Firefox's own Take Screenshot produces a better full-page PNG than an extension can, and
+ * MV3 does not expose captureTab at all — the schema lists it but it never materialises, with
+ * or without host permission. So screenshots are yours to take and the extension's job is only
+ * to notice one and attach it to the right capture.
+ *
+ * Correlation is by time, in both directions: a screenshot saved shortly before or after a
+ * capture belongs to it. Two minutes is generous enough for a slow save and tight enough that
+ * unrelated downloads do not get adopted.
  */
-const SHOT_MAX_PX = 20000;
+const SHOT_WINDOW_MS = 120000;
+const SHOT_NAME = /(-fullpage\.png|^Screen ?[Ss]hot .*\.png|^Screenshot .*\.png)$/;
 
-/* Firefox lists captureTab on the tabs namespace but only materialises it once the extension
- * holds host permission — activeTab is enough for scripting.executeScript, which is why text
- * capture works without it, but not for reading pixels. The grant is optional and requested
- * from the popup, since permissions.request needs a real user gesture. */
-async function hasSiteAccess() {
-  try {
-    return await browser.permissions.contains({ origins: ["*://*/*"] });
-  } catch (e) {
-    return false;
+browser.downloads.onCreated.addListener(async item => {
+  const name = (item.filename || "").split("/").pop();
+  if (!name || !SHOT_NAME.test(name)) return;
+
+  const captures = await getCaptures();
+  const last = captures[captures.length - 1];
+  const fresh = last && Date.parse(last.captured_at || 0) > Date.now() - SHOT_WINDOW_MS;
+
+  if (fresh && !last.screenshot) {
+    last.screenshot = { filename: name, via: "firefox" };
+    await setCaptures(captures);
+    await notify(`screenshot linked to ${last.title || last.url}`);
+  } else {
+    // Taken before the capture — hold it for the next one.
+    await browser.storage.local.set({ pendingShot: { filename: name, at: Date.now() } });
   }
-}
+});
 
-// The compositor will not render an image beyond roughly 32k pixels on a side.
-const SHOT_MAX_DEVICE_PX = 32000;
-
-async function screenshot(tabId, slug) {
-  if (!browser.downloads) throw new Error("no downloads permission — reload the extension");
-  if (!browser.tabs.captureTab) {
-    throw new Error(await hasSiteAccess()
-      ? "captureTab still missing with site access granted — reload the extension"
-      : "needs site access: click 'Keep + screenshot' in the popup once to grant it");
-  }
-
-  const [dims] = await browser.scripting.executeScript({
-    target: { tabId },
-    func: () => ({
-      w: Math.min(document.documentElement.scrollWidth, window.innerWidth),
-      h: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0),
-      dpr: window.devicePixelRatio || 1,
-    }),
-  });
-  const { w, h, dpr = 1 } = dims?.result || {};
-  if (!w || !h) return null;
-
-  // Keep the display's pixel ratio for a crisp image, backing off only if that would exceed
-  // what the compositor can render.
-  const height = Math.min(h, SHOT_MAX_PX);
-  const scale = Math.min(dpr, SHOT_MAX_DEVICE_PX / height);
-
-  const dataUrl = await browser.tabs.captureTab(tabId, {
-    rect: { x: 0, y: 0, width: w, height },
-    scale,
-  });
-
-  // A data: URL is not reliably downloadable in Firefox; a blob URL is.
-  const blob = await (await fetch(dataUrl)).blob();
-  const url = URL.createObjectURL(blob);
-  const filename = `link-keeper/${slug}.png`;
-  try {
-    await browser.downloads.download({ url, filename, saveAs: false });
-  } finally {
-    // Revoking immediately can cancel the download; give it a moment to start.
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-  }
-  return { filename, width: Math.round(w * scale), height: Math.round(height * scale), scale, truncated: h > SHOT_MAX_PX };
-}
-
-function slugFor(record, tab) {
-  if (record.status_id) return `x-${record.status_id}`;
-  const host = (() => {
-    try { return new URL(record.url || tab.url).hostname.replace(/^www\./, ""); }
-    catch (e) { return "page"; }
-  })();
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  return `${host}-${stamp}`;
-}
-
-async function captureActive(note = "", withShot = false) {
+async function captureActive(note = "") {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "no active tab" };
   if (/^(about|moz-extension|view-source):/.test(tab.url || "")) {
@@ -232,12 +190,11 @@ async function captureActive(note = "", withShot = false) {
   if (note) record.note = note;
   record.links = await resolveLinks(record.links);
 
-  if (withShot) {
-    try {
-      record.screenshot = await screenshot(tab.id, slugFor(record, tab));
-    } catch (e) {
-      record.screenshot_error = String(e.message || e);
-    }
+  // A screenshot you already took, waiting to be claimed.
+  const { pendingShot } = await browser.storage.local.get("pendingShot");
+  if (pendingShot && Date.now() - pendingShot.at < SHOT_WINDOW_MS) {
+    record.screenshot = { filename: pendingShot.filename, via: "firefox" };
+    await browser.storage.local.set({ pendingShot: null });
   }
 
   // A capture arriving while a worklist item is open is that item's verdict. The URL is
@@ -277,9 +234,7 @@ function describe(res) {
   const r = res.record;
   if (!r) return "done";
   const who = r.author?.handle ? `${r.author.handle} — ` : "";
-  const shot = r.screenshot
-    ? ` · png saved${r.screenshot.truncated ? " (cut at 20000px)" : ""}`
-    : r.screenshot_error ? ` · screenshot failed: ${r.screenshot_error}` : "";
+  const shot = r.screenshot ? ` · png ${r.screenshot.filename}` : "";
   const links = r.links?.length ? ` · +${r.links.length} link${r.links.length > 1 ? "s" : ""}` : "";
   return `kept ${who}${r.title || r.url}${links}${shot}`;
 }
@@ -309,7 +264,6 @@ browser.commands.onCommand.addListener(async name => {
 
 const MENU = [
   { id: "menu-keep", title: "Keep this page", contexts: ["page", "selection", "image"] },
-  { id: "menu-shot", title: "Keep this page + screenshot", contexts: ["page", "selection", "image"] },
   { id: "menu-next", title: "Next link in the list", contexts: ["page", "selection", "image"] },
   { id: "menu-queue", title: "Add this page to the list", contexts: ["page", "selection", "image"] },
   { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
@@ -330,7 +284,6 @@ buildMenus();
 browser.menus.onClicked.addListener(async (info, tab) => {
   switch (info.menuItemId) {
     case "menu-keep": await notify(describe(await captureActive())); break;
-    case "menu-shot": await notify(describe(await captureActive("", true))); break;
     case "menu-next": {
       const res = await openNext(1);
       await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
@@ -468,7 +421,7 @@ browser.runtime.onMessage.addListener(async msg => {
       return openNext(1);
 
     case "capture-active":
-      return captureActive(msg.note, !!msg.withShot);
+      return captureActive(msg.note);
 
     case "export":
       return { captures: await getCaptures() };

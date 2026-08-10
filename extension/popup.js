@@ -60,22 +60,16 @@ async function refresh() {
   $("export").disabled = !s.captures;
 }
 
-async function keep(withShot) {
-  say(withShot ? "reading page and shooting…" : "reading page…");
-  const res = await send({ type: "capture-active", note: $("note").value.trim(), withShot });
+async function keep() {
+  say("reading page…");
+  const res = await send({ type: "capture-active", note: $("note").value.trim() });
   if (res?.ok) {
     const r = res.record;
     const inner = r.links?.length ? ` (+${r.links.length} link${r.links.length > 1 ? "s" : ""})` : "";
     // Truncate the title, never the diagnostic — the reason a screenshot failed is the whole
     // point of showing anything at all.
     const head = `kept: ${label({ title: r.title, handle: r.author?.handle, url: r.url })}${inner}`.slice(0, 110);
-    if (r.screenshot) {
-      say(`${head} · png ${r.screenshot.width}×${r.screenshot.height}`, "ok");
-    } else if (r.screenshot_error) {
-      say(`${head}\nscreenshot failed: ${r.screenshot_error}`, "bad");
-    } else {
-      say(head, "ok");
-    }
+    say(r.screenshot ? `${head}\npng linked: ${r.screenshot.filename}` : head, "ok");
     $("note").value = "";
   } else {
     say(res?.error || "could not keep that page", "bad");
@@ -83,21 +77,7 @@ async function keep(withShot) {
   refresh();
 }
 
-$("keep").onclick = () => keep(false);
-
-/* permissions.request only works from a real user gesture, so the grant has to happen here in
- * the popup rather than in the background where the capture runs. Returns true immediately if
- * already granted, so this is a no-op after the first time. */
-$("keep-shot").onclick = async () => {
-  let granted = false;
-  try {
-    granted = await browser.permissions.request({ origins: ["*://*/*"] });
-  } catch (e) {
-    return say(`could not request permission: ${e.message}`, "bad");
-  }
-  if (!granted) return say("screenshots need site access — declined, text capture still works", "bad");
-  keep(true);
-};
+$("keep").onclick = () => keep();
 
 $("next").onclick = async () => {
   const res = await send({ type: "next" });
