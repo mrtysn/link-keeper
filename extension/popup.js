@@ -38,22 +38,21 @@ async function refresh() {
   const s = await send({ type: "status" });
   const { pending = 0, seen = 0, kept = 0 } = s.counts;
 
-  $("t-kept").textContent = kept;
-  $("t-seen").textContent = seen;
-  $("t-pending").textContent = pending;
-  $("t-total").textContent = s.total;
+  $("tally").innerHTML = "";
+  $("tally").append(document.createTextNode(""));
+  $("tally").textContent = s.total ? `${kept} kept · ${pending} left of ${s.total}` : "no links yet";
   $("bar-kept").style.width = s.total ? `${kept / s.total * 100}%` : "0";
   $("bar-seen").style.width = s.total ? `${seen / s.total * 100}%` : "0";
 
   // Show what you are on if it came from the list, otherwise what is coming next.
   if (s.current?.isOpen) {
-    $("now-lbl").textContent = "on now, from the list";
+    $("now-lbl").textContent = "on now";
     $("now-url").textContent = short(s.current.url);
   } else if (s.next) {
-    $("now-lbl").textContent = "next up";
+    $("now-lbl").textContent = "next";
     $("now-url").textContent = short(s.next);
   } else {
-    $("now-lbl").textContent = s.total ? "list finished" : "next up";
+    $("now-lbl").textContent = s.total ? "done" : "next";
     $("now-url").textContent = s.total ? "nothing pending" : "list is empty";
   }
 
