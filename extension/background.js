@@ -135,16 +135,13 @@ async function resolveLinks(links) {
 }
 
 /* Images stay beside the text, never inside it — a base64 PNG in the JSONL would make the log
- * unreadable and ungreppable, which defeats the point of keeping text at all.
+ * unreadable and ungreppable, which defeats the point of keeping text at all. Only the filename
+ * is recorded.
  *
- * Firefox's own Take Screenshot produces a better full-page PNG than an extension can, and
- * MV3 does not expose captureTab at all — the schema lists it but it never materialises, with
- * or without host permission. So screenshots are yours to take and the extension's job is only
- * to notice one and attach it to the right capture.
- *
- * Correlation is by time, in both directions: a screenshot saved shortly before or after a
- * capture belongs to it. Two minutes is generous enough for a slow save and tight enough that
- * unrelated downloads do not get adopted.
+ * Besides the screenshot this extension takes itself, a picture taken with Firefox's own tool is
+ * adopted too: correlation is by time, in both directions, since a shot saved shortly before or
+ * after a capture belongs to it. Two minutes is generous enough for a slow save and tight enough
+ * that unrelated downloads are not claimed.
  */
 const SHOT_WINDOW_MS = 120000;
 const SHOT_NAME = /(-fullpage\.png|^Screen ?[Ss]hot .*\.png|^Screenshot .*\.png)$/;
@@ -167,7 +164,115 @@ browser.downloads.onCreated.addListener(async item => {
   }
 });
 
-async function captureActive(note = "") {
+/* --- full-page screenshot, by scrolling and stitching ---------------------------
+ * MV3 does not expose captureTab, which would have shot the whole page in one call. It does
+ * expose captureVisibleTab, which shoots the viewport — so the page is walked a screenful at a
+ * time and the tiles are drawn into one canvas.
+ *
+ * Two details make the difference between this and a mess: fixed and sticky elements are
+ * temporarily made static, or x.com's top bar repeats in every tile; and each tile records the
+ * scroll position actually reached rather than the one requested, since the last scroll clamps
+ * short of the target.
+ */
+const SHOT_MAX_TILES = 40;
+const SHOT_MAX_DEVICE_PX = 32000;
+const TILE_SETTLE_MS = 180;
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function inject(tabId, func, args = []) {
+  const [res] = await browser.scripting.executeScript({ target: { tabId }, func, args });
+  return res?.result;
+}
+
+async function fullPageShot(tab, slug) {
+  if (!browser.downloads) throw new Error("no downloads permission — reload the extension");
+  if (!browser.tabs.captureVisibleTab) {
+    throw new Error(await hasSiteAccess()
+      ? "captureVisibleTab missing even with site access — reload the extension"
+      : "needs access to all sites; grant it from the popup once");
+  }
+
+  const page = await inject(tab.id, () => {
+    const de = document.documentElement;
+    window.__lkStash = { scroll: window.scrollY, pinned: [] };
+    for (const el of document.querySelectorAll("*")) {
+      const pos = getComputedStyle(el).position;
+      if (pos === "fixed" || pos === "sticky") {
+        window.__lkStash.pinned.push([el, el.style.position]);
+        el.style.position = "static";
+      }
+    }
+    return {
+      w: de.clientWidth,
+      h: Math.max(de.scrollHeight, document.body?.scrollHeight || 0),
+      vh: window.innerHeight,
+      dpr: window.devicePixelRatio || 1,
+    };
+  });
+
+  const restore = () => inject(tab.id, () => {
+    for (const [el, prev] of window.__lkStash?.pinned || []) el.style.position = prev;
+    window.scrollTo(0, window.__lkStash?.scroll || 0);
+    delete window.__lkStash;
+  }).catch(() => {});
+
+  try {
+    const { w, h, vh, dpr } = page || {};
+    if (!w || !h || !vh) throw new Error("could not measure the page");
+
+    const scale = Math.min(dpr, SHOT_MAX_DEVICE_PX / h);
+    const tiles = [];
+    for (let y = 0, n = 0; y < h && n < SHOT_MAX_TILES; y += vh, n++) {
+      const at = await inject(tab.id, yy => { window.scrollTo(0, yy); return window.scrollY; }, [y]);
+      await sleep(TILE_SETTLE_MS);
+      tiles.push({ y: at, dataUrl: await browser.tabs.captureVisibleTab(tab.windowId, { format: "png" }) });
+      if (at + vh >= h) break;
+    }
+
+    const captured = Math.min(h, tiles[tiles.length - 1].y + vh);
+    const canvas = new OffscreenCanvas(Math.round(w * scale), Math.round(captured * scale));
+    const ctx = canvas.getContext("2d");
+    for (const tile of tiles) {
+      const bitmap = await createImageBitmap(await (await fetch(tile.dataUrl)).blob());
+      ctx.drawImage(bitmap, 0, Math.round(tile.y * scale), Math.round(w * scale), bitmap.height);
+      bitmap.close();
+    }
+
+    const url = URL.createObjectURL(await canvas.convertToBlob({ type: "image/png" }));
+    const filename = `link-keeper/${slug}.png`;
+    await browser.downloads.download({ url, filename, saveAs: false });
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+    return {
+      filename,
+      width: canvas.width,
+      height: canvas.height,
+      tiles: tiles.length,
+      truncated: captured < h,
+      via: "stitched",
+    };
+  } finally {
+    await restore();
+  }
+}
+
+function slugFor(record, tab) {
+  if (record.status_id) return `x-${record.status_id}`;
+  let host = "page";
+  try { host = new URL(record.url || tab.url).hostname.replace(/^www\./, ""); } catch (e) { /* keep default */ }
+  return `${host}-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}`;
+}
+
+async function hasSiteAccess() {
+  try {
+    return await browser.permissions.contains({ origins: ["*://*/*"] });
+  } catch (e) {
+    return false;
+  }
+}
+
+async function captureActive(note = "", withShot = false) {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "no active tab" };
   if (/^(about|moz-extension|view-source):/.test(tab.url || "")) {
@@ -190,9 +295,17 @@ async function captureActive(note = "") {
   if (note) record.note = note;
   record.links = await resolveLinks(record.links);
 
-  // A screenshot you already took, waiting to be claimed.
+  if (withShot) {
+    try {
+      record.screenshot = await fullPageShot(tab, slugFor(record, tab));
+    } catch (e) {
+      record.screenshot_error = String(e.message || e);
+    }
+  }
+
+  // Or one you took yourself with Firefox's own tool, waiting to be claimed.
   const { pendingShot } = await browser.storage.local.get("pendingShot");
-  if (pendingShot && Date.now() - pendingShot.at < SHOT_WINDOW_MS) {
+  if (!record.screenshot && pendingShot && Date.now() - pendingShot.at < SHOT_WINDOW_MS) {
     record.screenshot = { filename: pendingShot.filename, via: "firefox" };
     await browser.storage.local.set({ pendingShot: null });
   }
@@ -234,7 +347,9 @@ function describe(res) {
   const r = res.record;
   if (!r) return "done";
   const who = r.author?.handle ? `${r.author.handle} — ` : "";
-  const shot = r.screenshot ? ` · png ${r.screenshot.filename}` : "";
+  const shot = r.screenshot
+    ? ` · png ${r.screenshot.width}×${r.screenshot.height}${r.screenshot.truncated ? " (cut short)" : ""}`
+    : r.screenshot_error ? ` · screenshot failed: ${r.screenshot_error}` : "";
   const links = r.links?.length ? ` · +${r.links.length} link${r.links.length > 1 ? "s" : ""}` : "";
   return `kept ${who}${r.title || r.url}${links}${shot}`;
 }
@@ -264,6 +379,7 @@ browser.commands.onCommand.addListener(async name => {
 
 const MENU = [
   { id: "menu-keep", title: "Keep this page", contexts: ["page", "selection", "image"] },
+  { id: "menu-shot", title: "Keep this page + full-page screenshot", contexts: ["page", "selection", "image"] },
   { id: "menu-next", title: "Next link in the list", contexts: ["page", "selection", "image"] },
   { id: "menu-queue", title: "Add this page to the list", contexts: ["page", "selection", "image"] },
   { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
@@ -284,6 +400,7 @@ buildMenus();
 browser.menus.onClicked.addListener(async (info, tab) => {
   switch (info.menuItemId) {
     case "menu-keep": await notify(describe(await captureActive())); break;
+    case "menu-shot": await notify(describe(await captureActive("", true))); break;
     case "menu-next": {
       const res = await openNext(1);
       await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
@@ -421,7 +538,7 @@ browser.runtime.onMessage.addListener(async msg => {
       return openNext(1);
 
     case "capture-active":
-      return captureActive(msg.note);
+      return captureActive(msg.note, !!msg.withShot);
 
     case "export":
       return { captures: await getCaptures() };

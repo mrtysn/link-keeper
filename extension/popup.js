@@ -60,16 +60,23 @@ async function refresh() {
   $("export").disabled = !s.captures;
 }
 
-async function keep() {
-  say("reading page…");
-  const res = await send({ type: "capture-active", note: $("note").value.trim() });
+async function keep(withShot = false) {
+  say(withShot ? "reading page, then shooting it…" : "reading page…");
+  const res = await send({ type: "capture-active", note: $("note").value.trim(), withShot });
   if (res?.ok) {
     const r = res.record;
     const inner = r.links?.length ? ` (+${r.links.length} link${r.links.length > 1 ? "s" : ""})` : "";
     // Truncate the title, never the diagnostic — the reason a screenshot failed is the whole
     // point of showing anything at all.
     const head = `kept: ${label({ title: r.title, handle: r.author?.handle, url: r.url })}${inner}`.slice(0, 110);
-    say(r.screenshot ? `${head}\npng linked: ${r.screenshot.filename}` : head, "ok");
+    if (r.screenshot) {
+      const s = r.screenshot;
+      say(`${head}\npng ${s.width}×${s.height}${s.tiles ? ` from ${s.tiles} tiles` : ""} → ${s.filename}`, "ok");
+    } else if (r.screenshot_error) {
+      say(`${head}\nscreenshot failed: ${r.screenshot_error}`, "bad");
+    } else {
+      say(head, "ok");
+    }
     $("note").value = "";
   } else {
     say(res?.error || "could not keep that page", "bad");
@@ -77,7 +84,20 @@ async function keep() {
   refresh();
 }
 
-$("keep").onclick = () => keep();
+$("keep").onclick = () => keep(false);
+
+/* permissions.request needs a real user gesture, so the grant happens here rather than in the
+ * background where the capture runs. Already-granted returns true immediately. */
+$("keep-shot").onclick = async () => {
+  let granted = false;
+  try {
+    granted = await browser.permissions.request({ origins: ["*://*/*"] });
+  } catch (e) {
+    return say(`could not request permission: ${e.message}`, "bad");
+  }
+  if (!granted) return say("reading pixels needs site access — declined", "bad");
+  keep(true);
+};
 
 $("next").onclick = async () => {
   const res = await send({ type: "next" });

@@ -81,20 +81,29 @@ there attaches the capture to the right list entry.
 
 ### Screenshots
 
-The extension does not take them — Firefox does it better, and MV3 does not expose `captureTab`
-at all. The schema lists it, but it never materialises, with or without host permission.
+**Keep + full-page screenshot** — one action. It reads the page, then scrolls it a screenful at a
+time, shoots each viewport, and stitches the tiles into a single PNG in `~/Downloads/link-keeper/`
+named after the post. Leave the tab alone for a second while it walks the page.
 
-So: right-click → **Take Screenshot** → *Save full page*, whenever you want one. If it lands
-within two minutes of a keep, the extension notices the download and attaches the filename to
-that capture. Order does not matter — shoot before or after.
+MV3 does not expose `captureTab`, which would have taken the whole page in one call — the schema
+lists it but it never materialises, with or without host permission. `captureVisibleTab` is
+exposed, hence the tiling. Two details keep the result clean: fixed and sticky elements are
+temporarily made `static`, or x.com's top bar would repeat in every tile; and each tile records
+the scroll position actually reached, since the final scroll clamps short of its target.
 
-Only the filename is recorded, in `screenshot`. The PNG stays wherever Firefox put it. Text in
-the JSONL, images beside it, joined by name: a base64 image inlined into the log would make it
-unreadable and ungreppable.
+Scrolling the page also has a useful side effect — lazily-loaded images load, so they appear in
+the shot.
 
-Image URLs are recorded on every capture regardless, in `images` — for x.com they are rewritten
-to `name=orig` so they point at the unresized original rather than whatever size the layout
-happened to use.
+**This needs access to all sites.** Reading a page's pixels does, where `activeTab` is enough for
+reading its text. The permission is optional and requested the first time you press the button;
+decline it and text capture is unaffected. Revoke any time in `about:addons`.
+
+A screenshot you take yourself with Firefox's own tool is adopted too, if it lands within two
+minutes of a keep — useful when you want Firefox's rendering rather than the stitched one. Only
+the filename is recorded; the PNG stays where it was saved.
+
+Image URLs are recorded on every capture regardless, in `images` — for x.com rewritten to
+`name=orig` so they point at the unresized original.
 
 ### Getting the data out
 
@@ -162,6 +171,7 @@ still valid.
 | `menus` | the right-click actions |
 | `downloads` | write screenshot PNGs and the exported JSONL |
 | `notifications` | report the result of keyboard and menu actions, which have nowhere else to speak |
+| `*://*/*` *(optional)* | reading pixels for a screenshot; requested on first use, revocable, and not needed for text |
 | `*://t.co/*` | resolve shortened links |
 
 No content scripts, and no host permissions beyond `t.co`. There is no mechanism by which the
