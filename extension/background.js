@@ -270,7 +270,9 @@ async function fullPageShot(tab, slug) {
 
     const url = URL.createObjectURL(await canvas.convertToBlob({ type: "image/png" }));
     const filename = `link-keeper/${slug}.png`;
-    await browser.downloads.download({ url, filename, saveAs: false });
+    // Same slug means the same page, so replace rather than let Firefox uniquify to "(1)" —
+    // otherwise re-keeping leaves the record naming a file that is now the older shot.
+    await browser.downloads.download({ url, filename, saveAs: false, conflictAction: "overwrite" });
     setTimeout(() => URL.revokeObjectURL(url), 30000);
 
     try {

@@ -129,7 +129,7 @@ function rowEl(row) {
   if (row.cap?.images?.length) {
     const shots = document.createElement("div");
     shots.className = "shots";
-    for (const src of row.cap.images.slice(0, 4)) {
+    for (const src of row.cap.images.slice(0, 8)) {
       const a = document.createElement("a");
       a.href = src;
       a.target = "_blank";
@@ -140,6 +140,12 @@ function rowEl(row) {
       img.alt = "";
       a.append(img);
       shots.append(a);
+    }
+    if (row.cap.images.length > 8) {
+      const more = document.createElement("span");
+      more.className = "png";
+      more.textContent = `+${row.cap.images.length - 8} more`;
+      shots.append(more);
     }
     main.append(shots);
   }
