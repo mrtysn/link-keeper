@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Link Keeper",
+  "version": "1.0",
+  "description": "Capture the page you are on — title, author, body and embedded URLs — into a local JSONL log. Manual trigger only.",
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "link-keeper@notebook.local",
+      "strict_min_version": "128.0"
+    }
+  },
+
+  "permissions": ["storage", "alarms", "tabs", "scripting", "activeTab"],
+
+  "host_permissions": ["http://127.0.0.1/*", "*://t.co/*"],
+
+  "optional_host_permissions": ["*://*/*"],
+
+  "background": {
+    "scripts": ["background.js"]
+  },
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Link Keeper — capture this page",
+    "default_icon": "icon.svg"
+  },
+
+  "icons": { "48": "icon.svg", "96": "icon.svg" },
+
+  "commands": {
+    "capture-page": {
+      "suggested_key": { "default": "Ctrl+Shift+K" },
+      "description": "Capture the current page"
+    }
+  }
+}

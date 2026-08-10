@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #6b6b6b;
+    --line: #e4e0da; --accent: #7a5cff; --ok: #17915c; --bad: #c2422f; --chip: #f1eee9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1e22; --panel: #24272c; --ink: #e8e6e3; --dim: #9a9793;
+      --line: #33373d; --accent: #a992ff; --ok: #4fcf95; --bad: #ff8b74; --chip: #2b2f35;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    width: 22rem; margin: 0; padding: .9rem; background: var(--bg); color: var(--ink);
+    font: 13px/1.5 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
+  }
+  h1 { font-size: .95rem; margin: 0 0 .6rem; }
+  .row { display: flex; gap: .4rem; align-items: center; }
+  .stat {
+    display: flex; justify-content: space-between; gap: .5rem; padding: .35rem 0;
+    border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums;
+  }
+  .stat span { color: var(--dim); }
+  .dot { width: .55rem; height: .55rem; border-radius: 50%; display: inline-block; }
+  .dot.on { background: var(--ok); } .dot.off { background: var(--bad); }
+  button {
+    font: inherit; cursor: pointer; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: .4rem; padding: .4rem .7rem;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  input, textarea {
+    font: inherit; width: 100%; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: .4rem; padding: .35rem .5rem;
+  }
+  textarea { min-height: 4.5rem; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: .8rem; }
+  label { display: block; color: var(--dim); font-size: .78rem; margin: .6rem 0 .2rem; }
+  details { margin-top: .7rem; border-top: 1px solid var(--line); padding-top: .5rem; }
+  summary { cursor: pointer; color: var(--dim); font-size: .8rem; }
+  #msg { min-height: 1.2rem; font-size: .78rem; color: var(--dim); margin-top: .5rem; }
+  #msg.bad { color: var(--bad); } #msg.ok { color: var(--ok); }
+  .hint { color: var(--dim); font-size: .75rem; margin: .3rem 0 0; }
+  kbd {
+    background: var(--chip); border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: .25rem; padding: 0 .25rem; font: inherit; font-size: .72rem;
+  }
+</style>
+</head>
+<body>
+  <h1>Link Keeper</h1>
+
+  <div class="stat"><span>sink</span><b id="s-sink"><span class="dot off"></span> checking…</b></div>
+  <div class="stat"><span>queued</span><b id="s-queued">0</b></div>
+  <div class="stat"><span>sent this session</span><b id="s-sent">0</b></div>
+  <div class="stat"><span>in log file</span><b id="s-file">—</b></div>
+
+  <label for="note">Note for this capture (optional)</label>
+  <input id="note" placeholder="why you're keeping it">
+
+  <div class="row" style="margin-top:.5rem">
+    <button class="primary" id="capture" style="flex:1">Capture this page</button>
+    <button id="flush" title="Retry sending the queue">Flush</button>
+  </div>
+  <p class="hint"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> does the same from any page. Nothing is captured unless you trigger it.</p>
+
+  <div id="msg"></div>
+
+  <details>
+    <summary>Sweep a list of URLs</summary>
+    <label for="urls">One URL per line — each opens in a background tab, is read, and closes</label>
+    <textarea id="urls" placeholder="https://x.com/i/status/2086188444317819246&#10;https://news.ycombinator.com/item?id=49139102"></textarea>
+    <div class="row" style="margin-top:.4rem">
+      <button id="bf-start" style="flex:1">Start</button>
+      <button id="bf-stop">Stop</button>
+      <button id="errors" title="Copy the URLs that failed">Failures</button>
+    </div>
+    <p class="hint">Firefox will ask for access to those sites first — reading a tab you are not
+    looking at is outside <code>activeTab</code>. One every few seconds; leave the window alone.</p>
+  </details>
+
+  <details>
+    <summary>Sink settings</summary>
+    <label for="sink">Sink URL</label>
+    <input id="sink" placeholder="http://127.0.0.1:8788/capture">
+    <label for="token">Token — printed by <code>link-sink.py</code> at startup</label>
+    <input id="token" type="password" placeholder="paste once">
+    <div class="row" style="margin-top:.4rem">
+      <button class="primary" id="save" style="flex:1">Save</button>
+      <button id="export" title="Download the queue if the sink is unavailable">Export queue</button>
+    </div>
+  </details>
+
+  <script src="popup.js"></script>
+</body>
+</html>

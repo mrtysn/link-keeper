@@ -1,0 +1,13 @@
+# Captured data and its token never belong in the repo.
+link-captures.jsonl
+*.jsonl
+*.token
+
+__pycache__/
+*.pyc
+
+# Built add-on packages
+*.xpi
+web-ext-artifacts/
+
+.DS_Store
