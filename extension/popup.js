@@ -70,7 +70,7 @@ async function refresh() {
   for (const r of s.recent) {
     const li = document.createElement("li");
     const b = document.createElement("b");
-    b.textContent = label(r);
+    b.textContent = r.label || short(r.url);
     li.append(b);
     if (r.links) li.append(document.createTextNode(` +${r.links} link${r.links > 1 ? "s" : ""}`));
     $("recent").append(li);

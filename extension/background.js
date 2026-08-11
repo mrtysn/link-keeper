@@ -552,8 +552,9 @@ browser.runtime.onMessage.addListener(async msg => {
         current: current && { url: current.url, isOpen: keyOf(tab?.url || "") === current.key },
         next: items.find(i => i.status === "pending")?.url || null,
         upcoming: items.filter(i => i.status === "pending").slice(0, 5).map(i => i.url),
+        // summarise() so a plain tweet reads as its text, not "@someone on X"
         recent: captures.slice(-4).reverse().map(r => ({
-          title: r.title, handle: r.author?.handle, url: r.url, links: r.links?.length || 0,
+          label: summarise(r), url: r.url, links: r.links?.length || 0,
         })),
       };
     }
