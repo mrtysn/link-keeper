@@ -13,6 +13,13 @@ happens there.
 **Everything is manual.** No page is read, and no link is opened, unless you press a key.
 There are no content scripts, no background tabs, and no automation of your browsing.
 
+## Layout
+
+| Path | Role |
+|---|---|
+| `extension/` | the add-on — load `extension/manifest.json` in Firefox |
+| `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
+
 ## Install
 
 Requires Firefox 128 or newer. No build step, no dependencies.
@@ -100,7 +107,8 @@ there attaches the capture to the right list entry.
 
 - **`Ctrl+Shift+U`** or *This page* — queue something for later while browsing.
 - **Paste URLs** into *Add links*, one per line. Each line may carry the date the link was
-  originally saved, tab or space separated:
+  originally saved, tab or space separated — which is exactly what the scripts in `importers/`
+  produce:
 
   ```
   https://x.com/i/status/2086188444317819246	2026-08-09
