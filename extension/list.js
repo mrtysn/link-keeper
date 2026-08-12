@@ -382,6 +382,7 @@ async function runImport(raw) {
   const res = await send({ type: "import-captures", records });
   note.className = "ok";
   note.textContent = `${res.added} new, ${res.enriched} filled in, ${res.skipped} already known`
+    + `${res.marked ? `, ${res.marked} taken off the queue` : ""}`
     + `${bad ? `, ${bad} bad lines skipped` : ""} — ${res.total} captures held`;
   $("import-text").value = "";
   load();

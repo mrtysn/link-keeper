@@ -783,7 +783,22 @@ browser.runtime.onMessage.addListener(async msg => {
         }
       }
       await setCaptures(captures);
-      return { ok: true, added, enriched, skipped, total: captures.length };
+
+      // A capture means the link has been read, so the worklist should stop offering it. Without
+      // this, Next walks you to links you already hold the full text for.
+      const items = await getItems();
+      const haveCapture = new Set(captures.map(c => keyOf(c.url)));
+      let marked = 0;
+      for (const item of items) {
+        if (item.status === "pending" && haveCapture.has(keyOf(item.url))) {
+          item.status = "kept";
+          item.kept_at = new Date().toISOString();
+          marked++;
+        }
+      }
+      if (marked) await setItems(items);
+
+      return { ok: true, added, enriched, skipped, marked, total: captures.length };
     }
 
     case "export-list":
