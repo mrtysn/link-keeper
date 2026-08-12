@@ -41,6 +41,36 @@ needs no registration and touches nothing else. Worth having:
 Keep dates in ISO form (`YYYY-MM-DD` or full ISO 8601). Anything `Date.parse` understands works, but
 ISO is unambiguous across locales.
 
+## enrich-x.py and enrich-web.py
+
+These take importer output and resolve it into capture records, ready to import into the extension.
+Both read `URL<TAB>date` and write capture JSONL:
+
+    ./telegram.py result.json | ./enrich-x.py   > x.jsonl
+    ./telegram.py result.json | ./enrich-web.py > web.jsonl --failed-to left.tsv
+
+`enrich-x.py` uses FxTwitter's public API, which resolves a bare `x.com/i/status/<id>` with no login
+and expands `t.co` inline. `enrich-web.py` reads `og:` tags, and special-cases three sites where a
+free API beats scraping: the GitHub repo API (description, stars, language, topics), the HN Algolia
+API (title, points, and the story's own outbound URL) and YouTube oembed (title, channel).
+
+Measured on one 272-link pile: 131 of 133 x.com links and 115 of 141 others resolved offline, in
+about three minutes, with no rate limiting.
+
+### What defeats them
+
+Sites behind a bot check answer `403 Just a moment…` to anything that is not a real browser, and
+login walls answer with a shell. `--failed-to` collects those rather than guessing. Two ways to
+finish them:
+
+* **A crawler with its own infrastructure.** Exa's fetch gets through Cloudflare — it recovered 10
+  of 27 stragglers here, including every apkpure and makerworld page.
+* **The extension**, a real logged-in browser, which is the only thing that works for LinkedIn,
+  Instagram, and anything needing a session.
+
+Google Maps shortlinks need neither: following the redirect puts the place name in the URL path, so
+`maps.app.goo.gl/…` resolves to "Mikla, The Marmara Pera, Asmalı Mescit…" with no page fetch at all.
+
 ## telegram.py
 
 Telegram marks URLs with `link` text entities, so links come out already parsed. Two wrinkles it

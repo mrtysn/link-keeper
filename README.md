@@ -179,6 +179,12 @@ with their destination link recovered.
 variant changes that — so a post saying "repo in the comments" arrives without the repo. Those are
 flagged `needs_replies`, and reading them is the extension's job — see below.
 
+### Everything else, also without opening it
+
+`importers/enrich-web.py` does the same for ordinary links — `og:` tags, plus the GitHub, Hacker News
+and YouTube APIs where those beat scraping. Sites behind a bot check or a login wall go to
+`--failed-to` instead of being guessed at; those are what the extension is for.
+
 ### Links from the replies
 
 Keeping an x.com post also harvests links out of the replies rendered below it, into `reply_links`.
