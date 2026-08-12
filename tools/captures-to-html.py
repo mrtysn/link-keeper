@@ -195,8 +195,9 @@ for (const b of document.querySelectorAll('.copy')) {
 
 /* The handoff into the extension: filter to a bucket, copy the set, paste into Add links. */
 document.getElementById('copy-shown').onclick = async () => {
+  // URL plus the date it was saved, which is the format Add links reads.
   const urls = cards.filter(c => !c.classList.contains('hidden'))
-    .map(c => c.querySelector('.acts .go').href);
+    .map(c => c.dataset.savedUrl + (c.dataset.date ? '\t' + c.dataset.date : ''));
   const btn = document.getElementById('copy-shown');
   try {
     await navigator.clipboard.writeText(urls.join('\n'));
@@ -225,8 +226,13 @@ def card_html(rec: dict) -> str:
     title = rec.get("title") or ""
     is_article = rec.get("kind") == "x-article"
 
+    # Copying back into the extension has to use the URL that was *saved*, not the one it
+    # redirected to — lnkd.in and maps.app.goo.gl resolve elsewhere, and pasting the destination
+    # creates a second worklist entry for a link already held.
+    saved_url = rec.get("source_url") or url
     bits = [f'<div class="card {b}" data-bucket="{b}" data-date="{e(saved)}"'
-            f' data-replies="{rec.get("replies") or 0}" data-author="{e(handle)}">']
+            f' data-replies="{rec.get("replies") or 0}" data-author="{e(handle)}"'
+            f' data-saved-url="{e(saved_url)}">']
 
     bits.append('<div class="top">')
     who = e(handle) if handle else e(url[:40])
@@ -274,7 +280,7 @@ def card_html(rec: dict) -> str:
 
     bits.append('<div class="acts">')
     bits.append(f'<a class="go" href="{e(url)}" target="_blank" rel="noopener noreferrer">open post ↗</a>')
-    bits.append(f'<button class="copy" data-url="{e(url)}">copy url</button>')
+    bits.append(f'<button class="copy" data-url="{e(saved_url)}">copy url</button>')
     bits.append("</div>")
 
     bits.append('<div class="meta">')
