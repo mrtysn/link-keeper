@@ -39,13 +39,14 @@
   .tally b { color: var(--ink); }
   .tally .k b { color: var(--keep); } .tally .x b { color: var(--skip); }
 
-  #stage { position: relative; height: 25rem; touch-action: none; }
+  #stage { position: relative; height: 27rem; touch-action: none; }
   .card {
     position: absolute; inset: 0; background: var(--panel); border: 1px solid var(--line);
     border-radius: 1rem; box-shadow: var(--shadow); padding: 1.4rem 1.4rem 1.2rem;
     display: flex; flex-direction: column; gap: .7rem; overflow: hidden;
     will-change: transform; user-select: none;
   }
+  .card > .title, .card > .body { min-height: 0; }
   .card.top { cursor: grab; }
   .card.top:active { cursor: grabbing; }
   .head { display: flex; align-items: center; gap: .75rem; }
@@ -55,10 +56,13 @@
   }
   .host { font-size: 1.05rem; font-weight: 650; overflow-wrap: anywhere; }
   .when { color: var(--dim); font-size: .78rem; font-variant-numeric: tabular-nums; }
-  .title { font-weight: 600; overflow-wrap: anywhere; }
+  .title {
+    font-weight: 600; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden;
+  }
   .body {
     color: var(--dim); font-size: .9rem; overflow-wrap: anywhere;
-    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
   .path {
     font-family: ui-monospace, Menlo, monospace; font-size: .82rem; color: var(--dim);
@@ -76,10 +80,11 @@
   .inner.replies a.from-author { border-style: solid; border-color: var(--keep); color: var(--keep); }
   .done kbd { background: var(--chip); border: 1px solid var(--line); border-radius: .3rem; padding: 0 .25rem; }
   .thumbs { display: flex; gap: .35rem; flex-wrap: wrap; }
+  .thumbs { flex: none; }
   .thumbs img {
-    height: 4rem; max-width: 8rem; object-fit: cover; border-radius: .3rem; border: 1px solid var(--line);
+    height: 3.5rem; max-width: 7rem; object-fit: cover; border-radius: .3rem; border: 1px solid var(--line);
   }
-  .foot { margin-top: auto; display: flex; align-items: center; gap: .7rem; }
+  .foot { margin-top: auto; display: flex; align-items: center; gap: .7rem; flex: none; }
   .open {
     font: inherit; font-size: .88rem; color: var(--accent); text-decoration: none;
     border: 1px solid var(--line); border-radius: .5rem; padding: .35rem .75rem;

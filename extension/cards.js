@@ -44,7 +44,10 @@ function headline(card) {
       ? `${card.handle} — ${card.title}`
       : card.title;
   }
-  if (body) return (card.handle ? `${card.handle}: ` : "") + body;
+  if (body) {
+    const clipped = body.length > 420 ? body.slice(0, 420) + "…" : body;
+    return (card.handle ? `${card.handle}: ` : "") + clipped;
+  }
   return card.handle || shortUrl(card.url);
 }
 
