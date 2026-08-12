@@ -31,6 +31,11 @@ function label(r) {
   return r.title || r.handle || short(r.url);
 }
 
+/* JSON.stringify leaves U+2028/U+2029 raw and every line-splitter treats them as line breaks, which
+ * would tear a JSONL record in half. Tweet text contains them. */
+const jsonl = records => records.map(r =>
+  JSON.stringify(r).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")).join("\n") + "\n";
+
 function download(name, body, type) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([body], { type }));
@@ -183,15 +188,34 @@ $("add").onclick = async () => {
 $("export").onclick = async () => {
   const { captures } = await send({ type: "export" });
   if (!captures.length) return say("nothing captured yet", "");
-  download("link-captures.jsonl", captures.map(r => JSON.stringify(r)).join("\n") + "\n", "application/x-ndjson");
+  download("link-captures.jsonl", jsonl(captures), "application/x-ndjson");
   say(`exported ${captures.length} to Downloads`, "ok");
 };
 
 $("export-list").onclick = async () => {
   const { items } = await send({ type: "export-list" });
   if (!items.length) return say("the list is empty", "");
-  download("link-worklist.jsonl", items.map(r => JSON.stringify(r)).join("\n") + "\n", "application/x-ndjson");
+  download("link-worklist.jsonl", jsonl(items), "application/x-ndjson");
   say(`exported ${items.length} list entries`, "ok");
+};
+
+/* split("\n") not splitlines-equivalent: U+2028 appears raw inside tweet text and would tear a
+ * record in two. Records written by this extension escape it; ones written elsewhere may not. */
+$("import-captures").onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  let records = [], bad = 0;
+  for (const line of (await file.text()).split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    try { records.push(JSON.parse(t)); } catch (err) { bad++; }
+  }
+  if (!records.length) return say(`nothing readable in that file${bad ? ` (${bad} bad lines)` : ""}`, "bad");
+  const res = await send({ type: "import-captures", records });
+  say(`imported ${res.added} new, ${res.enriched} filled in, ${res.skipped} already known`
+    + `${bad ? `\n${bad} unparseable lines skipped` : ""}`, "ok");
+  e.target.value = "";
+  refresh();
 };
 
 $("reset").onclick = async () => {

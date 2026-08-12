@@ -81,6 +81,11 @@
   details .grid { margin-top: .4rem; }
   details p { color: var(--dim); font-size: .72rem; margin: .35rem 0 0; }
   details input { margin-top: .35rem; }
+  label#import-label {
+    display: block; text-align: center; font-size: .82rem; cursor: pointer; padding: .42rem .5rem;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: .4rem;
+  }
+  label#import-label:hover { border-color: var(--accent); }
   code { background: var(--chip); padding: 0 .2rem; border-radius: .2rem; }
 </style>
 </head>
@@ -133,6 +138,8 @@
     <div class="grid">
       <button class="go" id="export">Export captures</button>
       <button id="export-list">Export list</button>
+      <label class="wide" id="import-label" for="import-captures">Import captures from a JSONL file
+        <input id="import-captures" type="file" accept=".jsonl,.json,.ndjson" hidden></label>
       <button id="reset">Reset seen</button>
       <button class="danger" id="clear-captures">Clear captures</button>
       <button class="danger wide" id="clear-list">Clear list</button>

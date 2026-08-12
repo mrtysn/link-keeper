@@ -326,8 +326,9 @@ $("export").onclick = async () => {
   const { captures } = await send({ type: "export" });
   if (!captures.length) return say("nothing captured yet");
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([captures.map(r => JSON.stringify(r)).join("\n") + "\n"],
-    { type: "application/x-ndjson" }));
+  const body = captures.map(r =>
+    JSON.stringify(r).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")).join("\n") + "\n";
+  a.href = URL.createObjectURL(new Blob([body], { type: "application/x-ndjson" }));
   a.download = "link-captures.jsonl";
   a.click();
   URL.revokeObjectURL(a.href);

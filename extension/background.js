@@ -746,6 +746,33 @@ browser.runtime.onMessage.addListener(async msg => {
     case "export":
       return { captures: await getCaptures() };
 
+    /* Captures produced outside the browser — importers/enrich-x.py resolves x.com links via a
+     * public API with no login, so half a pile can arrive already read. Merged on the same
+     * normalised key the rest of the extension uses; an incoming record wins only where the
+     * existing one has no text, so a real page read is never overwritten by an API summary. */
+    case "import-captures": {
+      const captures = await getCaptures();
+      const byId = new Map(captures.map(c => [keyOf(c.url), c]));
+      let added = 0, enriched = 0, skipped = 0;
+      for (const rec of msg.records || []) {
+        if (!rec?.url) continue;
+        const key = keyOf(rec.url);
+        const existing = byId.get(key);
+        if (!existing) {
+          captures.push(rec);
+          byId.set(key, rec);
+          added++;
+        } else if (!existing.text && rec.text) {
+          Object.assign(existing, rec, { verdict: existing.verdict });
+          enriched++;
+        } else {
+          skipped++;
+        }
+      }
+      await setCaptures(captures);
+      return { ok: true, added, enriched, skipped, total: captures.length };
+    }
+
     case "export-list":
       return { items: await getItems() };
 

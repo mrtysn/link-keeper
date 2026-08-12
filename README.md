@@ -19,6 +19,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 |---|---|
 | `extension/` | the add-on — load `extension/manifest.json` in Firefox |
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
+| `tools/` | `captures-to-html.py` — render an exported capture JSONL as one browsable page |
 
 ## Install
 
@@ -155,6 +156,24 @@ the filename is recorded; the PNG stays where it was saved.
 
 Image URLs are recorded on every capture regardless, in `images` — for x.com rewritten to
 `name=orig` so they point at the unresized original.
+
+### x.com without opening anything
+
+`importers/enrich-x.py` resolves x.com status links through FxTwitter's public JSON API, which needs
+no login and returns the author, full text, date, media and — because it expands `t.co` inline — the
+destinations the post linked to. A bare `x.com/i/status/<id>` resolves fine, handle included.
+
+    ./importers/telegram.py result.json | ./importers/enrich-x.py > link-captures.jsonl
+
+Then popup → *Export & housekeeping* → **Import captures**. Those links arrive already read, so the
+card deck can judge them immediately.
+
+Measured on 133 links: 131 resolved in 106 seconds, 2 were deleted tweets, no rate limiting. 38 came
+with their destination link recovered.
+
+**It cannot get replies.** FxTwitter returns a reply count, never reply content, and no `?thread`
+variant changes that — so a post saying "repo in the comments" arrives without the repo. Those are
+flagged `needs_replies`, and reading them is the extension's job.
 
 ### Getting the data out
 
