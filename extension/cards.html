@@ -72,6 +72,8 @@
     border-radius: 1rem; padding: .15rem .55rem; max-width: 100%; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
   }
+  .inner.replies a { background: transparent; border: 1px dashed var(--line); }
+  .inner.replies a.from-author { border-style: solid; border-color: var(--keep); color: var(--keep); }
   .done kbd { background: var(--chip); border: 1px solid var(--line); border-radius: .3rem; padding: 0 .25rem; }
   .thumbs { display: flex; gap: .35rem; flex-wrap: wrap; }
   .thumbs img {

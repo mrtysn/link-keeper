@@ -99,6 +99,49 @@ const LK = (() => {
     return [...new Set(urls)];
   }
 
+  /* Links from the replies below the post.
+   *
+   * Half the reason a tweet gets saved is a tool it names but does not link — "repo in the
+   * comments". No API exposes reply bodies; they exist only in this rendered, logged-in page, so
+   * this is the one thing scraping can do that fetching cannot.
+   *
+   * x.com renders replies lazily, so only what has actually scrolled into view is here. `Keep +
+   * shot` walks the whole page to stitch its screenshot and therefore sees far more of them.
+   * A reply from the post's own author is marked `self` — that is where an author parks the link.
+   */
+  function replyLinks(primary, primaryHandle) {
+    const out = [];
+    const seen = new Set();
+    let scanned = 0;
+
+    for (const art of document.querySelectorAll('article[data-testid="tweet"]')) {
+      if (art === primary) continue;
+      scanned++;
+      const spans = [...art.querySelectorAll('div[data-testid="User-Name"] span')].map(s => s.textContent.trim());
+      const handle = spans.find(s => /^@\w+$/.test(s)) || null;
+      const body = art.querySelector('div[data-testid="tweetText"]');
+      if (!body) continue;
+
+      for (const a of body.querySelectorAll("a[href]")) {
+        const href = a.href;
+        if (!href || seen.has(href)) continue;
+        if (/^https?:\/\/(x|twitter)\.com\//.test(href)) continue;   // in-app navigation
+        seen.add(href);
+        out.push({
+          href,
+          display: txt(a),
+          resolved: null,
+          from: handle,
+          self: !!handle && handle === primaryHandle,
+          context: txt(body)?.slice(0, 160) || null,
+        });
+      }
+    }
+    // The author's own reply first: that is where "link below" points.
+    out.sort((a, b) => Number(b.self) - Number(a.self));
+    return { links: out, scanned };
+  }
+
   /* Long-form "Articles" reuse the tweet element for author and timestamp but put the title
    * and body in their own nodes, and have no tweetText at all. */
   const ARTICLE_BODY = '[data-testid="twitterArticleRichTextView"], [data-testid="longformRichTextComponent"]';
@@ -119,6 +162,7 @@ const LK = (() => {
     const quotedBlock = [...article.querySelectorAll('div[role="link"]')]
       .find(d => d.querySelector('div[data-testid="User-Name"]'));
 
+    const replies = replyLinks(article, handle);
     const articleTitle = txt(article.querySelector(ARTICLE_TITLE));
     const articleBody = article.querySelector(ARTICLE_BODY);
     const isLongform = !!(articleTitle || articleBody);
@@ -138,6 +182,8 @@ const LK = (() => {
       code_blocks: [...article.querySelectorAll('[data-testid="markdown-code-block"]')]
         .map(blockText).filter(Boolean),
       images: tweetImages(article),
+      reply_links: replies.links,
+      replies_scanned: replies.scanned,
       posted: timeEl?.getAttribute("datetime") || null,
       links: tweetLinks(article),
       quoted: quotedBlock && {

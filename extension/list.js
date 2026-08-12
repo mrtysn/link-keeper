@@ -53,7 +53,7 @@ function matches(row, term) {
   if (filter !== "all" && row.status !== filter) return false;
   if (!term) return true;
   const hay = [row.url, labelOf(row), row.cap?.text, row.note, row.cap?.screenshot, savedOn(row),
-    row.cap?.verdict, ...(row.cap?.links || [])]
+    row.cap?.verdict, ...(row.cap?.links || []), ...(row.cap?.reply_links || []).map(l => l.href)]
     .filter(Boolean).join(" ").toLowerCase();
   return hay.includes(term);
 }
@@ -154,6 +154,23 @@ function rowEl(row) {
       inner.append(chip);
     }
     main.append(inner);
+  }
+
+  // Links harvested from the replies — the author's own reply is the one that usually matters.
+  if (row.cap?.reply_links?.length) {
+    const box = document.createElement("div");
+    box.className = "inner replies";
+    for (const l of row.cap.reply_links.slice(0, 6)) {
+      const a = document.createElement("a");
+      a.href = l.href;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.className = l.self ? "from-author" : "";
+      a.textContent = `↩ ${shortUrl(l.href)}`;
+      a.title = l.self ? `from the author's own reply (${l.from || "?"})` : `from a reply by ${l.from || "?"}`;
+      box.append(a);
+    }
+    main.append(box);
   }
 
   // Actual thumbnails, not URLs — the point of keeping image links is to see them.

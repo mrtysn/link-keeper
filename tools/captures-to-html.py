@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def bucket(rec: dict) -> str:
-    if rec.get("links"):
+    if rec.get("links") or rec.get("reply_links"):
         return "linked"
     text = rec.get("text") or ""
     if rec.get("needs_replies") or POINTS_AT_REPLIES.search(text) or NAMES_CODE.search(text):
@@ -116,6 +116,8 @@ select{font:inherit;font-size:.85rem;padding:.4rem .6rem;background:var(--card);
 .links{display:flex;flex-wrap:wrap;gap:.3rem}
 .links a{font-size:.78rem;color:#fff;background:var(--linked);text-decoration:none;border-radius:1rem;
   padding:.15rem .55rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.links.replies a{background:transparent;border:1px dashed var(--line);color:var(--dim)}
+.links.replies a.from-author{border-style:solid;border-color:var(--linked);color:var(--linked)}
 .shots{display:flex;gap:.3rem;flex-wrap:wrap}
 .shots img{height:5rem;max-width:100%;object-fit:cover;border-radius:.35rem;border:1px solid var(--line);background:var(--chip)}
 .acts{display:flex;gap:.35rem;align-items:center}
@@ -249,6 +251,17 @@ def card_html(rec: dict) -> str:
             href = link.get("resolved") or link.get("href") or ""
             label = re.sub(r"^https?://(www\.)?", "", href)[:44]
             bits.append(f'<a href="{e(href)}" target="_blank" rel="noopener noreferrer">{e(label)}</a>')
+        bits.append("</div>")
+
+    if rec.get("reply_links"):
+        bits.append('<div class="links replies">')
+        for link in rec["reply_links"][:6]:
+            href = link.get("resolved") or link.get("href") or ""
+            label = re.sub(r"^https?://(www\.)?", "", href)[:40]
+            who = link.get("from") or "?"
+            cls = " from-author" if link.get("self") else ""
+            bits.append(f'<a class="reply{cls}" href="{e(href)}" target="_blank" rel="noopener noreferrer"'
+                        f' title="from a reply by {e(who)}">↩ {e(label)}</a>')
         bits.append("</div>")
 
     pics = [u for u in (rec.get("images") or []) if u.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png", ".webp"))]

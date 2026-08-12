@@ -118,6 +118,22 @@ function cardEl(card, top) {
     el.append(inner);
   }
 
+  if (card.reply_links?.length) {
+    const box = document.createElement("div");
+    box.className = "inner replies";
+    for (const l of card.reply_links.slice(0, 5)) {
+      const a = document.createElement("a");
+      a.href = l.href;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.className = l.self ? "from-author" : "";
+      a.textContent = `↩ ${shortUrl(l.href)}`;
+      a.title = l.self ? `from the author's own reply (${l.from || "?"})` : `from a reply by ${l.from || "?"}`;
+      box.append(a);
+    }
+    el.append(box);
+  }
+
   const pics = [...(card.shotThumb ? [card.shotThumb] : []), ...card.images.slice(0, 3)];
   if (pics.length) {
     const thumbs = document.createElement("div");

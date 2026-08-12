@@ -173,7 +173,21 @@ with their destination link recovered.
 
 **It cannot get replies.** FxTwitter returns a reply count, never reply content, and no `?thread`
 variant changes that — so a post saying "repo in the comments" arrives without the repo. Those are
-flagged `needs_replies`, and reading them is the extension's job.
+flagged `needs_replies`, and reading them is the extension's job — see below.
+
+### Links from the replies
+
+Keeping an x.com post also harvests links out of the replies rendered below it, into `reply_links`.
+Half the reason a tweet gets saved is a tool it names but does not link — "repo in the comments" —
+and no API exposes reply bodies. They exist only in a rendered, logged-in page, so this is the one
+thing scraping does that fetching cannot.
+
+A reply from the post's own author is marked `self` and sorted first, because that is where an author
+parks the link. In the list and the deck those chips are outlined in green and prefixed `↩`.
+
+x.com renders replies lazily, so a plain **Keep** sees only what has scrolled into view. **Keep +
+shot** walks the entire page to stitch its screenshot and therefore sees far more of them — worth
+using on anything flagged `needs_replies`.
 
 ### Getting the data out
 

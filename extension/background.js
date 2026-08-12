@@ -385,6 +385,7 @@ async function captureActive(note = "", withShot = false) {
   record.captured_at = new Date().toISOString();
   if (note) record.note = note;
   record.links = await resolveLinks(record.links);
+  if (record.reply_links?.length) record.reply_links = await resolveLinks(record.reply_links);
 
   if (withShot) {
     try {
@@ -455,7 +456,8 @@ function describe(res) {
     ? ` · png ${r.screenshot.width}×${r.screenshot.height}${r.screenshot.truncated ? " (cut short)" : ""}`
     : r.screenshot_error ? ` · screenshot failed: ${r.screenshot_error}` : "";
   const links = r.links?.length ? ` · +${r.links.length} link${r.links.length > 1 ? "s" : ""}` : "";
-  return `kept ${summarise(r)}${links}${shot}`;
+  const fromReplies = r.reply_links?.length ? ` · ${r.reply_links.length} from replies` : "";
+  return `kept ${summarise(r)}${links}${fromReplies}${shot}`;
 }
 
 async function queueActiveTab() {
@@ -582,6 +584,9 @@ browser.runtime.onMessage.addListener(async msg => {
             saved_at: savedBy.get(keyOf(c.url)) || c.captured_at || null,
             images: c.images || [],
             links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean),
+            reply_links: (c.reply_links || []).map(l => ({
+              href: l.resolved || l.href, from: l.from || null, self: !!l.self,
+            })).filter(l => l.href),
             shotThumb: thumbs[c.screenshot?.filename] || null,
             code_blocks: (c.code_blocks || []).length,
           })),
@@ -625,6 +630,9 @@ browser.runtime.onMessage.addListener(async msg => {
               text: cap.text || null,
               kind: cap.kind,
               links: (cap.links || []).map(l => l.resolved || l.href).filter(Boolean),
+              reply_links: (cap.reply_links || []).map(l => ({
+                href: l.resolved || l.href, from: l.from || null, self: !!l.self,
+              })).filter(l => l.href),
               images: cap.images || [],
               screenshot: cap.screenshot?.filename || null,
               shotThumb: thumbs[cap.screenshot?.filename] || null,
@@ -649,6 +657,9 @@ browser.runtime.onMessage.addListener(async msg => {
               text: c.text || null,
               kind: c.kind,
               links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean),
+              reply_links: (c.reply_links || []).map(l => ({
+                href: l.resolved || l.href, from: l.from || null, self: !!l.self,
+              })).filter(l => l.href),
               images: c.images || [],
               screenshot: c.screenshot?.filename || null,
               shotThumb: thumbs[c.screenshot?.filename] || null,
