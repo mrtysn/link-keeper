@@ -1,10 +1,27 @@
 const $ = id => document.getElementById(id);
 const send = msg => browser.runtime.sendMessage(msg);
 
+/* A popup is destroyed the moment it closes, so anything half-typed is lost and the result of the
+ * last action vanishes with it. These few fields are mirrored into storage and restored on open:
+ * a note in progress, a paste in progress, which sections were expanded, and the last message —
+ * that last one matters most, because an action's outcome is otherwise unknowable after the fact.
+ */
+const UI_KEY = "popupUi";
+let ui = { note: "", urls: "", open: [], msg: "", msgClass: "" };
+let uiTimer = null;
+
+function saveUi() {
+  clearTimeout(uiTimer);
+  uiTimer = setTimeout(() => browser.storage.local.set({ [UI_KEY]: ui }).catch(() => {}), 250);
+}
+
 function say(text, cls = "") {
   $("msg").textContent = text;
   $("msg").className = cls;
   $("copy-msg").hidden = !text;
+  ui.msg = text;
+  ui.msgClass = cls;
+  saveUi();
 }
 
 $("copy-msg").onclick = async () => {
@@ -101,11 +118,22 @@ async function keep(withShot = false) {
       say(head, "ok");
     }
     $("note").value = "";
+    ui.note = "";
   } else {
     say(res?.error || "could not keep that page", "bad");
   }
   refresh();
 }
+
+for (const [id, key] of [["note", "note"], ["urls", "urls"]]) {
+  $(id).addEventListener("input", () => { ui[key] = $(id).value; saveUi(); });
+}
+document.querySelectorAll("details").forEach((d, i) => {
+  d.addEventListener("toggle", () => {
+    ui.open = [...document.querySelectorAll("details")].map(x => x.open);
+    saveUi();
+  });
+});
 
 $("keep").onclick = () => keep(false);
 
@@ -182,6 +210,8 @@ $("add").onclick = async () => {
   if (res.skipped) bits.push(`${res.skipped} unchanged`);
   say(`${bits.join(", ")} — ${res.total} on the list${dated ? "" : "\nno dates in that paste"}`, "ok");
   $("urls").value = "";
+  ui.urls = "";
+  saveUi();
   refresh();
 };
 
@@ -227,6 +257,20 @@ $("clear-list").onclick = async () => {
   say("list cleared", "ok");
   refresh();
 };
+
+/* Restore what the last popup session had in flight. */
+browser.storage.local.get(UI_KEY).then(got => {
+  ui = { ...ui, ...(got[UI_KEY] || {}) };
+  $("note").value = ui.note || "";
+  $("urls").value = ui.urls || "";
+  const panels = [...document.querySelectorAll("details")];
+  (ui.open || []).forEach((isOpen, i) => { if (panels[i]) panels[i].open = isOpen; });
+  if (ui.msg) {
+    $("msg").textContent = ui.msg;
+    $("msg").className = ui.msgClass || "";
+    $("copy-msg").hidden = false;
+  }
+}).catch(() => {});
 
 /* The subfolder is committed on blur or Enter, so every keystroke is not a write. */
 send({ type: "get-folder" }).then(({ folder, fallback }) => {
