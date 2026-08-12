@@ -354,6 +354,53 @@ $("export").onclick = async () => {
 
 $("to-cards").onclick = () => { location.href = "cards.html"; };
 
+/* Import lives here rather than in the popup: choosing a file opens an OS dialog, which closes a
+ * browser-action popup and destroys its JS before onchange can fire. A tab survives it. */
+$("show-import").onclick = () => $("import-panel").classList.remove("hidden");
+$("hide-import").onclick = () => $("import-panel").classList.add("hidden");
+
+function parseJsonl(raw) {
+  // split("\n") only: U+2028 appears raw inside tweet text and would tear a record in two.
+  const records = [];
+  let bad = 0;
+  for (const line of raw.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    try { records.push(JSON.parse(t)); } catch (e) { bad++; }
+  }
+  return { records, bad };
+}
+
+async function runImport(raw) {
+  const note = $("import-msg");
+  const { records, bad } = parseJsonl(raw);
+  if (!records.length) {
+    note.className = "bad";
+    note.textContent = `nothing readable${bad ? ` — ${bad} unparseable lines` : ""}`;
+    return;
+  }
+  const res = await send({ type: "import-captures", records });
+  note.className = "ok";
+  note.textContent = `${res.added} new, ${res.enriched} filled in, ${res.skipped} already known`
+    + `${bad ? `, ${bad} bad lines skipped` : ""} — ${res.total} captures held`;
+  $("import-text").value = "";
+  load();
+}
+
+$("import-file").onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $("import-msg").textContent = `reading ${file.name}…`;
+  await runImport(await file.text());
+  e.target.value = "";
+};
+
+$("do-import").onclick = () => {
+  const raw = $("import-text").value.trim();
+  if (!raw) return ($("import-msg").className = "bad", $("import-msg").textContent = "paste some JSONL, or choose a file");
+  runImport(raw);
+};
+
 $("tidy").onclick = async () => {
   const done = rows.filter(r => r.status !== "pending").map(r => r.url);
   if (!done.length) return say("nothing to tidy — everything is still pending");
@@ -362,6 +409,8 @@ $("tidy").onclick = async () => {
   say(`removed ${done.length} from the list`);
   load();
 };
+
+if (location.hash === "#import") $("import-panel").classList.remove("hidden");
 
 load();
 // Cheap way to stay in step with captures made in other tabs.

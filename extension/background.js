@@ -727,7 +727,9 @@ browser.runtime.onMessage.addListener(async msg => {
     }
 
     case "open-list":
-      await browser.tabs.create({ url: browser.runtime.getURL("list.html") });
+      await browser.tabs.create({
+        url: browser.runtime.getURL("list.html") + (msg.importing ? "#import" : ""),
+      });
       return { ok: true };
 
     case "open-cards":

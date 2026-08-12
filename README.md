@@ -165,8 +165,12 @@ destinations the post linked to. A bare `x.com/i/status/<id>` resolves fine, han
 
     ./importers/telegram.py result.json | ./importers/enrich-x.py > link-captures.jsonl
 
-Then popup → *Export & housekeeping* → **Import captures**. Those links arrive already read, so the
-card deck can judge them immediately.
+Then, in the list page, **Import…** → choose the file or paste it. Those links arrive already read, so
+the card deck can judge them immediately.
+
+Import lives in the list page rather than the popup on purpose: choosing a file opens an OS dialog,
+which closes a browser-action popup and destroys its JavaScript before the change event can fire — the
+file is silently never read. A tab survives it.
 
 Measured on 133 links: 131 resolved in 106 seconds, 2 were deleted tweets, no rate limiting. 38 came
 with their destination link recovered.

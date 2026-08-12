@@ -199,23 +199,11 @@ $("export-list").onclick = async () => {
   say(`exported ${items.length} list entries`, "ok");
 };
 
-/* split("\n") not splitlines-equivalent: U+2028 appears raw inside tweet text and would tear a
- * record in two. Records written by this extension escape it; ones written elsewhere may not. */
-$("import-captures").onchange = async e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  let records = [], bad = 0;
-  for (const line of (await file.text()).split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
-    try { records.push(JSON.parse(t)); } catch (err) { bad++; }
-  }
-  if (!records.length) return say(`nothing readable in that file${bad ? ` (${bad} bad lines)` : ""}`, "bad");
-  const res = await send({ type: "import-captures", records });
-  say(`imported ${res.added} new, ${res.enriched} filled in, ${res.skipped} already known`
-    + `${bad ? `\n${bad} unparseable lines skipped` : ""}`, "ok");
-  e.target.value = "";
-  refresh();
+/* Import needs a real tab: an OS file dialog closes this popup and destroys its JS before the
+ * change event can fire, so the file is silently never read. */
+$("go-import").onclick = async () => {
+  await send({ type: "open-list", importing: true });
+  window.close();
 };
 
 $("reset").onclick = async () => {
