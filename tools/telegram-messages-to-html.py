@@ -335,22 +335,10 @@ if (savedMode && savedMode !== 'all') {
   tickBtn.textContent = LABELS[savedMode];
 }
 
-/* No mass-marking. One mistaken click there rewrites hundreds of messages, and the marks are the
- * only record of what has already been deleted. Reset asks, and names what it is about to lose. */
-document.getElementById('untick-all').onclick = () => {
-  const all = Object.values(states);
-  const t = all.filter(v => v === 'ticked').length;
-  const d = all.filter(v => v === 'deleted').length;
-  if (!t && !d) return;
-  if (!confirm(`Forget ${t} marked to delete and ${d} marked as already deleted?\n\n`
-    + `The record of what you have deleted in Telegram cannot be recovered.`)) return;
-  states = {};
-  save();
-  rows.forEach(paint);
-  count();
-  apply();
-};
-
+/* Nothing here changes more than one message at a time. The marks are the only record of what has
+ * already been deleted in Telegram, and no button is worth the risk of rewriting them wholesale.
+ * Starting over means clearing this page's local storage by hand, which is rare and deliberate.
+ */
 document.getElementById('show-ids').onclick = () => {
   const picked = rows.filter(r => stateOf(r) === 'ticked');
   const lines = picked.map(r => `${r.dataset.id}\t${r.dataset.date}\t${(r.dataset.hay || '').slice(0, 70)}`);
@@ -427,7 +415,6 @@ or voice message was ever downloaded and no copy of them exists anywhere but Tel
   <button class="chip" id="f-media">media {counts['media']}</button>
   <button class="act" id="sort" data-dir="newest" title="Flip the order">newest first ↓</button>
   <button class="act" id="ticked" data-mode="all" title="Filter by mark: all → unmarked → to delete → deleted">show: all</button>
-  <button class="act" id="untick-all" title="Forget every mark and start over">reset marks</button>
 </div>
 
 {chr(10).join(rows)}
@@ -437,8 +424,8 @@ or voice message was ever downloaded and no copy of them exists anywhere but Tel
 <div id="out">
   <span><b id="n-ticked">0</b> to delete · <b id="n-deleted">0</b> deleted</span>
   <button class="act go" id="show-ids">list the to-delete &amp; copy IDs</button>
-  <span style="color:var(--dim)">Marks are remembered in this browser. Click a message's badge to cycle
-  <b>·</b> → <b>✓</b> → <b>✕</b>.</span>
+  <span style="color:var(--dim)">Click a message's badge to cycle <b>·</b> → <b>✓</b> → <b>✕</b>.
+  Marks are remembered in this browser.</span>
 </div>
 <script>{JS}</script>
 </body></html>
