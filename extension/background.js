@@ -358,6 +358,85 @@ async function hasSiteAccess() {
   }
 }
 
+/* Read a page in a tab that is not the one you are looking at.
+ *
+ * This is the same extraction the hotkey does; only the tab differs. It needs host permission for
+ * that origin, because activeTab covers the tab you acted on and nothing else — the list page asks
+ * for it per site, at the moment you click capture.
+ */
+async function readTab(tabId) {
+  await browser.scripting.executeScript({ target: { tabId }, files: ["extractors.js"] });
+  const [result] = await browser.scripting.executeScript({ target: { tabId }, func: runExtractor });
+  return result?.result || null;
+}
+
+function tabSettled(tabId, timeout = 25000) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = ok => {
+      if (done) return;
+      done = true;
+      browser.tabs.onUpdated.removeListener(onUpdated);
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const onUpdated = (id, changed) => {
+      if (id === tabId && changed.status === "complete") finish(true);
+    };
+    const timer = setTimeout(() => finish(false), timeout);
+    browser.tabs.onUpdated.addListener(onUpdated);
+    // It may already be loaded by the time we start listening.
+    browser.tabs.get(tabId).then(t => { if (t.status === "complete") finish(true); }).catch(() => finish(false));
+  });
+}
+
+/* One link, start to finish: open it out of sight, read it, close it, store it. */
+async function captureUrl(url, note = "") {
+  let tab;
+  try {
+    tab = await browser.tabs.create({ url, active: false });
+  } catch (e) {
+    return { ok: false, error: `could not open it: ${e.message || e}` };
+  }
+  try {
+    const loaded = await tabSettled(tab.id);
+    if (!loaded) return { ok: false, error: "the page never finished loading" };
+
+    let record;
+    try {
+      record = await readTab(tab.id);
+    } catch (e) {
+      return { ok: false, error: `no access to that site — grant it and retry (${e.message || e})` };
+    }
+    if (!record) return { ok: false, error: "nothing extractable on that page" };
+
+    record.url = (record.url || record.canonical || url).split("#")[0];
+    const visited = url.split("#")[0];
+    record.source_url = visited !== record.url ? visited : null;
+    record.captured_at = new Date().toISOString();
+    record.via = "list";
+    if (note) record.note = note;
+    record.links = await resolveLinks(record.links);
+    if (record.reply_links?.length) record.reply_links = await resolveLinks(record.reply_links);
+
+    const captures = await getCaptures();
+    const key = keyOf(record.url);
+    await setCaptures([...captures.filter(r => keyOf(r.url) !== key), record]);
+
+    // It has been read, so it leaves the queue.
+    const items = await getItems();
+    const item = items.find(i => keyOf(i.url) === keyOf(url) || keyOf(i.url) === key);
+    if (item && item.status !== "kept") {
+      item.status = "kept";
+      item.kept_at = new Date().toISOString();
+      await setItems(items);
+    }
+    return { ok: true, record };
+  } finally {
+    await browser.tabs.remove(tab.id).catch(() => {});
+  }
+}
+
 async function captureActive(note = "", withShot = false) {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "no active tab" };
@@ -755,6 +834,9 @@ browser.runtime.onMessage.addListener(async msg => {
 
     case "capture-active":
       return captureActive(msg.note, !!msg.withShot);
+
+    case "capture-url":
+      return captureUrl(msg.url, msg.note);
 
     case "export":
       return { captures: await getCaptures() };

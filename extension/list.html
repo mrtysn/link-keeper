@@ -107,6 +107,11 @@
   .acts { display: flex; gap: .25rem; opacity: 0; }
   ul.rows li:hover .acts, ul.rows li:focus-within .acts { opacity: 1; }
   .acts button { padding: .2rem .5rem; font-size: .78rem; }
+  .acts button:disabled { opacity: .5; cursor: default; }
+  /* The one action worth finding without hunting: always visible, not only on hover. */
+  li:not(:hover) .acts { opacity: 1; }
+  li:not(:hover) .acts button:not(:first-child) { opacity: 0; pointer-events: none; }
+  .acts button:first-child { border-color: var(--accent); color: var(--accent); }
   .empty { color: var(--dim); text-align: center; padding: 4rem 1rem; border: 1px dashed var(--line); border-radius: .8rem; }
   .empty b { display: block; color: var(--ink); font-size: 1.05rem; margin-bottom: .3rem; }
   #msg { color: var(--dim); font-size: .82rem; min-height: 1.2rem; margin-top: .5rem; }

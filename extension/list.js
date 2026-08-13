@@ -233,6 +233,42 @@ function rowEl(row) {
 
   const acts = document.createElement("div");
   acts.className = "acts";
+
+  /* Read it without leaving this page: opens the link out of sight in your own session, extracts,
+   * closes it. Needs permission for that site, asked for here because a permission prompt must come
+   * from a click on an extension page. */
+  const grab = document.createElement("button");
+  grab.textContent = row.cap ? "re-read" : "read it";
+  grab.title = "Open it in the background, read it, close it";
+  grab.onclick = async () => {
+    let origin;
+    try {
+      origin = new URL(row.url).origin + "/*";
+    } catch (e) {
+      return say("that URL cannot be opened");
+    }
+    const granted = await browser.permissions.request({ origins: [origin] }).catch(() => false);
+    if (!granted) return say(`without access to ${hostOf(row.url)} it cannot be read`);
+
+    grab.disabled = true;
+    grab.textContent = "reading…";
+    const res = await send({ type: "capture-url", url: row.url });
+    if (res?.ok) {
+      const r = res.record;
+      const extra = [
+        r.links?.length ? `${r.links.length} link${r.links.length > 1 ? "s" : ""}` : null,
+        r.reply_links?.length ? `${r.reply_links.length} from replies` : null,
+      ].filter(Boolean).join(", ");
+      say(`read ${r.title || hostOf(row.url)}${extra ? ` — ${extra}` : ""}`);
+    } else {
+      say(res?.error || "could not read it");
+      grab.disabled = false;
+      grab.textContent = row.cap ? "re-read" : "read it";
+    }
+    load();
+  };
+  acts.append(grab);
+
   const actions = [
     ["open", "Open in this window", () => send({ type: "set-current", url: row.url })
       .then(() => browser.tabs.update({ url: row.url })).then(load)],
