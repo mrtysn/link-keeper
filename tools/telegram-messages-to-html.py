@@ -348,8 +348,45 @@ document.getElementById('show-ids').onclick = () => {
   navigator.clipboard.writeText(picked.map(r => r.dataset.id).join('\n')).catch(() => {});
 };
 
+/* Remember where you were, by message rather than by pixel: a filter change, a re-sort or a
+ * regenerated file all move the pixel offset, but the topmost visible message is still the place you
+ * had got to. Restored after the first layout so the offsets are real.
+ */
+const POS_KEY = 'tg-scroll-anchor';
+
+function topmostVisible() {
+  for (const r of rows) {
+    if (r.classList.contains('hidden')) continue;
+    if (r.getBoundingClientRect().bottom > 80) return r;
+  }
+  return null;
+}
+
+let posTimer = null;
+addEventListener('scroll', () => {
+  clearTimeout(posTimer);
+  posTimer = setTimeout(() => {
+    const r = topmostVisible();
+    if (r) localStorage.setItem(POS_KEY, r.dataset.id);
+  }, 150);
+}, { passive: true });
+
+function restorePosition() {
+  const id = localStorage.getItem(POS_KEY);
+  if (!id) return;
+  const target = rows.find(r => r.dataset.id === id);
+  if (!target || target.classList.contains('hidden')) return;
+  // Leave the sticky toolbar clear of it.
+  const y = target.getBoundingClientRect().top + scrollY - 72;
+  scrollTo({ top: Math.max(0, y), behavior: 'instant' });
+  target.style.transition = 'outline-color .8s ease';
+  target.style.outline = '2px solid var(--accent)';
+  setTimeout(() => { target.style.outlineColor = 'transparent'; }, 900);
+}
+
 count();
 apply();
+requestAnimationFrame(restorePosition);
 """
 
 
