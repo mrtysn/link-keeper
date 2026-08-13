@@ -349,21 +349,29 @@ document.getElementById('show-ids').onclick = () => {
 };
 
 /* Remember where you were, by message rather than by pixel: a filter change, a re-sort or a
- * regenerated file all move the pixel offset, but the topmost visible message is still the place you
- * had got to. Restored after the first layout so the offsets are real.
+ * regenerated file all move the pixel offset, but the topmost visible message is still where you had
+ * got to.
+ *
+ * The browser restores scroll itself on reload, and it does so *after* scripts run — so it silently
+ * overrode this. scrollRestoration = 'manual' takes that away from it. The restore then runs twice,
+ * once after layout and once after load, because late-arriving layout can move everything.
  */
+history.scrollRestoration = 'manual';
+
 const POS_KEY = 'tg-scroll-anchor';
+let restoring = false;
 
 function topmostVisible() {
   for (const r of rows) {
     if (r.classList.contains('hidden')) continue;
-    if (r.getBoundingClientRect().bottom > 80) return r;
+    if (r.getBoundingClientRect().bottom > 90) return r;
   }
   return null;
 }
 
 let posTimer = null;
 addEventListener('scroll', () => {
+  if (restoring) return;          // never record the position the restore itself lands on
   clearTimeout(posTimer);
   posTimer = setTimeout(() => {
     const r = topmostVisible();
@@ -371,22 +379,28 @@ addEventListener('scroll', () => {
   }, 150);
 }, { passive: true });
 
-function restorePosition() {
+function restorePosition(flash) {
   const id = localStorage.getItem(POS_KEY);
   if (!id) return;
   const target = rows.find(r => r.dataset.id === id);
   if (!target || target.classList.contains('hidden')) return;
-  // Leave the sticky toolbar clear of it.
-  const y = target.getBoundingClientRect().top + scrollY - 72;
+
+  restoring = true;
+  const y = target.getBoundingClientRect().top + scrollY - 76;   // clear of the sticky toolbar
   scrollTo({ top: Math.max(0, y), behavior: 'instant' });
-  target.style.transition = 'outline-color .8s ease';
-  target.style.outline = '2px solid var(--accent)';
-  setTimeout(() => { target.style.outlineColor = 'transparent'; }, 900);
+  setTimeout(() => { restoring = false; }, 120);
+
+  if (flash) {
+    target.style.transition = 'outline-color .8s ease';
+    target.style.outline = '2px solid var(--accent)';
+    setTimeout(() => { target.style.outlineColor = 'transparent'; }, 1000);
+  }
 }
 
 count();
 apply();
-requestAnimationFrame(restorePosition);
+requestAnimationFrame(() => restorePosition(true));
+addEventListener('load', () => restorePosition(false));
 """
 
 

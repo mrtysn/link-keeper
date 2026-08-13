@@ -59,10 +59,10 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def get(url: str, timeout: float, as_json: bool = False):
+def get(url: str, timeout: float, as_json: bool = False, ua: str = UA):
     """Returns (payload, final_url, status). Never raises; a failure is (None, url, code)."""
     req = urllib.request.Request(url, headers={
-        "User-Agent": UA,
+        "User-Agent": ua,
         "Accept": "application/json" if as_json else "text/html,application/xhtml+xml",
         "Accept-Language": "en,tr;q=0.8",
     })
@@ -140,6 +140,30 @@ def from_hn(url: str, timeout: float) -> dict | None:
     }
 
 
+def from_maps(url: str, timeout: float) -> dict | None:
+    """A Maps shortlink has no metadata, but resolving it puts the place in the URL path."""
+    if not re.search(r"(maps\.app\.goo\.gl|goo\.gl/maps)/", url, re.I):
+        return None
+    # Google answers a browser-shaped UA with a 200 interstitial and only issues the real redirect
+    # to a plain client — so ask as one, and throw the body away.
+    _, final, _ = get(url, timeout, ua="curl/8.4.0")
+    if not final:
+        return None
+    m = re.search(r"/maps/place/([^/@]+)", final)
+    if not m:
+        return None
+    name = urllib.parse.unquote(m.group(1)).replace("+", " ").strip()
+    if not name:
+        return None
+    return {
+        "kind": "place",
+        "title": name.split(",")[0],
+        "text": name,
+        "resolved_to": final.split("?")[0],
+        "via": "redirect",
+    }
+
+
 def from_youtube(url: str, timeout: float) -> dict | None:
     if not re.search(r"(youtube\.com/(watch|shorts/|live/)|youtu\.be/)", url, re.I):
         return None
@@ -155,7 +179,7 @@ def from_youtube(url: str, timeout: float) -> dict | None:
     }
 
 
-SPECIAL = (from_github, from_hn, from_youtube)
+SPECIAL = (from_github, from_hn, from_youtube, from_maps)
 
 
 def from_html(url: str, timeout: float) -> tuple[dict | None, int, str]:
@@ -236,11 +260,13 @@ def main() -> int:
         for handler in SPECIAL:
             base = handler(url, args.timeout)
             if base:
-                base["via"] = "api"
+                base["via"] = base.get("via", "api")
                 break
         final = url
         code = 200
-        if not base:
+        if base:
+            final = base.pop("resolved_to", url)
+        else:
             base, code, final = from_html(url, args.timeout)
 
         if base:
