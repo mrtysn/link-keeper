@@ -170,8 +170,9 @@ h1{font-size:1.3rem;margin:0 0 .2rem}
   border:1px solid var(--line);border-radius:.45rem}
 #sort{min-width:8.5rem}
 #ticked{min-width:8rem}
-#ticked[data-mode=ticked]{border-color:var(--safe);color:var(--safe)}
-#ticked[data-mode=unticked]{border-color:var(--accent);color:var(--accent)}
+#ticked[data-mode=none]{border-color:var(--accent);color:var(--accent)}
+#ticked[data-mode=ticked]{border-color:var(--keepc);color:var(--keepc)}
+#ticked[data-mode=deleted]{border-color:var(--safe);color:var(--safe)}
 .chip{border:1px solid var(--line);background:var(--card);color:var(--dim);border-radius:1rem;
   padding:.3rem .75rem;font-size:.8rem;cursor:pointer;font-variant-numeric:tabular-nums}
 .chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -184,8 +185,15 @@ button.act.go{background:var(--accent);border-color:var(--accent);color:#fff;fon
 .msg.v-migrated{border-left:3px solid var(--safe)}
 .msg.v-uncaptured,.msg.v-media{border-left:3px solid var(--warn)}
 .msg.v-note,.msg.v-yournote{border-left:3px solid var(--keepc)}
-.msg.ticked{background:var(--safe-bg)}
-.msg input[type=checkbox]{margin-top:.25rem;cursor:pointer}
+.msg .state{width:1.5rem;height:1.5rem;margin-top:.15rem;padding:0;cursor:pointer;font:inherit;
+  font-size:.9rem;line-height:1;border:1px solid var(--line);border-radius:.35rem;
+  background:var(--card);color:var(--dim)}
+.msg .state:hover{border-color:var(--accent)}
+.msg[data-state=ticked] .state{border-color:var(--keepc);color:var(--keepc);font-weight:700}
+.msg[data-state=deleted] .state{border-color:var(--safe);background:var(--safe);color:#fff;font-weight:700}
+.msg[data-state=ticked]{background:var(--chip)}
+.msg[data-state=deleted]{opacity:.5}
+.msg[data-state=deleted] .body{text-decoration:line-through}
 .head{display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap;font-size:.76rem;color:var(--dim);margin-bottom:.2rem}
 .head .v{padding:.05rem .45rem;border-radius:1rem;background:var(--chip)}
 .head .v.migrated{background:var(--safe-bg);color:var(--safe);font-weight:600}
@@ -206,20 +214,49 @@ pre#ids{max-height:12rem;overflow:auto;background:var(--chip);border-radius:.4re
 """
 
 JS = r"""
-const KEY = 'tg-delete-ticks';
+const KEY = 'tg-states';
+const OLD_KEY = 'tg-delete-ticks';
 const rows = [...document.querySelectorAll('.msg')];
 const q = document.getElementById('q');
 let filter = 'all';
-let ticks = new Set(JSON.parse(localStorage.getItem(KEY) || '[]'));
+
+/* Three states per message: unmarked, to-delete, deleted. "deleted" means you have actually removed
+ * it in Telegram, so the two together are a worklist and a record of what is done. */
+const STATES = ['none', 'ticked', 'deleted'];
+const GLYPH = { none: '·', ticked: '✓', deleted: '✕' };
+let states = {};
+try { states = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { states = {}; }
+if (!Object.keys(states).length) {
+  // Carry over ticks made before this had three states.
+  try {
+    for (const id of JSON.parse(localStorage.getItem(OLD_KEY) || '[]')) states[id] = 'ticked';
+  } catch (e) { /* nothing to carry */ }
+}
+
+const stateOf = r => states[r.dataset.id] || 'none';
+
+function paint(r) {
+  const st = stateOf(r);
+  r.dataset.state = st;
+  r.querySelector('.state').textContent = GLYPH[st];
+}
+
+function save() {
+  localStorage.setItem(KEY, JSON.stringify(states));
+}
+
+function setState(r, st) {
+  if (st === 'none') delete states[r.dataset.id];
+  else states[r.dataset.id] = st;
+  paint(r);
+}
 
 rows.forEach(r => {
   r.dataset.hay = r.textContent.toLowerCase();
-  const box = r.querySelector('input[type=checkbox]');
-  if (ticks.has(r.dataset.id)) { box.checked = true; r.classList.add('ticked'); }
-  box.onchange = () => {
-    box.checked ? ticks.add(r.dataset.id) : ticks.delete(r.dataset.id);
-    r.classList.toggle('ticked', box.checked);
-    localStorage.setItem(KEY, JSON.stringify([...ticks]));
+  paint(r);
+  r.querySelector('.state').onclick = () => {
+    setState(r, STATES[(STATES.indexOf(stateOf(r)) + 1) % STATES.length]);
+    save();
     count();
     if (document.getElementById('ticked').dataset.mode !== 'all') apply();
   };
@@ -232,7 +269,9 @@ rows.forEach(r => {
 });
 
 function count() {
-  document.getElementById('n-ticked').textContent = ticks.size;
+  const all = Object.values(states);
+  document.getElementById('n-ticked').textContent = all.filter(v => v === 'ticked').length;
+  document.getElementById('n-deleted').textContent = all.filter(v => v === 'deleted').length;
 }
 
 function apply() {
@@ -240,8 +279,8 @@ function apply() {
   const tickMode = document.getElementById('ticked').dataset.mode;
   let shown = 0;
   for (const r of rows) {
-    const isTicked = ticks.has(r.dataset.id);
-    const tickOk = tickMode === 'all' || (tickMode === 'ticked') === isTicked;
+    const st = stateOf(r);
+    const tickOk = tickMode === 'all' || tickMode === st;
     const hit = tickOk
       && (filter === 'all' || r.dataset.verdict === filter)
       && (!term || r.dataset.hay.includes(term));
@@ -280,8 +319,8 @@ sortBtn.onclick = () => {
 // Remember which way round it was left.
 if (localStorage.getItem('tg-sort') === 'oldest') sortBtn.click();
 
-const LABELS = { all: 'all ticks', ticked: 'ticked only', unticked: 'unticked only' };
-const ORDER = ['all', 'ticked', 'unticked'];
+const LABELS = { all: 'all marks', none: 'unmarked only', ticked: 'to delete only', deleted: 'deleted only' };
+const ORDER = ['all', 'none', 'ticked', 'deleted'];
 const tickBtn = document.getElementById('ticked');
 tickBtn.onclick = () => {
   const next = ORDER[(ORDER.indexOf(tickBtn.dataset.mode) + 1) % ORDER.length];
@@ -296,23 +335,29 @@ if (savedMode && savedMode !== 'all') {
   tickBtn.textContent = LABELS[savedMode];
 }
 
-document.getElementById('tick-shown').onclick = () => {
-  for (const r of rows) {
-    if (r.classList.contains('hidden')) continue;
-    const box = r.querySelector('input[type=checkbox]');
-    if (!box.checked) { box.checked = true; box.onchange(); }
-  }
-};
+function markShown(st) {
+  const shown = rows.filter(r => !r.classList.contains('hidden'));
+  if (st === 'deleted' && !confirm(`Mark ${shown.length} message(s) as already deleted in Telegram?`)) return;
+  shown.forEach(r => setState(r, st));
+  save();
+  count();
+  apply();
+}
+
+document.getElementById('tick-shown').onclick = () => markShown('ticked');
+document.getElementById('del-shown').onclick = () => markShown('deleted');
 
 document.getElementById('untick-all').onclick = () => {
-  ticks.clear();
-  localStorage.setItem(KEY, '[]');
-  rows.forEach(r => { r.querySelector('input[type=checkbox]').checked = false; r.classList.remove('ticked'); });
+  if (!confirm('Clear every mark? This forgets what you have already deleted.')) return;
+  states = {};
+  save();
+  rows.forEach(paint);
   count();
+  apply();
 };
 
 document.getElementById('show-ids').onclick = () => {
-  const picked = rows.filter(r => ticks.has(r.dataset.id));
+  const picked = rows.filter(r => stateOf(r) === 'ticked');
   const lines = picked.map(r => `${r.dataset.id}\t${r.dataset.date}\t${(r.dataset.hay || '').slice(0, 70)}`);
   const box = document.getElementById('ids');
   box.textContent = lines.join('\n') || 'nothing ticked';
@@ -354,7 +399,7 @@ def main() -> int:
 
         rows.append(
             f'<div class="msg v-{v}" data-id="{msg.get("id")}" data-verdict="{v}" data-date="{html.escape(when)}">'
-            f'<input type="checkbox" title="mark for deletion">'
+            f'<button class="state" title="click to cycle: unmarked → to delete → deleted">·</button>'
             f'<div><div class="head">{"".join(head)}</div>'
             f'<div class="body{" clamp" if long_body else ""}">{body}</div>'
             + ('<button class="more">more</button>' if long_body else "")
@@ -386,9 +431,10 @@ or voice message was ever downloaded and no copy of them exists anywhere but Tel
   <button class="chip" id="f-note">notes {counts['note']}</button>
   <button class="chip" id="f-media">media {counts['media']}</button>
   <button class="act" id="sort" data-dir="newest" title="Flip the order">newest first ↓</button>
-  <button class="act" id="ticked" data-mode="all" title="Cycle: all → ticked only → unticked only">all ticks</button>
-  <button class="act" id="tick-shown" title="Tick every message currently shown">tick shown</button>
-  <button class="act" id="untick-all">untick all</button>
+  <button class="act" id="ticked" data-mode="all" title="Cycle: all → unmarked → to delete → deleted">all marks</button>
+  <button class="act" id="tick-shown" title="Mark every message shown as to-delete">✓ shown</button>
+  <button class="act" id="del-shown" title="Mark every message shown as deleted in Telegram">✕ shown</button>
+  <button class="act" id="untick-all">clear marks</button>
 </div>
 
 {chr(10).join(rows)}
@@ -396,9 +442,10 @@ or voice message was ever downloaded and no copy of them exists anywhere but Tel
 <pre id="ids" class="hidden"></pre>
 </div>
 <div id="out">
-  <span><b id="n-ticked">0</b> ticked for deletion</span>
-  <button class="act go" id="show-ids">list them &amp; copy IDs</button>
-  <span style="color:var(--dim)">Ticks are remembered in this browser.</span>
+  <span><b id="n-ticked">0</b> to delete · <b id="n-deleted">0</b> deleted</span>
+  <button class="act go" id="show-ids">list the to-delete &amp; copy IDs</button>
+  <span style="color:var(--dim)">Marks are remembered in this browser. Click a message's badge to cycle
+  <b>·</b> → <b>✓</b> → <b>✕</b>.</span>
 </div>
 <script>{JS}</script>
 </body></html>
