@@ -11,6 +11,7 @@
 #   refresh.zsh <path/to/result.json>
 #   refresh.zsh <result.json> <outdir>
 #   refresh.zsh --no-serve          # rebuild only, do not offer it to the extension
+#   refresh.zsh --no-open           # offer it, but do not open the browser yourself
 #
 # Paths come from config.local.sh at this repo's root — copy config.local.sh.example and fill it in.
 # Nothing machine-specific is committed.
@@ -32,9 +33,11 @@ if [[ ${1:-} == -h || ${1:-} == --help ]]; then
 fi
 
 serve=1
+open_page=1
 argv=()
 for a in "$@"; do
   [[ $a == --no-serve ]] && { serve=0; continue }
+  [[ $a == --no-open ]] && { open_page=0; continue }
   argv+=$a
 done
 
@@ -107,7 +110,26 @@ if [[ -s $unresolved ]]; then
   print "  cut -f1 ${unresolved:t} | pbcopy   →  popup → Add links → paste → Add"
 fi
 
-if (( serve )); then
-  print "\nNow open the extension's list page — it imports this by itself."
-  exec "$repo/tools/serve-once.py" "$all_jsonl" --port "$SERVE_PORT"
+if (( ! serve )); then
+  exit 0
 fi
+
+# Hold the file on loopback and let the add-on's own page collect it. Firefox records the internal
+# uuid of each install in its profile, so that page's URL can be looked up and opened — which removes
+# the last manual step. If the lookup fails (a fresh install Firefox has not flushed yet), fall back
+# to waiting for you to open it.
+"$repo/tools/serve-once.py" "$all_jsonl" --port "$SERVE_PORT" &
+serve_pid=$!
+
+list_url=$("$repo/tools/extension-url.py" list.html 2>/dev/null) || list_url=""
+
+if [[ -n $list_url ]] && (( open_page )); then
+  print "\nopening the list page to hand it over…"
+  open -a Firefox "$list_url" 2>/dev/null || open "$list_url" 2>/dev/null || {
+    print "  could not open Firefox; open the extension's list page yourself"
+  }
+else
+  print "\nNow open the extension's list page — it imports this by itself."
+fi
+
+wait $serve_pid
