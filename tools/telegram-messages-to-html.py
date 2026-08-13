@@ -169,7 +169,7 @@ h1{font-size:1.3rem;margin:0 0 .2rem}
 #q{flex:1 1 14rem;padding:.45rem .75rem;font:inherit;background:var(--card);color:var(--ink);
   border:1px solid var(--line);border-radius:.45rem}
 #sort{min-width:8.5rem}
-#ticked{min-width:8rem}
+#ticked{min-width:9.5rem}
 #ticked[data-mode=none]{border-color:var(--accent);color:var(--accent)}
 #ticked[data-mode=ticked]{border-color:var(--keepc);color:var(--keepc)}
 #ticked[data-mode=deleted]{border-color:var(--safe);color:var(--safe)}
@@ -319,7 +319,7 @@ sortBtn.onclick = () => {
 // Remember which way round it was left.
 if (localStorage.getItem('tg-sort') === 'oldest') sortBtn.click();
 
-const LABELS = { all: 'all marks', none: 'unmarked only', ticked: 'to delete only', deleted: 'deleted only' };
+const LABELS = { all: 'show: all', none: 'show: unmarked', ticked: 'show: to delete', deleted: 'show: deleted' };
 const ORDER = ['all', 'none', 'ticked', 'deleted'];
 const tickBtn = document.getElementById('ticked');
 tickBtn.onclick = () => {
@@ -335,20 +335,15 @@ if (savedMode && savedMode !== 'all') {
   tickBtn.textContent = LABELS[savedMode];
 }
 
-function markShown(st) {
-  const shown = rows.filter(r => !r.classList.contains('hidden'));
-  if (st === 'deleted' && !confirm(`Mark ${shown.length} message(s) as already deleted in Telegram?`)) return;
-  shown.forEach(r => setState(r, st));
-  save();
-  count();
-  apply();
-}
-
-document.getElementById('tick-shown').onclick = () => markShown('ticked');
-document.getElementById('del-shown').onclick = () => markShown('deleted');
-
+/* No mass-marking. One mistaken click there rewrites hundreds of messages, and the marks are the
+ * only record of what has already been deleted. Reset asks, and names what it is about to lose. */
 document.getElementById('untick-all').onclick = () => {
-  if (!confirm('Clear every mark? This forgets what you have already deleted.')) return;
+  const all = Object.values(states);
+  const t = all.filter(v => v === 'ticked').length;
+  const d = all.filter(v => v === 'deleted').length;
+  if (!t && !d) return;
+  if (!confirm(`Forget ${t} marked to delete and ${d} marked as already deleted?\n\n`
+    + `The record of what you have deleted in Telegram cannot be recovered.`)) return;
   states = {};
   save();
   rows.forEach(paint);
@@ -431,10 +426,8 @@ or voice message was ever downloaded and no copy of them exists anywhere but Tel
   <button class="chip" id="f-note">notes {counts['note']}</button>
   <button class="chip" id="f-media">media {counts['media']}</button>
   <button class="act" id="sort" data-dir="newest" title="Flip the order">newest first ↓</button>
-  <button class="act" id="ticked" data-mode="all" title="Cycle: all → unmarked → to delete → deleted">all marks</button>
-  <button class="act" id="tick-shown" title="Mark every message shown as to-delete">✓ shown</button>
-  <button class="act" id="del-shown" title="Mark every message shown as deleted in Telegram">✕ shown</button>
-  <button class="act" id="untick-all">clear marks</button>
+  <button class="act" id="ticked" data-mode="all" title="Filter by mark: all → unmarked → to delete → deleted">show: all</button>
+  <button class="act" id="untick-all" title="Forget every mark and start over">reset marks</button>
 </div>
 
 {chr(10).join(rows)}
