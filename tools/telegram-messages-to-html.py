@@ -168,8 +168,7 @@ h1{font-size:1.3rem;margin:0 0 .2rem}
   background:var(--bg);padding:.7rem 0;border-bottom:1px solid var(--line);margin-bottom:1rem}
 #q{flex:1 1 14rem;padding:.45rem .75rem;font:inherit;background:var(--card);color:var(--ink);
   border:1px solid var(--line);border-radius:.45rem}
-select{font:inherit;font-size:.82rem;padding:.35rem .5rem;background:var(--card);color:var(--ink);
-  border:1px solid var(--line);border-radius:.45rem}
+#sort{min-width:8.5rem}
 .chip{border:1px solid var(--line);background:var(--card);color:var(--dim);border-radius:1rem;
   padding:.3rem .75rem;font-size:.8rem;cursor:pointer;font-variant-numeric:tabular-nums}
 .chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -257,13 +256,21 @@ q.addEventListener('input', apply);
 /* Message ids increase with time, so they order the chat without parsing dates. Reordering moves the
  * existing nodes rather than rebuilding them, so tick state and expanded bodies survive. */
 const container = rows[0]?.parentNode;
-document.getElementById('sort').onchange = e => {
-  const dir = e.target.value === 'oldest' ? 1 : -1;
+const sortBtn = document.getElementById('sort');
+sortBtn.onclick = () => {
+  const oldest = sortBtn.dataset.dir !== 'oldest';
+  sortBtn.dataset.dir = oldest ? 'oldest' : 'newest';
+  sortBtn.textContent = oldest ? 'oldest first ↑' : 'newest first ↓';
+  const dir = oldest ? 1 : -1;
   const anchor = document.getElementById('ids');
   [...rows]
     .sort((a, b) => dir * ((+a.dataset.id || 0) - (+b.dataset.id || 0)))
     .forEach(r => container.insertBefore(r, anchor));
+  localStorage.setItem('tg-sort', sortBtn.dataset.dir);
 };
+
+// Remember which way round it was left.
+if (localStorage.getItem('tg-sort') === 'oldest') sortBtn.click();
 
 document.getElementById('tick-shown').onclick = () => {
   for (const r of rows) {
@@ -354,10 +361,7 @@ or voice message was ever downloaded and no copy of them exists anywhere but Tel
   <button class="chip" id="f-uncaptured">not captured {counts['uncaptured']}</button>
   <button class="chip" id="f-note">notes {counts['note']}</button>
   <button class="chip" id="f-media">media {counts['media']}</button>
-  <select id="sort" title="Order the messages">
-    <option value="newest">newest first</option>
-    <option value="oldest">oldest first</option>
-  </select>
+  <button class="act" id="sort" data-dir="newest" title="Flip the order">newest first ↓</button>
   <button class="act" id="tick-shown" title="Tick every message currently shown">tick shown</button>
   <button class="act" id="untick-all">untick all</button>
 </div>
