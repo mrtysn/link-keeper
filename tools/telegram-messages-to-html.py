@@ -169,6 +169,9 @@ h1{font-size:1.3rem;margin:0 0 .2rem}
 #q{flex:1 1 14rem;padding:.45rem .75rem;font:inherit;background:var(--card);color:var(--ink);
   border:1px solid var(--line);border-radius:.45rem}
 #sort{min-width:8.5rem}
+#ticked{min-width:8rem}
+#ticked[data-mode=ticked]{border-color:var(--safe);color:var(--safe)}
+#ticked[data-mode=unticked]{border-color:var(--accent);color:var(--accent)}
 .chip{border:1px solid var(--line);background:var(--card);color:var(--dim);border-radius:1rem;
   padding:.3rem .75rem;font-size:.8rem;cursor:pointer;font-variant-numeric:tabular-nums}
 .chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -218,6 +221,7 @@ rows.forEach(r => {
     r.classList.toggle('ticked', box.checked);
     localStorage.setItem(KEY, JSON.stringify([...ticks]));
     count();
+    if (document.getElementById('ticked').dataset.mode !== 'all') apply();
   };
   const more = r.querySelector('.more');
   if (more) more.onclick = () => {
@@ -233,9 +237,13 @@ function count() {
 
 function apply() {
   const term = q.value.trim().toLowerCase();
+  const tickMode = document.getElementById('ticked').dataset.mode;
   let shown = 0;
   for (const r of rows) {
-    const hit = (filter === 'all' || r.dataset.verdict === filter)
+    const isTicked = ticks.has(r.dataset.id);
+    const tickOk = tickMode === 'all' || (tickMode === 'ticked') === isTicked;
+    const hit = tickOk
+      && (filter === 'all' || r.dataset.verdict === filter)
       && (!term || r.dataset.hay.includes(term));
     r.classList.toggle('hidden', !hit);
     if (hit) shown++;
@@ -271,6 +279,22 @@ sortBtn.onclick = () => {
 
 // Remember which way round it was left.
 if (localStorage.getItem('tg-sort') === 'oldest') sortBtn.click();
+
+const LABELS = { all: 'all ticks', ticked: 'ticked only', unticked: 'unticked only' };
+const ORDER = ['all', 'ticked', 'unticked'];
+const tickBtn = document.getElementById('ticked');
+tickBtn.onclick = () => {
+  const next = ORDER[(ORDER.indexOf(tickBtn.dataset.mode) + 1) % ORDER.length];
+  tickBtn.dataset.mode = next;
+  tickBtn.textContent = LABELS[next];
+  localStorage.setItem('tg-tickmode', next);
+  apply();
+};
+const savedMode = localStorage.getItem('tg-tickmode');
+if (savedMode && savedMode !== 'all') {
+  tickBtn.dataset.mode = savedMode;
+  tickBtn.textContent = LABELS[savedMode];
+}
 
 document.getElementById('tick-shown').onclick = () => {
   for (const r of rows) {
@@ -362,6 +386,7 @@ or voice message was ever downloaded and no copy of them exists anywhere but Tel
   <button class="chip" id="f-note">notes {counts['note']}</button>
   <button class="chip" id="f-media">media {counts['media']}</button>
   <button class="act" id="sort" data-dir="newest" title="Flip the order">newest first ↓</button>
+  <button class="act" id="ticked" data-mode="all" title="Cycle: all → ticked only → unticked only">all ticks</button>
   <button class="act" id="tick-shown" title="Tick every message currently shown">tick shown</button>
   <button class="act" id="untick-all">untick all</button>
 </div>
