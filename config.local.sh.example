@@ -1,0 +1,10 @@
+# Copy to config.local.sh (gitignored) and fill in. Nothing machine-specific belongs in the repo.
+
+# Where the rebuilt files go — your notes or data directory.
+DATA_DIR=$HOME/dev/notebook
+
+# Where Telegram Desktop drops its exports. The default below is Telegram's own default.
+TELEGRAM_EXPORT_DIR="$HOME/Downloads/Telegram Desktop"
+
+# Loopback port the rebuilt file is offered on, for the extension to collect.
+SERVE_PORT=8790

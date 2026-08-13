@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Link Keeper",
-  "version": "4.8",
+  "version": "4.9",
   "description": "Walk a list of saved links one at a time in your own tab, capture the ones worth keeping, export the lot as a file.",
   "browser_specific_settings": {
     "gecko": {
@@ -21,6 +21,7 @@
     "downloads.open"
   ],
   "host_permissions": [
+    "http://127.0.0.1/*",
     "*://t.co/*"
   ],
   "background": {

@@ -21,6 +21,20 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
 | `tools/` | `captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant |
 
+## After a Telegram export: one command
+
+    link-refresh
+
+That is the whole routine. It finds the newest export under Telegram's download folder, resolves every
+link it can without a browser, rebuilds both HTML views, and then holds the result on a loopback port.
+Open the extension's list page and it collects the file itself — no dialog, nothing to paste.
+
+Copy `config.local.sh.example` to `config.local.sh` and set `DATA_DIR` first; that is the only setup,
+and nothing machine-specific is committed. Symlink `tools/refresh.zsh` onto your PATH as
+`link-refresh`, or call it by path.
+
+Only links that resolved to nothing need anything more, and the command prints those.
+
 ## Install
 
 Requires Firefox 128 or newer. No build step, no dependencies.

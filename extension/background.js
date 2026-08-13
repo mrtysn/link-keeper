@@ -763,6 +763,20 @@ browser.runtime.onMessage.addListener(async msg => {
      * public API with no login, so half a pile can arrive already read. Merged on the same
      * normalised key the rest of the extension uses; an incoming record wins only where the
      * existing one has no text, so a real page read is never overwritten by an API summary. */
+    /* refresh.zsh leaves the rebuilt file behind a loopback URL and exits once it has been read, so
+     * the list page can collect it with no file dialog and nothing to paste. Silent when nothing is
+     * waiting — that is the normal case. */
+    case "fetch-pending": {
+      const url = msg.url || "http://127.0.0.1:8790/link-captures-all.jsonl";
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) return { ok: false, quiet: true, error: `HTTP ${res.status}` };
+        return { ok: true, body: await res.text(), url };
+      } catch (e) {
+        return { ok: false, quiet: true, error: String(e.message || e) };
+      }
+    }
+
     case "import-captures": {
       const captures = await getCaptures();
       const byId = new Map(captures.map(c => [keyOf(c.url), c]));

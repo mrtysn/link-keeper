@@ -413,6 +413,22 @@ $("tidy").onclick = async () => {
 
 if (location.hash === "#import") $("import-panel").classList.remove("hidden");
 
+/* If a refresh is waiting on loopback, take it now. Import is idempotent, so doing this on every
+ * visit costs nothing and means the only step after a rebuild is opening this page. */
+(async () => {
+  const res = await send({ type: "fetch-pending" });
+  if (!res?.ok) return;
+  const { records, bad } = parseJsonl(res.body);
+  if (!records.length) return;
+  const out = await send({ type: "import-captures", records });
+  const note = $("import-msg");
+  note.className = "ok";
+  note.textContent = `picked up ${records.length} from the last refresh — ${out.added} new, `
+    + `${out.enriched} filled in${out.marked ? `, ${out.marked} taken off the queue` : ""}`;
+  $("import-panel").classList.remove("hidden");
+  load();
+})();
+
 load();
 // Cheap way to stay in step with captures made in other tabs.
 browser.storage.onChanged.addListener(load);

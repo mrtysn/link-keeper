@@ -11,3 +11,6 @@ __pycache__/
 web-ext-artifacts/
 
 .DS_Store
+
+# Machine-specific paths.
+config.local.sh
