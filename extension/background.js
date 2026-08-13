@@ -849,7 +849,7 @@ browser.runtime.onMessage.addListener(async msg => {
      * the list page can collect it with no file dialog and nothing to paste. Silent when nothing is
      * waiting — that is the normal case. */
     case "fetch-pending": {
-      const url = msg.url || "http://127.0.0.1:8790/link-captures-all.jsonl";
+      const url = msg.url || "http://127.0.0.1:8790/link-handoff.json";
       try {
         const res = await fetch(url, { cache: "no-store" });
         if (!res.ok) return { ok: false, quiet: true, error: `HTTP ${res.status}` };

@@ -105,20 +105,47 @@ print "\n5/5  message view"
 # --- hand it over ---------------------------------------------------------------
 
 if [[ -s $unresolved ]]; then
-  print "\n$(grep -c . "$unresolved") links resolved to nothing — ${unresolved:t}"
-  print "Those are the only ones needing a browser. To queue them:"
-  print "  cut -f1 ${unresolved:t} | pbcopy   →  popup → Add links → paste → Add"
+  print "\n$(grep -c . "$unresolved") links resolved to nothing — they go onto the queue for the browser"
 fi
 
 if (( ! serve )); then
   exit 0
 fi
 
+# One handover carrying both halves: what could be read, and what could not. The unresolved ones are
+# the only links that still need a browser, so they are queued rather than printed as a command.
+handoff=$outdir/link-handoff.json
+python3 - "$all_jsonl" "$unresolved" "$handoff" <<'PY'
+import json, sys
+captures_path, unresolved_path, out_path = sys.argv[1:4]
+captures = []
+with open(captures_path, encoding="utf-8") as fh:
+    for line in fh.read().split("\n"):
+        line = line.strip()
+        if line:
+            try:
+                captures.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+queue = []
+try:
+    with open(unresolved_path, encoding="utf-8") as fh:
+        for line in fh:
+            parts = line.rstrip("\n").split("\t")
+            if parts and parts[0].startswith(("http://", "https://")):
+                queue.append({"url": parts[0], "saved_at": parts[1] if len(parts) > 1 else None})
+except FileNotFoundError:
+    pass
+with open(out_path, "w", encoding="utf-8") as fh:
+    json.dump({"captures": captures, "queue": queue}, fh, ensure_ascii=False)
+print(f"  handover: {len(captures)} captures, {len(queue)} for the browser")
+PY
+
 # Hold the file on loopback and let the add-on's own page collect it. Firefox records the internal
 # uuid of each install in its profile, so that page's URL can be looked up and opened — which removes
 # the last manual step. If the lookup fails (a fresh install Firefox has not flushed yet), fall back
 # to waiting for you to open it.
-"$repo/tools/serve-once.py" "$all_jsonl" --port "$SERVE_PORT" &
+"$repo/tools/serve-once.py" "$handoff" --port "$SERVE_PORT" &
 serve_pid=$!
 
 list_url=$("$repo/tools/extension-url.py" list.html 2>/dev/null) || list_url=""

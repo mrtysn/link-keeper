@@ -14,3 +14,4 @@ web-ext-artifacts/
 
 # Machine-specific paths.
 config.local.sh
+link-handoff.json

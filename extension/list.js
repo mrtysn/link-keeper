@@ -454,13 +454,38 @@ if (location.hash === "#import") $("import-panel").classList.remove("hidden");
 (async () => {
   const res = await send({ type: "fetch-pending" });
   if (!res?.ok) return;
-  const { records, bad } = parseJsonl(res.body);
-  if (!records.length) return;
-  const out = await send({ type: "import-captures", records });
+
+  // A refresh hands over both halves: what it could read, and what it could not. The second lot are
+  // the only links that still need a browser, so they go straight onto the queue rather than being
+  // printed as a shell command to run by hand.
+  let records = [], queue = [];
+  const body = res.body.trim();
+  if (body.startsWith("{")) {
+    try {
+      const bundle = JSON.parse(body);
+      records = bundle.captures || [];
+      queue = bundle.queue || [];
+    } catch (e) { return; }
+  } else {
+    records = parseJsonl(body).records;
+  }
+  if (!records.length && !queue.length) return;
+
+  const bits = [];
+  if (records.length) {
+    const out = await send({ type: "import-captures", records });
+    bits.push(`${records.length} read — ${out.added} new, ${out.enriched} filled in`
+      + `${out.marked ? `, ${out.marked} off the queue` : ""}`);
+  }
+  if (queue.length) {
+    const out = await send({ type: "add", urls: queue });
+    bits.push(`${queue.length} needing a browser — ${out.added} queued`
+      + `${out.skipped ? `, ${out.skipped} already there` : ""}`);
+  }
+
   const note = $("import-msg");
   note.className = "ok";
-  note.textContent = `picked up ${records.length} from the last refresh — ${out.added} new, `
-    + `${out.enriched} filled in${out.marked ? `, ${out.marked} taken off the queue` : ""}`;
+  note.textContent = `from the last refresh: ${bits.join("; ")}`;
   $("import-panel").classList.remove("hidden");
   load();
 })();
