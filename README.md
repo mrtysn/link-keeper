@@ -19,7 +19,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 |---|---|
 | `extension/` | the add-on — load `extension/manifest.json` in Firefox |
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
-| `tools/` | `captures-to-html.py` — render an exported capture JSONL as one browsable page |
+| `tools/` | `captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant |
 
 ## Install
 
