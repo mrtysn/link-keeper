@@ -21,7 +21,7 @@ app="$dest/Link Refresh.app"
 
 [[ -d $dest ]] || mkdir -p "$dest"
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -34,6 +34,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <string>local.link-refresh</string>
     <key>CFBundleName</key>
     <string>Link Refresh</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
@@ -97,6 +99,14 @@ log "--- finished ---"
 RUNNER
 
 chmod +x "$app/Contents/MacOS/refresh"
+
+# make-icon is a personal tool; without it the bundle still works and macOS draws the generic icon.
+if (( $+commands[make-icon] )); then
+    make-icon link "#3B82F6" "$app/Contents/Resources/AppIcon.icns" >/dev/null
+else
+    print "icon skipped — make-icon not installed"
+fi
+
 touch "$app"                       # nudge Spotlight into reindexing
 
 print "built: ${app/#$HOME/~}"
