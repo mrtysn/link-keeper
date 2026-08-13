@@ -25,6 +25,11 @@ There are no content scripts, no background tabs, and no automation of your brow
 
     link-refresh
 
+or, on macOS, ⌘-space → **Link Refresh**. `tools/make-app.zsh` builds that into `~/Applications` as a
+plain bundle — a plist and a shell script, no Automator — and it reports what happened as a
+notification. An app launched from Spotlight inherits almost no PATH, so the runner restores asdf's
+shims and Homebrew before anything else; without that, `python3` is simply absent.
+
 That is the whole routine. It finds the newest export under Telegram's download folder, resolves every
 link it can without a browser, rebuilds both HTML views, and then holds the result on a loopback port.
 Open the extension's list page and it collects the file itself — no dialog, nothing to paste.
