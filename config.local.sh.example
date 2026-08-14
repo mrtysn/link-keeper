@@ -6,5 +6,12 @@ DATA_DIR=$HOME/dev/notebook
 # Where Telegram Desktop drops its exports. The default below is Telegram's own default.
 TELEGRAM_EXPORT_DIR="$HOME/Downloads/Telegram Desktop"
 
+# Where the Instagram "Download your information" zip lands (or gets unzipped). The newest
+# instagram-* zip or directory under it is used; if none exists the step is skipped.
+INSTAGRAM_EXPORT_DIR="$HOME/Downloads"
+
+# Where watch-reel.zsh builds its packs (video, transcript, frames). Defaults to $DATA_DIR/reels.
+#REELS_DIR="$HOME/dev/notebook/reels"
+
 # Loopback port the rebuilt file is offered on, for the extension to collect.
 SERVE_PORT=8790

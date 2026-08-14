@@ -32,21 +32,27 @@ if [[ ${1:-} == -h || ${1:-} == --help ]]; then
   exit 0
 fi
 
+# NOT `argv` — that name is zsh's alias for $@, and assigning it empties the positional
+# parameters before the loop below ever reads them.
 serve=1
 open_page=1
-argv=()
+args=()
 for a in "$@"; do
   [[ $a == --no-serve ]] && { serve=0; continue }
   [[ $a == --no-open ]] && { open_page=0; continue }
-  argv+=$a
+  args+=$a
 done
 
 # --- configuration -------------------------------------------------------------
+# Precedence: environment > config.local.sh > built-in default. The env value is captured
+# before sourcing the config, which would otherwise clobber it.
 
-TELEGRAM_EXPORT_DIR=${TELEGRAM_EXPORT_DIR:-$HOME/Downloads/Telegram Desktop}
-DATA_DIR=${DATA_DIR:-$PWD}
-SERVE_PORT=${SERVE_PORT:-8790}
+env_tg=${TELEGRAM_EXPORT_DIR:-} env_ig=${INSTAGRAM_EXPORT_DIR:-} env_data=${DATA_DIR:-} env_port=${SERVE_PORT:-}
 [[ -r $repo/config.local.sh ]] && source "$repo/config.local.sh"
+TELEGRAM_EXPORT_DIR=${env_tg:-${TELEGRAM_EXPORT_DIR:-$HOME/Downloads/Telegram Desktop}}
+INSTAGRAM_EXPORT_DIR=${env_ig:-${INSTAGRAM_EXPORT_DIR:-$HOME/Downloads}}
+DATA_DIR=${env_data:-${DATA_DIR:-$PWD}}
+SERVE_PORT=${env_port:-${SERVE_PORT:-8790}}
 
 # --- what to read, what to write ------------------------------------------------
 
@@ -67,8 +73,18 @@ outdir=${argv[2]:-$DATA_DIR}
 [[ -f $export_json ]] || { print -u2 "no such export: $export_json"; exit 1 }
 [[ -d $outdir ]] || { print -u2 "no such directory: $outdir"; exit 1 }
 
+# Instagram is optional: the newest instagram-* zip or unzipped directory that actually holds
+# messages or saved posts. Instagram exports are per-request subsets, so a newer zip requested
+# for something else (say, connections only) must not shadow the one with the links in it.
+ig_export=""
+for c in ${~INSTAGRAM_EXPORT_DIR}/instagram-*(Nom); do
+  [[ -d $c || $c == *.zip ]] || continue
+  "$repo/importers/instagram.py" "$c" --check 2>/dev/null && { ig_export=$c; break }
+done
+
 x_jsonl=$outdir/link-captures-x.jsonl
 web_jsonl=$outdir/link-captures-web.jsonl
+ig_jsonl=$outdir/link-captures-ig.jsonl
 all_jsonl=$outdir/link-captures-all.jsonl
 extra_jsonl=$outdir/link-captures-extra.jsonl
 unresolved=$outdir/link-unresolved.tsv
@@ -76,30 +92,48 @@ captures_html=$outdir/$(date +%Y-%m-%d)-all-captures.html
 messages_html=$outdir/saved-messages.html
 
 print "export : ${export_json/#$HOME/~}"
+[[ -n $ig_export ]] && print "instagram : ${ig_export/#$HOME/~}"
 print "output : ${outdir/#$HOME/~}\n"
 
 # --- rebuild --------------------------------------------------------------------
 
-print "1/5  x.com via FxTwitter"
-"$repo/importers/telegram.py" "$export_json" | "$repo/importers/enrich-x.py" > "$x_jsonl"
+# One combined worklist: Telegram links, plus whatever non-instagram links sit in the IG
+# self-thread. The instagram.com links themselves never touch the enrichers — the IG export
+# already carries their caption and author, and instagram.com stonewalls resolvers anyway.
+worklist=$("$repo/importers/telegram.py" "$export_json")
+if [[ -n $ig_export ]]; then
+  worklist+=$'\n'$("$repo/importers/instagram.py" "$ig_export" --other)
+fi
 
-print "\n2/5  everything else via og: tags and free APIs"
-"$repo/importers/telegram.py" "$export_json" \
+print "1/6  x.com via FxTwitter"
+print -r -- "$worklist" | "$repo/importers/enrich-x.py" > "$x_jsonl"
+
+print "\n2/6  everything else via og: tags and free APIs"
+print -r -- "$worklist" \
   | "$repo/importers/enrich-web.py" --failed-to "$unresolved" > "$web_jsonl"
 
-print "\n3/5  merging"
+print "\n3/6  instagram, from its own export"
+if [[ -n $ig_export ]]; then
+  "$repo/importers/instagram.py" "$ig_export" --json > "$ig_jsonl"
+  print "  $(grep -c . "$ig_jsonl") captures → ${ig_jsonl:t} (no fetching — the export carries the content)"
+else
+  : > "$ig_jsonl"
+  print "  no instagram-* export under ${INSTAGRAM_EXPORT_DIR/#$HOME/~} — skipped"
+fi
+
+print "\n4/6  merging"
 if [[ -s $extra_jsonl ]]; then
-  cat "$x_jsonl" "$web_jsonl" "$extra_jsonl" > "$all_jsonl"
+  cat "$x_jsonl" "$web_jsonl" "$ig_jsonl" "$extra_jsonl" > "$all_jsonl"
   print "  including $(grep -c . "$extra_jsonl") hand-recovered from ${extra_jsonl:t}"
 else
-  cat "$x_jsonl" "$web_jsonl" > "$all_jsonl"
+  cat "$x_jsonl" "$web_jsonl" "$ig_jsonl" > "$all_jsonl"
 fi
 print "  $(grep -c . "$all_jsonl") captures → ${all_jsonl:t}"
 
-print "\n4/5  capture view"
+print "\n5/6  capture view"
 "$repo/tools/captures-to-html.py" "$all_jsonl" -o "$captures_html"
 
-print "\n5/5  message view"
+print "\n6/6  message view"
 "$repo/tools/telegram-messages-to-html.py" "$export_json" -c "$all_jsonl" -o "$messages_html"
 
 # --- hand it over ---------------------------------------------------------------

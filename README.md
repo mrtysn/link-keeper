@@ -204,6 +204,23 @@ flagged `needs_replies`, and reading them is the extension's job — see below.
 and YouTube APIs where those beat scraping. Sites behind a bot check or a login wall go to
 `--failed-to` instead of being guessed at; those are what the extension is for.
 
+### Instagram, from its own export
+
+Links sent to yourself (or saved) on Instagram come out of the account-wide "Download your
+information" dump — JSON format, Messages ticked, Saved too if you use it. `importers/instagram.py`
+reads the zip directly, undoes Meta's latin-1 mojibake, follows the `message_N.json` pagination, and
+finds the self-thread on its own. No enrichment fetch is needed or possible: instagram.com stonewalls
+resolvers, but the export already carries each reel's caption and author, so `--json` emits finished
+capture records (`kind: "reel"` / `"ig-post"`) with zero network calls. Non-instagram links pasted
+into the self-thread go through the normal enrichers via `--other`. `tools/refresh.zsh` runs all of
+this whenever an export containing messages exists — Instagram exports are per-request subsets, so
+`--check` keeps a zip requested for something else from shadowing the one with the links in it.
+
+A reel is a video, so a captured URL is not yet captured content. `tools/watch-reel.zsh` closes that
+gap: it downloads the MP4 with your logged-in Firefox session (yt-dlp), transcribes the audio locally
+(mlx-whisper), and extracts one frame per second — a watch-pack an agent can read instead of a video
+only a human could watch. Idempotent per reel; point it at a capture file with `--from`.
+
 ### Links from the replies
 
 Keeping an x.com post also harvests links out of the replies rendered below it, into `reply_links`.

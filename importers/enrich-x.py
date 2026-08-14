@@ -218,7 +218,9 @@ def main() -> int:
     print(f"\nresolved {ok}, failed {failed}, in {time.time() - started:.0f}s", file=sys.stderr)
     print(f"  tweets {counts.get('tweet', 0)} · articles {counts.get('x-article', 0)}", file=sys.stderr)
     print(f"  {len(needs)} look like they point at their replies (not retrievable here)", file=sys.stderr)
-    return 0 if ok else 1
+    # No x.com links in the input is a clean run, not a failure — only report failure when
+    # there was work and none of it resolved.
+    return 0 if ok or not unique else 1
 
 
 if __name__ == "__main__":
