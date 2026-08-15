@@ -77,13 +77,17 @@ def record(pack: Path) -> dict | None:
     upload_date = info.get("upload_date")  # YYYYMMDD
     posted = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}" if upload_date else None
 
+    # yt-dlp's Instagram fields: `channel` is the username, `uploader` the display name, and
+    # `uploader_id` a bare numeric id — never show that one. The title is the caption's first
+    # line, which identifies a reel far better than who posted it.
+    first_line = caption.splitlines()[0][:100] if caption else None
     return {
         "kind": "reel",
         "url": meta["url"],
         "source_url": None,
-        "title": (info.get("uploader") or info.get("channel") or pack.name),
+        "title": first_line or info.get("uploader") or pack.name,
         "text": text or None,
-        "author": {"name": info.get("uploader"), "handle": info.get("uploader_id") or info.get("channel")},
+        "author": {"name": info.get("uploader"), "handle": info.get("channel") or None},
         "saved_at": None,
         "posted_at": posted,
         "duration_s": meta.get("duration_s"),

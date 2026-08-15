@@ -63,8 +63,12 @@
 
   ul.rows { list-style: none; margin: 0; padding: 0; }
   ul.rows li {
-    display: grid; grid-template-columns: 1.6rem 1fr auto; gap: .7rem; align-items: start;
+    display: grid; grid-template-columns: 1rem 1.6rem 1fr auto; gap: .7rem; align-items: start;
     padding: .45rem .3rem; border-radius: .4rem;
+  }
+  .src {
+    width: .95rem; height: .95rem; margin-top: .28rem; justify-self: center;
+    background: center/contain no-repeat; border-radius: .2rem;
   }
   ul.rows li:hover { background: var(--panel); }
   ul.rows li.current { box-shadow: inset 2px 0 0 var(--accent); }

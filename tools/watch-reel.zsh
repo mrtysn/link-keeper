@@ -111,7 +111,9 @@ for url in $urls; do
                 --output-dir "$pack" --output-name transcript --output-format txt >/dev/null
     rm -f "$pack/audio.wav"
   else
-    print -- "(no audio track — visual only)" > "$pack/transcript.txt"
+    # Anonymous delivery withholds the audio track on some reels (licensed music); the reel
+    # itself usually does have sound on Instagram.
+    print -- "(no audio in the anonymous download — the reel may have music on Instagram)" > "$pack/transcript.txt"
   fi
 
   duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$pack/video.mp4")
