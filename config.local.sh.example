@@ -15,3 +15,9 @@ INSTAGRAM_EXPORT_DIR="$HOME/Downloads"
 
 # Loopback port the rebuilt file is offered on, for the extension to collect.
 SERVE_PORT=8790
+
+# Saved Messages puller (importers/telegram-pull.py) — reads new links directly, no export.
+# Create an app at https://my.telegram.org -> API development tools, then log in once with
+# `importers/telegram-pull.py --login`. Leave unset to keep using chat exports only.
+#TELEGRAM_API_ID=123456
+#TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef

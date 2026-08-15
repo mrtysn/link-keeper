@@ -57,22 +57,20 @@ SERVE_PORT=${env_port:-${SERVE_PORT:-8790}}
 
 # --- what to read, what to write ------------------------------------------------
 
-if [[ -n ${argv[1]:-} ]]; then
-  export_json=${argv[1]:A}
+if [[ -n ${args[1]:-} ]]; then
+  export_json=${args[1]:A}
+  [[ -f $export_json ]] || { print -u2 "no such export: $export_json"; exit 1 }
 else
   # Newest export wins, by mtime rather than name: two exports on one day would tie lexically.
+  # No export at all is tolerated: once the Saved Messages puller has a session, the export is
+  # only the historical seed and the inbox carries everything since.
   newest=(${~TELEGRAM_EXPORT_DIR}/ChatExport_*/result.json(.Nom))
-  (( $#newest )) || {
-    print -u2 "no export found under: $TELEGRAM_EXPORT_DIR"
-    print -u2 "pass one explicitly, or set TELEGRAM_EXPORT_DIR in $repo/config.local.sh"
-    exit 1
-  }
-  export_json=${newest[1]}
+  export_json=${newest[1]:-}
 fi
 
-outdir=${argv[2]:-$DATA_DIR}
-[[ -f $export_json ]] || { print -u2 "no such export: $export_json"; exit 1 }
+outdir=${args[2]:-$DATA_DIR}
 [[ -d $outdir ]] || { print -u2 "no such directory: $outdir"; exit 1 }
+inbox=$outdir/link-inbox.tsv
 
 # Instagram is optional: the newest instagram-* zip or unzipped directory that actually holds
 # messages or saved posts. Instagram exports are per-request subsets, so a newer zip requested
@@ -92,18 +90,38 @@ unresolved=$outdir/link-unresolved.tsv
 captures_html=$outdir/$(date +%Y-%m-%d)-all-captures.html
 messages_html=$outdir/saved-messages.html
 
-print "export : ${export_json/#$HOME/~}"
+[[ -n $export_json ]] && print "export : ${export_json/#$HOME/~}"
 [[ -n $ig_export ]] && print "instagram : ${ig_export/#$HOME/~}"
 print "output : ${outdir/#$HOME/~}\n"
 
+# --- pull straight from Saved Messages, when a session exists ---------------------
+
+session=${XDG_CONFIG_HOME:-$HOME/.config}/link-keeper/telegram.session
+if [[ -n ${TELEGRAM_API_ID:-} && -f $session ]]; then
+  print "0/6  new links from Saved Messages, no export needed"
+  "$repo/importers/telegram-pull.py" --inbox "$inbox" \
+    || print "  ! pull failed — continuing with what is already on disk"
+elif [[ -n ${TELEGRAM_API_ID:-} ]]; then
+  print "0/6  Saved Messages puller configured but not logged in"
+  print "  run once: $repo/importers/telegram-pull.py --login"
+fi
+
 # --- rebuild --------------------------------------------------------------------
 
-# One combined worklist: Telegram links, plus whatever non-instagram links sit in the IG
-# self-thread. The instagram.com links themselves never touch the enrichers — the IG export
-# already carries their caption and author, and instagram.com stonewalls resolvers anyway.
-worklist=$("$repo/importers/telegram.py" "$export_json")
+# One combined worklist: Telegram links (export and/or pulled inbox), plus whatever
+# non-instagram links sit in the IG self-thread. The instagram.com links themselves never touch
+# the enrichers — the IG export already carries their caption and author, and instagram.com
+# stonewalls resolvers anyway.
+worklist=""
+[[ -n $export_json ]] && worklist=$("$repo/importers/telegram.py" "$export_json")
+[[ -s $inbox ]] && worklist+=$'\n'$(grep -h . "$inbox")
 if [[ -n $ig_export ]]; then
   worklist+=$'\n'$("$repo/importers/instagram.py" "$ig_export" --other)
+fi
+if [[ -z ${worklist//$'\n'/} ]]; then
+  print -u2 "nothing to work with: no Telegram export under $TELEGRAM_EXPORT_DIR, no $inbox"
+  print -u2 "either export a chat, or set up the puller (importers/telegram-pull.py --login)"
+  exit 1
 fi
 
 print "1/6  x.com via FxTwitter"
@@ -135,7 +153,11 @@ print "\n5/6  capture view"
 "$repo/tools/captures-to-html.py" "$all_jsonl" -o "$captures_html"
 
 print "\n6/6  message view"
-"$repo/tools/telegram-messages-to-html.py" "$export_json" -c "$all_jsonl" -o "$messages_html"
+if [[ -n $export_json ]]; then
+  "$repo/tools/telegram-messages-to-html.py" "$export_json" -c "$all_jsonl" -o "$messages_html"
+else
+  print "  no Telegram export on disk — the message replica keeps its last build"
+fi
 
 # --- hand it over ---------------------------------------------------------------
 

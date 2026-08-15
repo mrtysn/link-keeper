@@ -35,6 +35,12 @@ folder, and — if one exists — the newest Instagram export that actually cont
 every link it can without a browser, rebuilds both HTML views, and then holds the result on a loopback
 port. Open the extension's list page and it collects the file itself — no dialog, nothing to paste.
 
+Better still, the Telegram export itself is optional once the Saved Messages puller is set up:
+`importers/telegram-pull.py` reads new messages directly through Telegram's API (your own account,
+one-time login, session stays on this machine), so sharing a link to Saved Messages from any app on
+any device is the entire intake — the refresh pulls it from there. See `config.local.sh.example`
+for the two credentials it needs.
+
 Copy `config.local.sh.example` to `config.local.sh` and set `DATA_DIR` first; that is the only setup,
 and nothing machine-specific is committed. Symlink `tools/refresh.zsh` onto your PATH as
 `link-refresh`, or call it by path.
