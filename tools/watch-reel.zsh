@@ -79,7 +79,7 @@ for url in $urls; do
   pack=$REELS_DIR/$code
 
   if [[ -s $pack/transcript.txt ]]; then
-    (( skipped++ ))
+    skipped=$(( skipped + 1 ))
     continue
   fi
   (( limit && built >= limit )) && break
@@ -94,7 +94,7 @@ for url in $urls; do
     yt-dlp --no-progress -o "$pack/video.mp4" \
            --write-info-json "$url" >/dev/null 2>"$pack/yt-dlp.err" || {
       print "  ! download failed — $(tail -1 "$pack/yt-dlp.err" 2>/dev/null | head -c 100)"
-      (( failed++ ))
+      failed=$(( failed + 1 ))
       continue
     }
     rm -f "$pack/yt-dlp.err"
@@ -117,7 +117,7 @@ json.dump({"url": url, "duration_s": round(float(duration), 1),
            "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat()},
           open(out, "w"), indent=2)
 PY
-  (( built++ ))
+  built=$(( built + 1 ))
 done
 
 print "\npacks: $built built, $skipped already had one, $failed failed → ${REELS_DIR/#$HOME/~}"
