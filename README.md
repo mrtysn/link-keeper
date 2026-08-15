@@ -218,7 +218,7 @@ this whenever an export containing messages exists — Instagram exports are per
 `--check` keeps a zip requested for something else from shadowing the one with the links in it.
 
 A reel is a video, so a captured URL is not yet captured content. `tools/watch-reel.zsh` closes that
-gap: it downloads the MP4 with your logged-in Firefox session (yt-dlp), transcribes the audio locally
+gap: it downloads the MP4 anonymously (yt-dlp, no login involved), transcribes the audio locally
 (mlx-whisper), and extracts one frame per second — a watch-pack an agent can read instead of a video
 only a human could watch. Idempotent per reel; point it at a capture file with `--from`.
 

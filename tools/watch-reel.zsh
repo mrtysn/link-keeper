@@ -1,10 +1,11 @@
 #!/bin/zsh
 # DESC: Download a reel and build a watch-pack: video, transcript, keyframes — so an agent can watch it.
 #
-# Instagram reels are video, so "capturing" one means more than a URL: this pulls the MP4 with your
-# logged-in Firefox session, transcribes the audio locally with mlx-whisper, and extracts one frame
-# per second. The resulting directory is everything an agent needs to watch the reel without a
-# browser: read transcript.txt, look at frames/, summarise.
+# Instagram reels are video, so "capturing" one means more than a URL: this pulls the MP4
+# anonymously — public reels need no login, so no account is involved — transcribes the audio
+# locally with mlx-whisper, and extracts one frame per second. The resulting directory is
+# everything an agent needs to watch the reel without a browser: read transcript.txt, look at
+# frames/, summarise.
 #
 # Usage:
 #   watch-reel.zsh <url>...                    # one pack per reel URL
@@ -18,8 +19,7 @@
 # Idempotent: a pack with a transcript is skipped, so rerunning over the whole capture file only
 # fetches what is new. Instagram rate-limits aggressively; downloads are spaced a few seconds apart.
 #
-# Requires: yt-dlp, ffmpeg (brew), mlx_whisper (uv tool install mlx-whisper), Firefox logged in
-# to Instagram.
+# Requires: yt-dlp, ffmpeg (brew), mlx_whisper (uv tool install mlx-whisper). No login anywhere.
 
 set -euo pipefail
 
@@ -88,7 +88,10 @@ for url in $urls; do
   mkdir -p "$pack/frames"
 
   if [[ ! -s $pack/video.mp4 ]]; then
-    yt-dlp --cookies-from-browser firefox --no-progress -o "$pack/video.mp4" \
+    # Anonymous on purpose: public reels serve without login (verified), and no cookies means no
+    # account is ever at risk. If Instagram starts refusing, that is a stop sign, not a cue to
+    # reach for a logged-in session.
+    yt-dlp --no-progress -o "$pack/video.mp4" \
            --write-info-json "$url" >/dev/null 2>"$pack/yt-dlp.err" || {
       print "  ! download failed — $(tail -1 "$pack/yt-dlp.err" 2>/dev/null | head -c 100)"
       (( failed++ ))
