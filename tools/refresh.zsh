@@ -1,7 +1,8 @@
 #!/bin/zsh
-# DESC: One command: find the newest Telegram export, rebuild everything, hand it to the extension.
+# DESC: One command: find the newest exports, rebuild everything, hand it to the extension.
 #
-# After exporting a chat from Telegram, run this. Nothing else. It picks the newest export, resolves
+# After exporting from Telegram (and, optionally, Instagram), run this. Nothing else. It picks the
+# newest Telegram export and the newest Instagram export that actually contains messages, resolves
 # every link it can without a browser, rebuilds the two HTML views, and then puts the result behind a
 # loopback URL — the extension's list page pulls it in by itself, so there is no file to choose and
 # nothing to paste.
@@ -28,7 +29,7 @@ here=${0:A:h}
 repo=${here:h}
 
 if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-  sed -n '2,22p' "$0" | sed 's/^# \?//'
+  sed -n '2,24p' "$0" | sed 's/^# \?//'
   exit 0
 fi
 

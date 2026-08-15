@@ -27,7 +27,7 @@ here=${0:A:h}
 repo=${here:h}
 
 if [[ ${1:-} == -h || ${1:-} == --help || $# -eq 0 ]]; then
-  sed -n '2,24p' "$0" | sed 's/^# \?//'
+  sed -n '2,22p' "$0" | sed 's/^# \?//'
   exit 0
 fi
 

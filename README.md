@@ -19,9 +19,9 @@ There are no content scripts, no background tabs, and no automation of your brow
 |---|---|
 | `extension/` | the add-on — load `extension/manifest.json` in Firefox |
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
-| `tools/` | `captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`watch-reel.zsh` — turn an Instagram reel into a transcript + keyframes an agent can read<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
-## After a Telegram export: one command
+## After an export: one command
 
     link-refresh
 
@@ -30,9 +30,10 @@ plain bundle — a plist and a shell script, no Automator — and it reports wha
 notification. An app launched from Spotlight inherits almost no PATH, so the runner restores asdf's
 shims and Homebrew before anything else; without that, `python3` is simply absent.
 
-That is the whole routine. It finds the newest export under Telegram's download folder, resolves every
-link it can without a browser, rebuilds both HTML views, and then holds the result on a loopback port.
-Open the extension's list page and it collects the file itself — no dialog, nothing to paste.
+That is the whole routine, and it covers both sources: the newest export under Telegram's download
+folder, and — if one exists — the newest Instagram export that actually contains messages. It resolves
+every link it can without a browser, rebuilds both HTML views, and then holds the result on a loopback
+port. Open the extension's list page and it collects the file itself — no dialog, nothing to paste.
 
 Copy `config.local.sh.example` to `config.local.sh` and set `DATA_DIR` first; that is the only setup,
 and nothing machine-specific is committed. Symlink `tools/refresh.zsh` onto your PATH as
