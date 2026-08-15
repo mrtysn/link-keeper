@@ -81,8 +81,9 @@ def record(pack: Path) -> dict | None:
     # `uploader_id` a bare numeric id — never show that one. The title is the caption's first
     # line, which identifies a reel far better than who posted it.
     first_line = caption.splitlines()[0][:100] if caption else None
+    is_reel = "/reel/" in meta["url"] or "/reels/" in meta["url"] or "/tv/" in meta["url"]
     return {
-        "kind": "reel",
+        "kind": "reel" if is_reel else "ig-post",
         "url": meta["url"],
         "source_url": None,
         "title": first_line or info.get("uploader") or pack.name,
