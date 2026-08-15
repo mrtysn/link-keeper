@@ -102,12 +102,17 @@ for url in $urls; do
   fi
 
   # 16 kHz mono is what whisper wants; 1 fps at 640px wide is plenty for reading a reel.
-  ffmpeg -y -loglevel error -i "$pack/video.mp4" -ar 16000 -ac 1 "$pack/audio.wav"
+  # Silent reels are common — probe before extracting, or ffmpeg dies on a stream-less wav.
   ffmpeg -y -loglevel error -i "$pack/video.mp4" -vf "fps=1,scale=640:-2" "$pack/frames/f%04d.jpg"
 
-  mlx_whisper "$pack/audio.wav" --model "$WHISPER_MODEL" \
-              --output-dir "$pack" --output-name transcript --output-format txt >/dev/null
-  rm -f "$pack/audio.wav"
+  if ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$pack/video.mp4" | grep -q .; then
+    ffmpeg -y -loglevel error -i "$pack/video.mp4" -ar 16000 -ac 1 "$pack/audio.wav"
+    mlx_whisper "$pack/audio.wav" --model "$WHISPER_MODEL" \
+                --output-dir "$pack" --output-name transcript --output-format txt >/dev/null
+    rm -f "$pack/audio.wav"
+  else
+    print -- "(no audio track — visual only)" > "$pack/transcript.txt"
+  fi
 
   duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$pack/video.mp4")
   python3 - "$pack/meta.json" "$url" "$duration" <<'PY'
