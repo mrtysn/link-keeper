@@ -52,6 +52,9 @@
     font-variant-numeric: tabular-nums;
   }
   .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chips.domains { flex-wrap: wrap; margin-top: .55rem; }
+  .chips.domains:empty { display: none; }
+  .chip .n { opacity: .6; margin-left: .3rem; }
 
   .group { margin: 1.6rem 0 0; }
   .group > h2 {
@@ -165,6 +168,8 @@
     <button id="export">Export captures</button>
     <button class="danger" id="tidy" title="Remove kept and seen entries from the list">Tidy</button>
   </div>
+
+  <div class="chips domains" id="domains" role="group" title="Toggle domains; none selected shows all"></div>
 
   <div id="import-panel" class="panel hidden">
     <p>Import capture JSONL — from <code>importers/enrich-x.py</code>, or an export from this

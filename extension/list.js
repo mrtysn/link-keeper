@@ -10,6 +10,8 @@ const send = msg => browser.runtime.sendMessage(msg);
 
 let rows = [];
 let filter = "all";
+const domainSel = new Set();   // empty = every domain
+let domainsExpanded = false;
 
 function say(text) { $("msg").textContent = text; }
 
@@ -51,6 +53,7 @@ async function load() {
 
 function matches(row, term) {
   if (filter !== "all" && row.status !== filter) return false;
+  if (domainSel.size && !domainSel.has(hostOf(row.url))) return false;
   if (!term) return true;
   const hay = [row.url, labelOf(row), row.cap?.text, row.note, row.cap?.screenshot, savedOn(row),
     row.cap?.verdict, ...(row.cap?.links || []), ...(row.cap?.reply_links || []).map(l => l.href)]
@@ -325,7 +328,61 @@ function rowEl(row) {
   return li;
 }
 
+/* Domain toggles. Multi-select: clicking narrows to the chosen set, clicking again releases;
+ * nothing selected means no narrowing. The long tail hides behind an expander so fifty
+ * one-off domains do not swallow the toolbar. */
+function renderDomainChips() {
+  const box = $("domains");
+  box.textContent = "";
+  const counts = new Map();
+  for (const r of rows) {
+    const h = hostOf(r.url);
+    counts.set(h, (counts.get(h) || 0) + 1);
+  }
+  const hosts = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const shown = domainsExpanded ? hosts : hosts.slice(0, 12);
+
+  for (const [host, n] of shown) {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.setAttribute("aria-pressed", String(domainSel.has(host)));
+    chip.style.color = domainSel.has(host) ? "" : `hsl(${hue(host)} 55% 55%)`;
+    chip.append(host, Object.assign(document.createElement("span"), { className: "n", textContent: n }));
+    chip.onclick = () => {
+      domainSel.has(host) ? domainSel.delete(host) : domainSel.add(host);
+      render();
+    };
+    box.append(chip);
+  }
+  // Selected domains always stay visible, even from the collapsed tail.
+  for (const host of domainSel) {
+    if (!shown.some(([h]) => h === host)) {
+      const chip = document.createElement("button");
+      chip.className = "chip";
+      chip.setAttribute("aria-pressed", "true");
+      chip.append(host, Object.assign(document.createElement("span"), { className: "n", textContent: counts.get(host) || 0 }));
+      chip.onclick = () => { domainSel.delete(host); render(); };
+      box.append(chip);
+    }
+  }
+  if (hosts.length > 12) {
+    const more = document.createElement("button");
+    more.className = "chip";
+    more.textContent = domainsExpanded ? "fewer −" : `+${hosts.length - 12} more`;
+    more.onclick = () => { domainsExpanded = !domainsExpanded; render(); };
+    box.append(more);
+  }
+  if (domainSel.size) {
+    const clear = document.createElement("button");
+    clear.className = "chip";
+    clear.textContent = "clear ✕";
+    clear.onclick = () => { domainSel.clear(); render(); };
+    box.append(clear);
+  }
+}
+
 function render() {
+  renderDomainChips();
   const term = $("q").value.trim().toLowerCase();
   const counts = { pending: 0, seen: 0, kept: 0, skipped: 0 };
   for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
