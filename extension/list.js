@@ -342,28 +342,24 @@ function renderDomainChips() {
   const hosts = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const shown = domainsExpanded ? hosts : hosts.slice(0, 12);
 
-  for (const [host, n] of shown) {
+  const domainChip = (host, n) => {
     const chip = document.createElement("button");
     chip.className = "chip";
     chip.setAttribute("aria-pressed", String(domainSel.has(host)));
     chip.style.color = domainSel.has(host) ? "" : `hsl(${hue(host)} 55% 55%)`;
-    chip.append(host, Object.assign(document.createElement("span"), { className: "n", textContent: n }));
+    chip.append(srcIcon(`https://${host}/`), host,
+      Object.assign(document.createElement("span"), { className: "n", textContent: n }));
     chip.onclick = () => {
       domainSel.has(host) ? domainSel.delete(host) : domainSel.add(host);
       render();
     };
-    box.append(chip);
-  }
+    return chip;
+  };
+
+  for (const [host, n] of shown) box.append(domainChip(host, n));
   // Selected domains always stay visible, even from the collapsed tail.
   for (const host of domainSel) {
-    if (!shown.some(([h]) => h === host)) {
-      const chip = document.createElement("button");
-      chip.className = "chip";
-      chip.setAttribute("aria-pressed", "true");
-      chip.append(host, Object.assign(document.createElement("span"), { className: "n", textContent: counts.get(host) || 0 }));
-      chip.onclick = () => { domainSel.delete(host); render(); };
-      box.append(chip);
-    }
+    if (!shown.some(([h]) => h === host)) box.append(domainChip(host, counts.get(host) || 0));
   }
   if (hosts.length > 12) {
     const more = document.createElement("button");
