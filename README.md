@@ -19,7 +19,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 |---|---|
 | `extension/` | the add-on — load `extension/manifest.json` in Firefox |
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`watch-reel.zsh` — turn an Instagram reel into a transcript + keyframes an agent can read<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`watch-reel.zsh` — turn an Instagram reel into a transcript + keyframes an agent can read<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
