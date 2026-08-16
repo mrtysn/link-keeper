@@ -30,15 +30,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // adb-seeded config: save what the extras carry, then show it like any other state.
-        Intent it = getIntent();
-        if (it.getStringExtra("endpoint") != null || it.getStringExtra("token") != null) {
-            Store.prefs(this).edit()
-                    .putString("endpoint", or(it.getStringExtra("endpoint"), Store.endpoint(this)))
-                    .putString("token", or(it.getStringExtra("token"), Store.token(this)))
-                    .apply();
-        }
+        applySeed(getIntent());
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -89,6 +81,27 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(root);
         refresh(null);
+    }
+
+    /** adb-seeded config: save what the intent extras carry, then show it like any other state.
+     *  Also handled for a relaunch onto a running instance, or the seed silently misses. */
+    private void applySeed(Intent it) {
+        if (it == null) return;
+        if (it.getStringExtra("endpoint") != null || it.getStringExtra("token") != null) {
+            Store.prefs(this).edit()
+                    .putString("endpoint", or(it.getStringExtra("endpoint"), Store.endpoint(this)))
+                    .putString("token", or(it.getStringExtra("token"), Store.token(this)))
+                    .apply();
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        applySeed(intent);
+        if (endpoint != null) endpoint.setText(Store.endpoint(this));
+        if (token != null) token.setText(Store.token(this));
+        refresh("config updated");
     }
 
     private void refresh(String note) {

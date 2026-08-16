@@ -34,7 +34,8 @@ if [[ -d $here/res ]]; then
   "$bt/aapt2" compile --dir "$here/res" -o "$out/res.zip"
   link_extra=("$out/res.zip")
 fi
-"$bt/aapt2" link -o "$out/base.apk" -I "$jar" --manifest "$here/AndroidManifest.xml" $link_extra
+"$bt/aapt2" link -o "$out/base.apk" -I "$jar" --manifest "$here/AndroidManifest.xml" \
+  --min-sdk-version 26 --target-sdk-version 35 $link_extra
 
 print "javac  : compiling"
 javac --release 11 -classpath "$jar" -d "$out/classes" "$here"/src/keeper/link/share/*.java
