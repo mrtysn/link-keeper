@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Link Keeper share target: appears in the Android share sheet, POSTs the shared URL to the
+     inbox receiver. Cleartext is allowed on purpose — the endpoint lives on a Tailscale address,
+     so the wire is WireGuard-encrypted underneath the plain HTTP. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="keeper.link.share">
+
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <application
+        android:label="Link Keeper"
+        android:usesCleartextTraffic="true"
+        android:theme="@android:style/Theme.DeviceDefault.DayNight">
+
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
