@@ -19,6 +19,8 @@ There are no content scripts, no background tabs, and no automation of your brow
 |---|---|
 | `extension/` | the add-on — load `extension/manifest.json` in Firefox |
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
+| `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
+| `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`watch-reel.zsh` — turn an Instagram reel into a transcript + keyframes an agent can read<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
@@ -35,11 +37,15 @@ folder, and — if one exists — the newest Instagram export that actually cont
 every link it can without a browser, rebuilds both HTML views, and then holds the result on a loopback
 port. Open the extension's list page and it collects the file itself — no dialog, nothing to paste.
 
-Better still, the Telegram export itself is optional once the Saved Messages puller is set up:
-`importers/telegram-pull.py` reads new messages directly through Telegram's API (your own account,
-one-time login, session stays on this machine), so sharing a link to Saved Messages from any app on
-any device is the entire intake — the refresh pulls it from there. See `config.local.sh.example`
-for the two credentials it needs.
+Better still, exports are optional altogether once the phone-share path is up: the `android/` share
+target puts **Link Keeper** in Android's share sheet, POSTs the link to the `receiver/` endpoint on
+any always-on box you own (over Tailscale, so nothing crosses the open internet), and the refresh
+mirrors that inbox before rebuilding. Share → pick Link Keeper → done; no messenger in the loop.
+Links queue on the phone when the endpoint is unreachable and ride along with the next share.
+
+Two alternative intakes exist for the same inbox: `importers/telegram-pull.py` reads Saved Messages
+directly through Telegram's API (needs a my.telegram.org login), and plain chat exports keep working
+as the manual fallback. All three feed the same refresh; `config.local.sh.example` shows the knobs.
 
 Copy `config.local.sh.example` to `config.local.sh` and set `DATA_DIR` first; that is the only setup,
 and nothing machine-specific is committed. Symlink `tools/refresh.zsh` onto your PATH as
