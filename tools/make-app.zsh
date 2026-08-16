@@ -100,12 +100,10 @@ RUNNER
 
 chmod +x "$app/Contents/MacOS/refresh"
 
-# make-icon is a personal tool; without it the bundle still works and macOS draws the generic icon.
-if (( $+commands[make-icon] )); then
-    make-icon link "#3B82F6" "$app/Contents/Resources/AppIcon.icns" >/dev/null
-else
-    print "icon skipped — make-icon not installed"
-fi
+# assets/AppIcon.icns is committed, so the bundle's icon does not depend on what
+# is installed on the machine. Regenerate it when the design changes:
+#   make-icon link "#3B82F6" assets/AppIcon.icns
+cp "$repo/assets/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 
 touch "$app"                       # nudge Spotlight into reindexing
 
