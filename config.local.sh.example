@@ -16,6 +16,11 @@ INSTAGRAM_EXPORT_DIR="$HOME/Downloads"
 # Loopback port the rebuilt file is offered on, for the extension to collect.
 SERVE_PORT=8790
 
+# Phone-share inbox (receiver/link-inbox-receiver.py on an always-on box): the refresh mirrors
+# this remote file before rebuilding, so links shared from the phone land with no export.
+# host must be reachable by plain ssh (an ~/.ssh/config alias); format host:absolute-path.
+#LINK_INBOX_REMOTE=mybox:/var/lib/link-inbox/inbox.tsv
+
 # Saved Messages puller (importers/telegram-pull.py) — reads new links directly, no export.
 # Create an app at https://my.telegram.org -> API development tools, then log in once with
 # `importers/telegram-pull.py --login`. Leave unset to keep using chat exports only.

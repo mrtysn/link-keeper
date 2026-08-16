@@ -94,6 +94,20 @@ messages_html=$outdir/saved-messages.html
 [[ -n $ig_export ]] && print "instagram : ${ig_export/#$HOME/~}"
 print "output : ${outdir/#$HOME/~}\n"
 
+# --- mirror the phone-share inbox from its server, when configured ----------------
+
+if [[ -n ${LINK_INBOX_REMOTE:-} ]]; then
+  print "0/6  links shared from the phone"
+  r_host=${LINK_INBOX_REMOTE%%:*} r_path=${LINK_INBOX_REMOTE#*:}
+  if ssh -o ConnectTimeout=6 -o BatchMode=yes "$r_host" cat "$r_path" > "$inbox.tmp" 2>/dev/null; then
+    mv "$inbox.tmp" "$inbox"
+    print "  $(grep -c . "$inbox") in the inbox (mirror of $r_host)"
+  else
+    rm -f "$inbox.tmp"
+    print "  ! could not reach $r_host — using the last mirror"
+  fi
+fi
+
 # --- pull straight from Saved Messages, when a session exists ---------------------
 
 session=${XDG_CONFIG_HOME:-$HOME/.config}/link-keeper/telegram.session

@@ -1,0 +1,26 @@
+# systemd unit for the link inbox receiver. Copy to /etc/systemd/system/link-inbox.service,
+# fill in the environment values, then:  systemctl daemon-reload && systemctl enable --now link-inbox
+#
+# Bind the Tailscale IP so the service is reachable from your own devices and nothing else.
+# Generate the token once:  openssl rand -hex 24
+
+[Unit]
+Description=Link Keeper inbox receiver
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/link-keeper/link-inbox-receiver.py
+Environment=LINK_INBOX_FILE=/var/lib/link-inbox/inbox.tsv
+Environment=LINK_INBOX_TOKEN=CHANGE-ME
+Environment=LINK_INBOX_BIND=100.x.y.z
+Environment=LINK_INBOX_PORT=8477
+Restart=on-failure
+DynamicUser=yes
+StateDirectory=link-inbox
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
