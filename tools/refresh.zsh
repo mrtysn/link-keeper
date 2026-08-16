@@ -97,7 +97,7 @@ print "output : ${outdir/#$HOME/~}\n"
 # --- mirror the phone-share inbox from its server, when configured ----------------
 
 if [[ -n ${LINK_INBOX_REMOTE:-} ]]; then
-  print "0/6  links shared from the phone"
+  print "0/7  links shared from the phone"
   r_host=${LINK_INBOX_REMOTE%%:*} r_path=${LINK_INBOX_REMOTE#*:}
   if ssh -o ConnectTimeout=6 -o BatchMode=yes "$r_host" cat "$r_path" > "$inbox.tmp" 2>/dev/null; then
     mv "$inbox.tmp" "$inbox"
@@ -112,11 +112,11 @@ fi
 
 session=${XDG_CONFIG_HOME:-$HOME/.config}/link-keeper/telegram.session
 if [[ -n ${TELEGRAM_API_ID:-} && -f $session ]]; then
-  print "0/6  new links from Saved Messages, no export needed"
+  print "0/7  new links from Saved Messages, no export needed"
   "$repo/importers/telegram-pull.py" --inbox "$inbox" \
     || print "  ! pull failed — continuing with what is already on disk"
 elif [[ -n ${TELEGRAM_API_ID:-} ]]; then
-  print "0/6  Saved Messages puller configured but not logged in"
+  print "0/7  Saved Messages puller configured but not logged in"
   print "  run once: $repo/importers/telegram-pull.py --login"
 fi
 
@@ -138,14 +138,18 @@ if [[ -z ${worklist//$'\n'/} ]]; then
   exit 1
 fi
 
-print "1/6  x.com via FxTwitter"
-print -r -- "$worklist" | "$repo/importers/enrich-x.py" > "$x_jsonl"
+# Instagram post/reel urls skip the enrichers entirely — the reels step below owns them, and a
+# generic fetch of instagram.com yields a login wall or a stub record at best.
+enrich_input=$(print -r -- "$worklist" | grep -vE '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' || true)
 
-print "\n2/6  everything else via og: tags and free APIs"
-print -r -- "$worklist" \
+print "1/7  x.com via FxTwitter"
+print -r -- "$enrich_input" | "$repo/importers/enrich-x.py" > "$x_jsonl"
+
+print "\n2/7  everything else via og: tags and free APIs"
+print -r -- "$enrich_input" \
   | "$repo/importers/enrich-web.py" --failed-to "$unresolved" > "$web_jsonl"
 
-print "\n3/6  instagram, from its own export"
+print "\n3/7  instagram, from its own export"
 if [[ -n $ig_export ]]; then
   "$repo/importers/instagram.py" "$ig_export" --json > "$ig_jsonl"
   print "  $(grep -c . "$ig_jsonl") captures → ${ig_jsonl:t} (no fetching — the export carries the content)"
@@ -154,19 +158,34 @@ else
   print "  no instagram-* export under ${INSTAGRAM_EXPORT_DIR/#$HOME/~} — skipped"
 fi
 
-print "\n4/6  merging"
+print "\n4/7  reels — packs for new instagram links, records from all of them"
+reels_dir=${REELS_DIR:-$outdir/reels}
+reels_jsonl=$outdir/link-captures-reels.jsonl
+reel_urls=$(print -r -- "$worklist" | cut -f1 | grep -E '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' | sort -u || true)
+if [[ -n $reel_urls ]]; then
+  print -r -- "$reel_urls" | REELS_DIR=$reels_dir xargs "$repo/tools/watch-reel.zsh" 2>&1 | grep -E "^packs:|! download failed" || true
+fi
+if [[ -d $reels_dir ]]; then
+  "$repo/tools/reels-to-captures.py" "$reels_dir" -o "$reels_jsonl"
+else
+  : > "$reels_jsonl"
+  print "  no packs yet — reels arrive here once links are shared"
+fi
+
+print "\n5/7  merging"
+# reels last, so a pack-backed record wins over a caption-only one for the same url on import.
 if [[ -s $extra_jsonl ]]; then
-  cat "$x_jsonl" "$web_jsonl" "$ig_jsonl" "$extra_jsonl" > "$all_jsonl"
+  cat "$x_jsonl" "$web_jsonl" "$ig_jsonl" "$extra_jsonl" "$reels_jsonl" > "$all_jsonl"
   print "  including $(grep -c . "$extra_jsonl") hand-recovered from ${extra_jsonl:t}"
 else
-  cat "$x_jsonl" "$web_jsonl" "$ig_jsonl" > "$all_jsonl"
+  cat "$x_jsonl" "$web_jsonl" "$ig_jsonl" "$reels_jsonl" > "$all_jsonl"
 fi
 print "  $(grep -c . "$all_jsonl") captures → ${all_jsonl:t}"
 
-print "\n5/6  capture view"
+print "\n6/7  capture view"
 "$repo/tools/captures-to-html.py" "$all_jsonl" -o "$captures_html"
 
-print "\n6/6  message view"
+print "\n7/7  message view"
 if [[ -n $export_json ]]; then
   "$repo/tools/telegram-messages-to-html.py" "$export_json" -c "$all_jsonl" -o "$messages_html"
 else

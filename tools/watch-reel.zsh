@@ -11,6 +11,7 @@
 #   watch-reel.zsh <url>...                    # one pack per reel URL
 #   watch-reel.zsh --from captures.jsonl       # every kind:"reel" record in the file
 #   watch-reel.zsh --from captures.jsonl -n 5  # only the 5 newest not yet fetched
+#   watch-reel.zsh --retry-failed <url>...     # also retry packs with a recorded failure
 #
 # Packs land under REELS_DIR (config.local.sh; default $DATA_DIR/reels), one directory per
 # shortcode:
@@ -44,8 +45,10 @@ done
 
 urls=()
 limit=0
+retry_failed=0
 while (( $# )); do
   case $1 in
+    --retry-failed) retry_failed=1 ;;
     --from) shift
       [[ -f ${1:-} ]] || { print -u2 "no such captures file: ${1:-}"; exit 1 }
       urls+=(${(f)"$(python3 -c '
@@ -79,6 +82,12 @@ for url in $urls; do
   pack=$REELS_DIR/$code
 
   if [[ -s $pack/transcript.txt ]]; then
+    skipped=$(( skipped + 1 ))
+    continue
+  fi
+  # A recorded failure (image post, deleted reel) is permanent until told otherwise — retrying
+  # it on every run would hammer instagram for nothing.
+  if [[ -s $pack/yt-dlp.err && $retry_failed == 0 ]]; then
     skipped=$(( skipped + 1 ))
     continue
   fi
