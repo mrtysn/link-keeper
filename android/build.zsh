@@ -29,7 +29,12 @@ rm -rf "$out"
 mkdir -p "$out/classes"
 
 print "aapt2  : linking manifest against ${platform[1]:t}"
-"$bt/aapt2" link -o "$out/base.apk" -I "$jar" --manifest "$here/AndroidManifest.xml"
+link_extra=()
+if [[ -d $here/res ]]; then
+  "$bt/aapt2" compile --dir "$here/res" -o "$out/res.zip"
+  link_extra=("$out/res.zip")
+fi
+"$bt/aapt2" link -o "$out/base.apk" -I "$jar" --manifest "$here/AndroidManifest.xml" $link_extra
 
 print "javac  : compiling"
 javac --release 11 -classpath "$jar" -d "$out/classes" "$here"/src/keeper/link/share/*.java

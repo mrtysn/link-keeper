@@ -9,6 +9,7 @@
 
     <application
         android:label="Link Keeper"
+        android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.DeviceDefault.DayNight">
 
