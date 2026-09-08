@@ -18,3 +18,4 @@ link-handoff.json
 
 # Android build output
 android/build/
+.amo-upload-uuid
