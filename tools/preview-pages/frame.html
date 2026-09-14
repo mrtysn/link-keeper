@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="darkreader-lock">
+<title>Link Keeper popup states</title>
+<!-- Firefox caps a browser-action popup at 600px tall; each frame is that size. -->
+<style>
+  body { margin: 16px; background: #777; font: 12px system-ui, sans-serif; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  iframe { border: 0; width: 352px; height: 600px; }
+  figure { margin: 0; }
+  figcaption { color: #fff; margin-top: 4px; }
+</style>
+<figure><iframe src="popup.html"></iframe><figcaption>System theme, next link waiting</figcaption></figure>
+<figure><iframe src="popup.html?msg&onpage"></iframe><figcaption>System theme, on a list item, after a keep</figcaption></figure>
+<figure><iframe src="popup.html?msg&add&light"></iframe><figcaption>Light, Add links open</figcaption></figure>
