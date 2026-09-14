@@ -52,8 +52,14 @@ def addon_id(explicit: str | None) -> str | None:
 
 
 def uuid_for(target: str) -> str | None:
-    """Newest profile that knows this add-on wins, so a second profile cannot shadow the live one."""
-    candidates: list[tuple[float, str]] = []
+    found = install_for(target)
+    return found[1] if found else None
+
+
+def install_for(target: str) -> tuple[Path, str] | None:
+    """(profile directory, uuid). The newest profile that knows this add-on wins, so a second profile
+    cannot shadow the live one."""
+    candidates: list[tuple[float, str, str]] = []
     for pattern in PROFILE_GLOBS:
         for path in glob.glob(os.path.expanduser(pattern)):
             try:
@@ -68,10 +74,11 @@ def uuid_for(target: str) -> str | None:
             except json.JSONDecodeError:
                 continue
             if target in mapping:
-                candidates.append((os.path.getmtime(path), mapping[target]))
+                candidates.append((os.path.getmtime(path), path, mapping[target]))
     if not candidates:
         return None
-    return max(candidates)[1]
+    _, prefs, uuid = max(candidates)
+    return Path(prefs).parent, uuid
 
 
 def main() -> int:
