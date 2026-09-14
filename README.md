@@ -92,7 +92,8 @@ Loading a link marks it **seen**. Keeping it marks it **kept**. **Skip** marks i
 is a deliberate rejection rather than "opened it, moved on" — the list filters the two separately.
 
 The popup shows the same actions as buttons, a progress bar, what is coming next, and a box
-for attaching a note to the next thing you keep.
+for attaching a note to the next thing you keep. One action is filled at a time: **Keep** while a
+list item is open in the tab, **Next** otherwise.
 
 ### Cards — judging what you have read
 
@@ -109,7 +110,7 @@ The deck runs over **captures**, never over bare URLs. A card has to be judgeabl
 extension exists. So a card only appears once the page behind it has been read, and then it carries
 the headline, the text, the embedded links, the images and the screenshot preview.
 
-A verdict never deletes anything. Dropping sets a flag, visible in the list as `✕ drop`, and one
+A verdict never deletes anything. Dropping sets a flag, visible in the list as `✕ Drop`, and one
 click reverses it. Deferring records nothing, so the card returns next session.
 
 The deck is shuffled fresh each visit: ordered by date it would be 133 x.com cards in a row, and
@@ -120,17 +121,18 @@ mixing the domains keeps each card an actual decision.
 *Open list* in the popup opens a full page — the readable view when there are
 hundreds of entries, rather than a 22rem popup.
 
-- Grouped **by domain** by default, or by status, or flat newest-first.
+- Grouped **by domain** by default, or by status, or flat newest- or oldest-first.
 - Filter box searches URLs, captured titles, tweet text, notes and embedded links.
 - Status chips narrow to what is left, seen, skipped, or kept.
 - Rows show the date the link was saved; a dimmed date means only the paste date is known.
-- A coloured dot per row: grey pending, amber seen, green kept. The current item is marked
-  down its left edge.
+- A status mark per row, told apart by shape as well as colour: a ring for pending, a dot for
+  seen, a tick for kept, a cross for skipped. The current item carries a *Current* badge and a
+  line down its left edge.
 - Rows show the captured title, the post's text and any links found inside it, so a tweet you
   already read is legible without opening it again.
-- Per row on hover: **open** (loads it in this window and makes it current), **kept** to
-  toggle the verdict by hand, **remove** to drop it from the list.
-- **remove all** per group, and **Tidy** to clear every finished entry at once. Neither
+- Per row: **Re-read** reads it again in the background, and **⋯** holds **Open in this tab**
+  (loads it here and makes it current), **Mark kept**, **Skip** and **Remove from list**.
+- **Remove all…** per group, and **Tidy…** to clear every finished entry at once. Neither
   touches your captures.
 
 Clicking a title opens it in a new tab and marks that entry current, so a `Ctrl+Shift+K`

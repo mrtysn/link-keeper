@@ -12,6 +12,10 @@ let rows = [];
 let filter = "all";
 const domainSel = new Set();   // empty = every domain
 let domainsExpanded = false;
+let menuSeq = 0;
+let usingKeyboard = false;
+addEventListener("keydown", () => { usingKeyboard = true; }, true);
+addEventListener("pointerdown", () => { usingKeyboard = false; }, true);
 
 function say(text) { $("msg").textContent = text; }
 
@@ -26,23 +30,24 @@ function shortUrl(url) { return String(url).replace(/^https?:\/\/(www\.)?/, "");
 function savedOn(row) { return row.saved_at || row.added_at || ""; }
 const byNewest = (a, b) => String(savedOn(b)).localeCompare(String(savedOn(a)));
 
+const el = (tag, props = {}, ...children) => {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+};
+
+/* A plain tweet's title is only its handle, so its text is what identifies it. */
+function isTextPost(cap) {
+  return !!(cap?.text && (!cap.title || /^@?\S+ on X$|^X post$/.test(cap.title)));
+}
+
 function labelOf(row) {
   const cap = row.cap;
   if (!cap) return null;
-  // A plain tweet's title is only its handle; its text is what identifies it.
   const body = (cap.text || "").replace(/\s+/g, " ").trim();
-  if (body && (!cap.title || /^@?\S+ on X$|^X post$/.test(cap.title))) {
-    return (cap.handle ? `${cap.handle}: ` : "") + (body.length > 120 ? body.slice(0, 120) + "…" : body);
-  }
+  if (isTextPost(cap)) return (cap.handle ? `${cap.handle}: ` : "") + body;
   if (cap.handle && cap.title && !cap.title.includes(cap.handle)) return `${cap.handle} — ${cap.title}`;
   return cap.title || cap.handle || null;
-}
-
-/* Stable hue per domain — no palette to maintain, and the same trick the triage page uses. */
-function hue(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 360;
-  return h;
 }
 
 async function load() {
@@ -67,10 +72,10 @@ function groupRows(visible, mode) {
   if (mode === "status") {
     const order = ["pending", "seen", "skipped", "kept"];
     const names = {
-      pending: "left to go through",
-      seen: "opened, undecided",
-      skipped: "skipped",
-      kept: "kept",
+      pending: "Left to go through",
+      seen: "Opened, undecided",
+      skipped: "Skipped",
+      kept: "Kept",
     };
     return order
       .map(s => [names[s], visible.filter(r => r.status === s).sort(byNewest)])
@@ -109,187 +114,197 @@ function brandOf(host) {
 }
 
 function srcIcon(url) {
-  const el = document.createElement("span");
-  el.className = "src";
+  const icon = document.createElement("span");
+  icon.className = "src";
   const host = hostOf(url);
   const glyph = BRAND_ICONS[brandOf(host)] ||
     `<rect width="24" height="24" rx="6" fill="#5a5f6a"/><text x="12" y="17" font-family="Verdana,sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#fff">${(host[0] || "•").toUpperCase()}</text>`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${glyph}</svg>`;
-  el.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-  el.title = host;
-  return el;
+  icon.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  icon.setAttribute("aria-hidden", "true");
+  return icon;
 }
 
-function rowEl(row) {
+const STATUS_NAMES = { pending: "Not opened yet", seen: "Opened, undecided", kept: "Kept", skipped: "Skipped" };
+
+function titleLink(row) {
+  const cap = row.cap;
+  const a = el("a", { className: "ttl", href: row.url, target: "_blank", rel: "noopener noreferrer" });
+  if (isTextPost(cap)) {
+    const body = cap.text.replace(/\s+/g, " ").trim();
+    if (cap.handle) a.append(el("span", { className: "who", textContent: cap.handle }), " ");
+    a.append(body);
+    a.title = body;
+  } else if (labelOf(row)) {
+    a.classList.add("titled");
+    a.textContent = labelOf(row);
+    a.title = labelOf(row);
+  } else {
+    a.classList.add("plain");
+    a.textContent = shortUrl(row.url);
+    a.title = row.url;
+  }
+  // Opening from the list makes this the current item, so a later keep attaches to it.
+  a.addEventListener("click", () => send({ type: "set-current", url: row.url }).then(load));
+  return a;
+}
+
+function linkChip(href, text, title, className = "") {
+  return el("a", { href, target: "_blank", rel: "noopener noreferrer", textContent: text, title, className });
+}
+
+/* Row actions beyond reading live in a native popover: Escape and outside clicks close it, and
+ * the row keeps its width instead of reserving room for buttons that are hidden most of the time. */
+function rowMenu(row, name) {
+  const id = `row-menu-${++menuSeq}`;
+  const trigger = el("button", { className: "small ghost more", textContent: "⋯", title: "More actions" });
+  trigger.setAttribute("aria-label", `More actions for ${name.length > 80 ? `${name.slice(0, 80)}…` : name}`);
+  trigger.setAttribute("popovertarget", id);
+
+  const menu = el("div", { id, className: "menu" });
+  menu.popover = "auto";
+  const item = (text, fn, className = "") => {
+    const b = el("button", { textContent: text, className });
+    b.onclick = async () => { menu.hidePopover(); await fn(); load(); };
+    return b;
+  };
+  menu.append(
+    item("Open in this tab", () => send({ type: "set-current", url: row.url })
+      .then(() => browser.tabs.update({ url: row.url }))),
+    item(row.status === "kept" ? "Unmark kept" : "Mark kept",
+      () => send({ type: "mark", url: row.url, status: row.status === "kept" ? "seen" : "kept" })),
+    item(row.status === "skipped" ? "Unskip" : "Skip",
+      () => send({ type: "mark", url: row.url, status: row.status === "skipped" ? "seen" : "skipped" })),
+    el("hr"),
+    item("Remove from list", () => send({ type: "remove", urls: [row.url] }), "danger"),
+  );
+  menu.addEventListener("toggle", e => {
+    if (e.newState !== "open") return;
+    const r = trigger.getBoundingClientRect();
+    const w = menu.offsetWidth, h = menu.offsetHeight;
+    const below = r.bottom + 4 + h <= innerHeight;
+    menu.style.top = `${below ? r.bottom + 4 : Math.max(8, r.top - 4 - h)}px`;
+    menu.style.left = `${Math.max(8, Math.min(r.right - w, innerWidth - w - 8))}px`;
+    // From the keyboard, land on the first item; a pointer user keeps focus where it was.
+    if (usingKeyboard) menu.querySelector("button")?.focus();
+  });
+  return [trigger, menu];
+}
+
+function rowEl(row, groupedByDomain) {
   const li = document.createElement("li");
   li.dataset.status = row.status;
   if (row.current) li.classList.add("current");
 
   li.append(srcIcon(row.url));
-  li.append(Object.assign(document.createElement("span"), { className: "dot" }));
+  const mark = el("span", { className: "mark", title: STATUS_NAMES[row.status] || row.status });
+  mark.setAttribute("role", "img");
+  mark.setAttribute("aria-label", STATUS_NAMES[row.status] || row.status);
+  li.append(mark);
 
-  const main = document.createElement("div");
-  main.className = "main";
+  const main = el("div", { className: "main" });
+  main.append(titleLink(row));
 
-  const label = labelOf(row);
-  const a = document.createElement("a");
-  a.className = "ttl" + (label ? "" : " plain");
-  a.href = row.url;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  a.textContent = label || shortUrl(row.url);
-  // Opening from the list makes this the current item, so a later keep attaches to it.
-  a.addEventListener("click", () => send({ type: "set-current", url: row.url }).then(load));
-  main.append(a);
+  // A titled page carries a description worth a second line, unless the title already is that text.
+  const squash = s => String(s || "").replace(/\s+/g, " ").trim();
+  const text = squash(row.cap?.text);
+  if (text && !isTextPost(row.cap) && !squash(labelOf(row)).includes(text.slice(0, 60))) {
+    main.append(el("div", { className: "body", textContent: row.cap.text }));
+  }
 
-  const meta = document.createElement("div");
-  meta.className = "meta";
-  meta.append(Object.assign(document.createElement("span"), { textContent: hostOf(row.url) }));
+  const meta = el("div", { className: "meta" });
+  if (!groupedByDomain) meta.append(el("span", { textContent: hostOf(row.url) }));
   const when = savedOn(row);
   if (when) {
-    const t = document.createElement("time");
-    t.dateTime = when;
-    t.textContent = when.slice(0, 10);
-    t.title = row.saved_at ? "saved on this date" : "added to the list on this date (original date unknown)";
-    if (!row.saved_at) t.style.opacity = ".6";
+    const t = el("time", { dateTime: when, textContent: when.slice(0, 10) });
+    t.title = row.saved_at ? "Saved on this date" : "Added to the list on this date; the original date is unknown";
+    if (!row.saved_at) t.style.opacity = ".7";
     meta.append(t);
   }
-  if (row.cap?.kind && row.cap.kind !== "page") {
-    meta.append(Object.assign(document.createElement("span"), { textContent: row.cap.kind }));
-  }
-  if (!row.cap) meta.append(Object.assign(document.createElement("span"), { textContent: "not read yet" }));
+  if (row.cap?.kind && row.cap.kind !== "page") meta.append(el("span", { textContent: row.cap.kind }));
+  if (!row.cap) meta.append(el("span", { textContent: "not read yet" }));
+  if (row.current) meta.append(el("span", { className: "badge current", textContent: "Current" }));
   if (row.cap?.verdict) {
-    const v = document.createElement("span");
-    v.className = "png";
-    v.textContent = row.cap.verdict === "keep" ? "✓ keep" : "✕ drop";
-    v.style.color = row.cap.verdict === "keep" ? "var(--ok)" : "var(--bad)";
-    meta.append(v);
+    const keep = row.cap.verdict === "keep";
+    meta.append(el("span", { className: `badge ${keep ? "keep" : "drop"}`, textContent: keep ? "✓ Keep" : "✕ Drop" }));
   }
-  if (row.note) {
-    const note = document.createElement("span");
-    note.className = "note";
-    note.textContent = row.note;
-    meta.append(note);
-  }
+  if (row.note) meta.append(el("span", { className: "note", textContent: row.note }));
   main.append(meta);
 
-  if (row.cap?.text) {
-    const body = document.createElement("div");
-    body.className = "body";
-    body.textContent = row.cap.text;
-    main.append(body);
-  }
-
   if (row.cap?.links?.length) {
-    const inner = document.createElement("div");
-    inner.className = "inner";
-    for (const url of row.cap.links.slice(0, 5)) {
-      const chip = document.createElement("a");
-      chip.href = url;
-      chip.target = "_blank";
-      chip.rel = "noopener noreferrer";
-      chip.textContent = shortUrl(url);
-      inner.append(chip);
-    }
+    const inner = el("div", { className: "inner" });
+    for (const url of row.cap.links.slice(0, 5)) inner.append(linkChip(url, shortUrl(url), url));
     main.append(inner);
   }
 
   // Links harvested from the replies — the author's own reply is the one that usually matters.
   if (row.cap?.reply_links?.length) {
-    const box = document.createElement("div");
-    box.className = "inner replies";
+    const box = el("div", { className: "inner replies" });
     for (const l of row.cap.reply_links.slice(0, 6)) {
-      const a = document.createElement("a");
-      a.href = l.href;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      a.className = l.self ? "from-author" : "";
-      a.textContent = `↩ ${shortUrl(l.href)}`;
-      a.title = l.self ? `from the author's own reply (${l.from || "?"})` : `from a reply by ${l.from || "?"}`;
-      box.append(a);
+      box.append(linkChip(l.href, `↩ ${shortUrl(l.href)}`,
+        l.self ? `From the author's own reply (${l.from || "?"})` : `From a reply by ${l.from || "?"}`,
+        l.self ? "from-author" : ""));
     }
     main.append(box);
   }
 
   // Actual thumbnails, not URLs — the point of keeping image links is to see them.
   if (row.cap?.images?.length) {
-    const shots = document.createElement("div");
-    shots.className = "shots";
+    const shots = el("div", { className: "shots" });
     for (const src of row.cap.images.slice(0, 8)) {
-      const a = document.createElement("a");
-      a.href = src;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      const img = document.createElement("img");
-      img.src = src;
-      img.loading = "lazy";
-      img.alt = "";
-      a.append(img);
+      const img = el("img", { src, loading: "lazy", alt: "" });
+      const a = el("a", { href: src, target: "_blank", rel: "noopener noreferrer" }, img);
+      // A dead image would otherwise collapse to a hairline beside the text.
+      img.addEventListener("error", () => {
+        a.remove();
+        if (!shots.querySelector("img")) shots.remove();
+      });
       shots.append(a);
     }
     if (row.cap.images.length > 8) {
-      const more = document.createElement("span");
-      more.className = "png";
-      more.textContent = `+${row.cap.images.length - 8} more`;
-      shots.append(more);
+      shots.append(el("span", { className: "png", textContent: `+${row.cap.images.length - 8} more` }));
     }
     main.append(shots);
   }
 
   if (row.cap?.screenshot && !row.cap.shotThumb) {
     // No preview stored — Firefox's own screenshot, or one taken before previews existed.
-    const tag = document.createElement("span");
-    tag.className = "png";
-    tag.textContent = `📄 ${row.cap.screenshot}`;
-    const line = document.createElement("div");
-    line.append(tag);
-    main.append(line);
+    main.append(el("div", { className: "shots" }, el("span", { className: "png", textContent: `📄 ${row.cap.screenshot}` })));
   }
 
   if (row.cap?.shotThumb) {
-    const wrap = document.createElement("div");
-    wrap.className = "shots";
-    const img = document.createElement("img");
-    img.src = row.cap.shotThumb;
-    img.className = "shot-preview";
-    img.loading = "lazy";
-    img.alt = "";
+    const img = el("img", { src: row.cap.shotThumb, className: "shot-preview", loading: "lazy", alt: "" });
     // The PNG itself lives in Downloads, which this page cannot load; the downloads API opens it.
-    const btn = document.createElement("button");
-    btn.className = "shot-btn";
-    btn.title = `open ${row.cap.screenshot}`;
-    btn.append(img);
+    const btn = el("button", { className: "shot-btn", title: `Open ${row.cap.screenshot}` }, img);
+    btn.setAttribute("aria-label", `Open screenshot ${row.cap.screenshot}`);
     btn.onclick = async () => {
       const res = await send({ type: "open-shot", id: row.cap.shotId, filename: row.cap.screenshot });
-      if (!res?.ok) say(res?.error || "could not open it");
+      if (!res?.ok) say(res?.error || "Unable to open the screenshot");
     };
-    wrap.append(btn);
-    main.append(wrap);
+    main.append(el("div", { className: "shots" }, btn));
   }
 
   li.append(main);
 
-  const acts = document.createElement("div");
-  acts.className = "acts";
+  const acts = el("div", { className: "acts" });
 
   /* Read it without leaving this page: opens the link out of sight in your own session, extracts,
    * closes it. Needs permission for that site, asked for here because a permission prompt must come
    * from a click on an extension page. */
-  const grab = document.createElement("button");
-  grab.textContent = row.cap ? "re-read" : "read it";
-  grab.title = "Open it in the background, read it, close it";
+  const readLabel = row.cap ? "Re-read" : "Read";
+  const grab = el("button", { className: "small", textContent: readLabel, title: "Open it in the background, read it, close it" });
   grab.onclick = async () => {
     let origin;
     try {
       origin = new URL(row.url).origin + "/*";
     } catch (e) {
-      return say("that URL cannot be opened");
+      return say("That URL cannot be opened");
     }
     const granted = await browser.permissions.request({ origins: [origin] }).catch(() => false);
-    if (!granted) return say(`without access to ${hostOf(row.url)} it cannot be read`);
+    if (!granted) return say(`Reading it needs access to ${hostOf(row.url)}`);
 
     grab.disabled = true;
-    grab.textContent = "reading…";
+    grab.textContent = "Reading…";
     const res = await send({ type: "capture-url", url: row.url });
     if (res?.ok) {
       const r = res.record;
@@ -297,33 +312,15 @@ function rowEl(row) {
         r.links?.length ? `${r.links.length} link${r.links.length > 1 ? "s" : ""}` : null,
         r.reply_links?.length ? `${r.reply_links.length} from replies` : null,
       ].filter(Boolean).join(", ");
-      say(`read ${r.title || hostOf(row.url)}${extra ? ` — ${extra}` : ""}`);
+      say(`Read ${r.title || hostOf(row.url)}${extra ? ` — ${extra}` : ""}`);
     } else {
-      say(res?.error || "could not read it");
+      say(res?.error || "Unable to read it");
       grab.disabled = false;
-      grab.textContent = row.cap ? "re-read" : "read it";
+      grab.textContent = readLabel;
     }
     load();
   };
-  acts.append(grab);
-
-  const actions = [
-    ["open", "Open in this window", () => send({ type: "set-current", url: row.url })
-      .then(() => browser.tabs.update({ url: row.url })).then(load)],
-    [row.status === "kept" ? "unkeep" : "kept", "Toggle kept",
-      () => send({ type: "mark", url: row.url, status: row.status === "kept" ? "seen" : "kept" }).then(load)],
-    [row.status === "skipped" ? "unskip" : "skip", "Toggle skipped",
-      () => send({ type: "mark", url: row.url, status: row.status === "skipped" ? "seen" : "skipped" }).then(load)],
-    ["remove", "Remove from the list",
-      () => send({ type: "remove", urls: [row.url] }).then(load)],
-  ];
-  for (const [text, title, fn] of actions) {
-    const b = document.createElement("button");
-    b.textContent = text;
-    b.title = title;
-    b.onclick = fn;
-    acts.append(b);
-  }
+  acts.append(grab, ...rowMenu(row, labelOf(row) || shortUrl(row.url)));
   li.append(acts);
   return li;
 }
@@ -343,12 +340,9 @@ function renderDomainChips() {
   const shown = domainsExpanded ? hosts : hosts.slice(0, 12);
 
   const domainChip = (host, n) => {
-    const chip = document.createElement("button");
-    chip.className = "chip";
+    const chip = el("button", { className: "chip" }, srcIcon(`https://${host}/`), host,
+      el("span", { className: "n", textContent: n }));
     chip.setAttribute("aria-pressed", String(domainSel.has(host)));
-    chip.style.color = domainSel.has(host) ? "" : `hsl(${hue(host)} 55% 55%)`;
-    chip.append(srcIcon(`https://${host}/`), host,
-      Object.assign(document.createElement("span"), { className: "n", textContent: n }));
     chip.onclick = () => {
       domainSel.has(host) ? domainSel.delete(host) : domainSel.add(host);
       render();
@@ -362,19 +356,32 @@ function renderDomainChips() {
     if (!shown.some(([h]) => h === host)) box.append(domainChip(host, counts.get(host) || 0));
   }
   if (hosts.length > 12) {
-    const more = document.createElement("button");
-    more.className = "chip";
-    more.textContent = domainsExpanded ? "fewer −" : `+${hosts.length - 12} more`;
+    const more = el("button", { className: "chip ghost", textContent: domainsExpanded ? "Show fewer" : `${hosts.length - 12} more` });
+    more.setAttribute("aria-expanded", String(domainsExpanded));
     more.onclick = () => { domainsExpanded = !domainsExpanded; render(); };
     box.append(more);
   }
   if (domainSel.size) {
-    const clear = document.createElement("button");
-    clear.className = "chip";
-    clear.textContent = "clear ✕";
+    const clear = el("button", { className: "chip ghost", textContent: "Clear domains" });
     clear.onclick = () => { domainSel.clear(); render(); };
     box.append(clear);
   }
+}
+
+function setChip(id, label, n) {
+  $(id).replaceChildren(`${label} `, el("span", { className: "n", textContent: n }));
+}
+
+function setFilter(which) {
+  filter = which;
+  for (const other of FILTERS) $(`f-${other}`).setAttribute("aria-pressed", String(other === which));
+}
+
+function clearFilters() {
+  $("q").value = "";
+  domainSel.clear();
+  setFilter("all");
+  render();
 }
 
 function render() {
@@ -386,58 +393,58 @@ function render() {
 
   $("sub").textContent = total
     ? `${total} links · ${counts.kept} kept · ${counts.skipped} skipped · ${counts.seen} seen · ${counts.pending} left`
-    : "nothing on the list yet";
+    : "Nothing on the list yet";
   $("bar-kept").style.width = total ? `${counts.kept / total * 100}%` : "0";
   $("bar-seen").style.width = total ? `${counts.seen / total * 100}%` : "0";
   $("bar-skipped").style.width = total ? `${counts.skipped / total * 100}%` : "0";
-  $("f-all").textContent = `all ${total}`;
-  $("f-pending").textContent = `left ${counts.pending}`;
-  $("f-seen").textContent = `seen ${counts.seen}`;
-  $("f-kept").textContent = `kept ${counts.kept}`;
-  $("f-skipped").textContent = `skipped ${counts.skipped}`;
+  setChip("f-all", "All", total);
+  setChip("f-pending", "Left", counts.pending);
+  setChip("f-seen", "Seen", counts.seen);
+  setChip("f-kept", "Kept", counts.kept);
+  setChip("f-skipped", "Skipped", counts.skipped);
 
   const visible = rows.filter(r => matches(r, term));
   const out = $("out");
   out.textContent = "";
 
   if (!visible.length) {
-    const box = document.createElement("div");
-    box.className = "empty";
-    box.innerHTML = total
-      ? "<b>Nothing matches.</b>Clear the filter or pick a different status."
-      : "<b>The list is empty.</b>Add links from the popup, or press Ctrl+Shift+U on a page.";
+    const box = el("div", { className: "empty" });
+    if (total) {
+      const which = { all: "", pending: "unopened ", seen: "seen ", skipped: "skipped ", kept: "kept " }[filter];
+      const where = domainSel.size ? ` on ${[...domainSel].join(", ")}` : "";
+      const query = term ? ` match “${$("q").value.trim()}”` : "";
+      const clear = el("button", { textContent: "Clear filters" });
+      clear.onclick = clearFilters;
+      box.append(el("p", { className: "title", textContent: "No matches" }),
+        el("p", { textContent: `No ${which}links${where}${query}.` }), clear);
+    } else {
+      box.append(el("p", { className: "title", textContent: "The list is empty" }),
+        el("p", {}, "Add links from the popup, or press ", el("kbd", { textContent: "Ctrl+Shift+U" }), " on a page."));
+    }
     out.append(box);
     return;
   }
 
-  for (const [name, list] of groupRows(visible, $("groupby").value)) {
-    const section = document.createElement("section");
-    section.className = "group";
+  const mode = $("groupby").value;
+  for (const [name, list] of groupRows(visible, mode)) {
+    const section = el("section", { className: "group" });
     if (name) {
-      const h2 = document.createElement("h2");
-      const mono = document.createElement("span");
-      mono.textContent = name;
-      mono.style.color = `hsl(${hue(name)} 55% 50%)`;
-      h2.append(mono, Object.assign(document.createElement("span"), { className: "n", textContent: list.length }));
-      const rm = document.createElement("button");
-      rm.textContent = "remove all";
+      const rm = el("button", { className: "small ghost danger", textContent: "Remove all…" });
       rm.onclick = () => {
         if (!confirm(`Remove all ${list.length} from ${name}? Captures are kept.`)) return;
         send({ type: "remove", urls: list.map(r => r.url) }).then(load);
       };
-      h2.append(rm);
-      section.append(h2);
+      section.append(el("h2", {}, el("span", { textContent: name }), el("span", { className: "n", textContent: list.length }), rm));
     }
-    const ul = document.createElement("ul");
-    ul.className = "rows";
+    const ul = el("ul", { className: "rows" });
     for (const row of list) {
       try {
-        ul.append(rowEl(row));
+        ul.append(rowEl(row, mode === "domain"));
       } catch (e) {
         // One malformed row must not blank the page; fall back to the bare URL.
         const li = document.createElement("li");
         li.dataset.status = row.status;
-        li.append(document.createElement("span"), Object.assign(document.createElement("div"), {
+        li.append(document.createElement("span"), document.createElement("span"), el("div", {
           className: "main", textContent: `${shortUrl(row.url)} — could not render: ${e.message}`,
         }));
         ul.append(li);
@@ -454,18 +461,17 @@ $("groupby").addEventListener("change", render);
 
 const FILTERS = ["all", "pending", "seen", "skipped", "kept"];
 for (const which of FILTERS) {
-  $(`f-${which}`).onclick = () => {
-    filter = which;
-    for (const other of FILTERS) {
-      $(`f-${other}`).setAttribute("aria-pressed", String(other === which));
-    }
-    render();
-  };
+  $(`f-${which}`).onclick = () => { setFilter(which); render(); };
 }
+
+// A popover is placed once, when it opens; scrolling would leave it behind, so close it instead.
+addEventListener("scroll", () => {
+  for (const open of document.querySelectorAll(".menu:popover-open")) open.hidePopover();
+}, { passive: true });
 
 $("export").onclick = async () => {
   const { captures } = await send({ type: "export" });
-  if (!captures.length) return say("nothing captured yet");
+  if (!captures.length) return say("Nothing captured yet");
   const a = document.createElement("a");
   const body = captures.map(r =>
     JSON.stringify(r).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")).join("\n") + "\n";
@@ -473,15 +479,20 @@ $("export").onclick = async () => {
   a.download = "link-captures.jsonl";
   a.click();
   URL.revokeObjectURL(a.href);
-  say(`exported ${captures.length} captures to Downloads`);
+  say(`Exported ${captures.length} captures to Downloads`);
 };
-
-$("to-cards").onclick = () => { location.href = "cards.html"; };
 
 /* Import lives here rather than in the popup: choosing a file opens an OS dialog, which closes a
  * browser-action popup and destroys its JS before onchange can fire. A tab survives it. */
-$("show-import").onclick = () => $("import-panel").classList.remove("hidden");
-$("hide-import").onclick = () => $("import-panel").classList.add("hidden");
+function showImport(open) {
+  $("import-panel").hidden = !open;
+  $("show-import").setAttribute("aria-expanded", String(open));
+}
+$("show-import").onclick = () => {
+  showImport($("import-panel").hidden);
+  if (!$("import-panel").hidden) $("import-text").focus();
+};
+$("hide-import").onclick = () => { showImport(false); $("show-import").focus(); };
 
 function parseJsonl(raw) {
   // split("\n") only: U+2028 appears raw inside tweet text and would tear a record in two.
@@ -500,7 +511,7 @@ async function runImport(raw) {
   const { records, bad } = parseJsonl(raw);
   if (!records.length) {
     note.className = "bad";
-    note.textContent = `nothing readable${bad ? ` — ${bad} unparseable lines` : ""}`;
+    note.textContent = `Nothing readable${bad ? ` — ${bad} unparseable lines` : ""}. Paste one JSON object per line.`;
     return;
   }
   const res = await send({ type: "import-captures", records });
@@ -515,27 +526,31 @@ async function runImport(raw) {
 $("import-file").onchange = async e => {
   const file = e.target.files[0];
   if (!file) return;
-  $("import-msg").textContent = `reading ${file.name}…`;
+  $("import-msg").textContent = `Reading ${file.name}…`;
   await runImport(await file.text());
   e.target.value = "";
 };
 
 $("do-import").onclick = () => {
   const raw = $("import-text").value.trim();
-  if (!raw) return ($("import-msg").className = "bad", $("import-msg").textContent = "paste some JSONL, or choose a file");
+  if (!raw) {
+    $("import-msg").className = "bad";
+    $("import-msg").textContent = "Paste some JSONL, or choose a file";
+    return;
+  }
   runImport(raw);
 };
 
 $("tidy").onclick = async () => {
   const done = rows.filter(r => r.status !== "pending").map(r => r.url);
-  if (!done.length) return say("nothing to tidy — everything is still pending");
+  if (!done.length) return say("Nothing to tidy: everything is still pending");
   if (!confirm(`Remove ${done.length} finished entries from the list? Captures are kept.`)) return;
   await send({ type: "remove", urls: done });
-  say(`removed ${done.length} from the list`);
+  say(`Removed ${done.length} from the list`);
   load();
 };
 
-if (location.hash === "#import") $("import-panel").classList.remove("hidden");
+if (location.hash === "#import") showImport(true);
 
 /* If a refresh is waiting on loopback, take it now. Import is idempotent, so doing this on every
  * visit costs nothing and means the only step after a rebuild is opening this page. */
@@ -573,8 +588,8 @@ if (location.hash === "#import") $("import-panel").classList.remove("hidden");
 
   const note = $("import-msg");
   note.className = "ok";
-  note.textContent = `from the last refresh: ${bits.join("; ")}`;
-  $("import-panel").classList.remove("hidden");
+  note.textContent = `From the last refresh: ${bits.join("; ")}`;
+  showImport(true);
   load();
 })();
 

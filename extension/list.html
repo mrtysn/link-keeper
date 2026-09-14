@@ -5,191 +5,263 @@
 <title>Link Keeper — list</title>
 <style>
   :root {
-    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #6b6b6b;
-    --line: #e4e0da; --accent: #7a5cff; --ok: #17915c; --bad: #c2422f;
-    --seen: #8a7a3f; --chip: #f1eee9;
+    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #6b6b6b; --line: #e4e0da; --mark: #8a857d;
+    --accent: #6647e6; --on-accent: #fff; --ok: #107647; --bad: #b33a28; --seen: #8a7a3f; --chip: #f1eee9;
+    --img-outline: rgb(0 0 0 / .1); --shadow: 0 8px 24px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .08);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #16171a; --panel: #22252a; --ink: #e8e6e3; --dim: #9a9793;
-      --line: #2c2f34; --accent: #a992ff; --ok: #4fcf95; --bad: #ff8b74;
-      --seen: #d8c47a; --chip: #2a2e34;
+      --bg: #16171a; --panel: #22252a; --ink: #e8e6e3; --dim: #9a9793; --line: #2c2f34; --mark: #6b6f77;
+      --accent: #a992ff; --on-accent: #16171a; --ok: #4fcf95; --bad: #ff8b74; --seen: #d8c47a; --chip: #2a2e34;
+      --img-outline: rgb(255 255 255 / .1); --shadow: 0 8px 24px rgb(0 0 0 / .45), 0 1px 3px rgb(0 0 0 / .3);
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
-    margin: 0; padding: 2rem 1.25rem 5rem; background: var(--bg); color: var(--ink);
+    margin: 0; padding: 32px 20px 80px; background: var(--bg); color: var(--ink);
     font: 15px/1.55 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
-    -webkit-font-smoothing: antialiased;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
   .wrap { max-width: 64rem; margin: 0 auto; }
-  h1 { font-size: 1.4rem; margin: 0 0 .15rem; letter-spacing: -.02em; }
-  .sub { color: var(--dim); font-size: .88rem; margin: 0 0 1.2rem; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .meter { height: 5px; background: var(--chip); border-radius: 3px; overflow: hidden; display: flex; }
-  .meter i { height: 100%; transition: width .25s ease; }
-  .meter .k { background: var(--ok); } .meter .s { background: var(--seen); }
-  .meter .x { background: var(--bad); }
+  /* --- header: what this is, and the page-level actions --- */
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
+  .heading { margin-right: auto; }
+  h1 { font-size: 1.5rem; line-height: 1.15; letter-spacing: -.02em; margin: 0 0 4px; }
+  .sub { margin: 0; color: var(--dim); font-size: .875rem; font-variant-numeric: tabular-nums; }
+  .page-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .meter { height: 5px; margin-top: 16px; background: var(--chip); border-radius: 3px; overflow: hidden; display: flex; }
+  .meter i { height: 100%; }
+  .meter .k { background: var(--ok); } .meter .s { background: var(--seen); } .meter .x { background: var(--bad); }
+
+  /* --- controls --- */
+  button, select, .btn {
+    font: inherit; font-size: .875rem; line-height: 1.2; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 7px 12px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+    text-decoration: none; white-space: nowrap;
+    transition-property: border-color, background-color, color; transition-duration: 150ms;
+  }
+  select { display: inline-block; padding-right: 8px; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  button.danger, .danger { color: var(--bad); }
+  button.small { font-size: .8125rem; min-height: 28px; padding: 4px 10px; }
+  button.ghost { background: none; border-color: transparent; color: var(--dim); }
+  button.ghost.danger { color: var(--bad); }
+  @media (hover: hover) {
+    button:hover:not(:disabled), select:hover, .btn:hover { border-color: var(--accent); }
+    button.danger:hover:not(:disabled) { border-color: var(--bad); }
+    button.ghost:hover:not(:disabled) { background: var(--chip); border-color: transparent; color: var(--ink); }
+    button.ghost.danger:hover:not(:disabled) { color: var(--bad); }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .meter i { transition: width .25s ease; }
+  }
 
   .bar {
-    display: flex; gap: .5rem; flex-wrap: wrap; align-items: center;
-    margin: .9rem 0 1.4rem; position: sticky; top: 0; background: var(--bg);
-    padding: .7rem 0; z-index: 5; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+    padding: 12px 0; background: var(--bg); border-bottom: 1px solid var(--line);
   }
-  #q { flex: 1 1 16rem; padding: .5rem .75rem; font: inherit; color: var(--ink);
-       background: var(--panel); border: 1px solid var(--line); border-radius: .45rem; }
-  #q:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  button, select {
-    font: inherit; font-size: .88rem; cursor: pointer; background: var(--panel); color: var(--ink);
-    border: 1px solid var(--line); border-radius: .45rem; padding: .45rem .75rem;
+  #q {
+    flex: 1 1 14rem; min-width: 0; min-height: 34px; padding: 6px 12px; font: inherit; font-size: .9375rem;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
   }
-  button:hover { border-color: var(--accent); }
-  button.danger:hover { border-color: var(--bad); color: var(--bad); }
-  .chips { display: flex; gap: .3rem; }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; }
   .chip {
-    border: 1px solid var(--line); background: var(--panel); border-radius: 1rem;
-    padding: .3rem .75rem; font-size: .82rem; cursor: pointer; color: var(--dim);
+    min-height: 30px; padding: 4px 12px; border-radius: 999px; font-size: .8125rem;
     font-variant-numeric: tabular-nums;
   }
-  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .chips.domains { flex-wrap: wrap; margin-top: .55rem; }
-  .chips.domains:empty { display: none; }
-  .chip .n { opacity: .6; margin-left: .3rem; }
-  .chip .src {
-    display: inline-block; width: .85rem; height: .85rem; margin: 0 .4rem 0 0;
-    vertical-align: -.14rem; background: center/contain no-repeat;
-  }
+  .chip .n { color: var(--dim); }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .chip[aria-pressed="true"] .n { color: inherit; }
+  .domains { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+  .domains:empty { display: none; }
+  .chip .src { margin: 0; }
 
-  .group { margin: 1.6rem 0 0; }
-  .group > h2 {
-    font-size: .92rem; font-weight: 600; margin: 0 0 .5rem; display: flex; gap: .6rem;
-    align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: .4rem;
+  #msg { margin: 12px 0 0; color: var(--dim); font-size: .875rem; }
+  #msg:empty { margin: 0; }
+
+  .panel { margin-top: 16px; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  .panel h2 { margin: 0 0 4px; font-size: .9375rem; }
+  .panel p { margin: 0; color: var(--dim); font-size: .875rem; text-wrap: pretty; }
+  .panel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+  .panel textarea {
+    display: block; width: 100%; min-height: 6rem; margin-top: 12px; padding: 8px 10px;
+    font: .8125rem/1.5 ui-monospace, Menlo, monospace; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px;
   }
-  .group > h2 .n { color: var(--dim); font-size: .78rem; font-variant-numeric: tabular-nums; }
-  .group > h2 button { margin-left: auto; font-size: .78rem; padding: .2rem .55rem; }
+  #import-msg { font-size: .875rem; color: var(--dim); }
+  #import-msg.ok { color: var(--ok); } #import-msg.bad { color: var(--bad); }
+
+  /* --- rows --- */
+  .group { margin-top: 32px; }
+  .group > h2 {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 0 8px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); font-size: .9375rem; font-weight: 600; overflow-wrap: anywhere;
+  }
+  .group > h2 .n { color: var(--dim); font-size: .8125rem; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .group > h2 button { margin-left: auto; }
 
   ul.rows { list-style: none; margin: 0; padding: 0; }
-  ul.rows li {
-    display: grid; grid-template-columns: 1rem 1.6rem 1fr auto; gap: .7rem; align-items: start;
-    padding: .45rem .3rem; border-radius: .4rem;
+  ul.rows > li {
+    display: grid; grid-template-columns: 16px 14px minmax(0, 1fr) auto; column-gap: 12px; align-items: start;
+    padding: 10px 8px; border-radius: 10px;
   }
+  @media (hover: hover) { ul.rows > li:hover { background: var(--panel); } }
+  ul.rows > li.current { box-shadow: inset 2px 0 0 var(--accent); }
+
   .src {
-    width: .95rem; height: .95rem; margin-top: .28rem; justify-self: center;
-    background: center/contain no-repeat; border-radius: .2rem;
+    display: inline-block; flex: none; width: 16px; height: 16px; margin-top: 4px;
+    background: center/contain no-repeat; border-radius: 4px;
   }
-  ul.rows li:hover { background: var(--panel); }
-  ul.rows li.current { box-shadow: inset 2px 0 0 var(--accent); }
-  .dot { width: .6rem; height: .6rem; border-radius: 50%; margin-top: .45rem; background: var(--line); justify-self: center; }
-  li[data-status="seen"] .dot { background: var(--seen); }
-  li[data-status="kept"] .dot { background: var(--ok); }
-  li[data-status="skipped"] .dot { background: var(--bad); }
-  li[data-status="skipped"] .ttl { opacity: .55; text-decoration: line-through; }
+  /* Status by shape as well as colour: ring pending, dot seen, tick kept, cross skipped. */
+  .mark { display: grid; place-items: center; width: 14px; height: 14px; margin-top: 5px; }
+  .mark::before {
+    content: ""; box-sizing: border-box; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--mark);
+  }
+  li[data-status="seen"] .mark::before { background: var(--seen); border-color: var(--seen); }
+  li[data-status="kept"] .mark::before,
+  li[data-status="skipped"] .mark::before {
+    width: auto; height: auto; border: 0; border-radius: 0; font-size: 13px; font-weight: 700; line-height: 1;
+  }
+  li[data-status="kept"] .mark::before { content: "✓"; color: var(--ok); }
+  li[data-status="skipped"] .mark::before { content: "✕"; color: var(--bad); font-size: 11px; }
+  li[data-status="skipped"] .ttl { opacity: .6; text-decoration: line-through; }
+
   .main { min-width: 0; }
-  .ttl { font-weight: 600; overflow-wrap: anywhere; }
-  .ttl.plain { font-weight: 400; font-family: ui-monospace, Menlo, monospace; font-size: .85rem; }
-  a.ttl { color: var(--ink); text-decoration: none; }
-  a.ttl:hover { color: var(--accent); text-decoration: underline; }
-  .meta { color: var(--dim); font-size: .8rem; display: flex; gap: .6rem; flex-wrap: wrap; }
+  .ttl {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+    color: var(--ink); text-decoration: none; overflow-wrap: anywhere;
+  }
+  .ttl.titled, .ttl .who { font-weight: 600; }
+  .ttl.plain { font: .8125rem/1.6 ui-monospace, Menlo, monospace; -webkit-line-clamp: 2; }
+  @media (hover: hover) { a.ttl:hover { color: var(--accent); } }
+  .body {
+    margin-top: 2px; color: var(--dim); font-size: .875rem; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  }
+  .meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px;
+    color: var(--dim); font-size: .8125rem;
+  }
   .meta time { font-variant-numeric: tabular-nums; }
-  .body { color: var(--dim); font-size: .85rem; overflow-wrap: anywhere;
-          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .inner { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .2rem; }
+  .badge { padding: 0 8px; border-radius: 999px; background: var(--chip); color: var(--ink); font-size: .75rem; line-height: 1.6; }
+  .badge.keep { color: var(--ok); } .badge.drop { color: var(--bad); } .badge.current { color: var(--accent); }
+  .note { padding: 0 8px; border-radius: 6px; background: var(--chip); color: var(--ink); font-size: .8125rem; }
+
+  .inner { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .inner a {
-    font-size: .78rem; color: var(--accent); text-decoration: none; background: var(--chip);
-    border-radius: 1rem; padding: .12rem .5rem; max-width: 22rem; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap;
+    max-width: 24rem; padding: 1px 10px; border-radius: 999px; background: var(--chip); color: var(--accent);
+    font-size: .8125rem; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .shots { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .35rem; }
+  .inner a.from-author { box-shadow: inset 0 0 0 1px var(--ok); }
+  @media (hover: hover) { .inner a:hover { text-decoration: underline; } }
+
+  .shots { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin-top: 8px; }
+  .shots a, .shots button.shot-btn { line-height: 0; border-radius: 6px; }
   .shots img {
-    height: 5.5rem; width: auto; max-width: 12rem; object-fit: cover; border-radius: .35rem;
-    border: 1px solid var(--line); background: var(--chip);
+    height: 5.5rem; width: auto; max-width: 12rem; object-fit: cover; border-radius: 6px;
+    background: var(--chip); outline: 1px solid var(--img-outline); outline-offset: -1px;
   }
-  .shots a, .shots button.shot-btn { line-height: 0; }
-  .shots button.shot-btn { padding: 0; border: 0; background: none; cursor: zoom-in; }
-  .shots img.shot-preview {
-    height: 7rem; max-width: 16rem; object-fit: cover; object-position: top;
-    border-color: var(--accent);
-  }
+  .shots button.shot-btn { min-height: 0; padding: 0; border: 0; background: none; cursor: zoom-in; }
+  .shots img.shot-preview { height: 7rem; max-width: 16rem; object-position: top; }
   .png {
-    font-size: .78rem; color: var(--dim); background: var(--chip); border-radius: .3rem;
-    padding: .1rem .4rem; font-family: ui-monospace, Menlo, monospace;
+    padding: 1px 8px; border-radius: 6px; background: var(--chip); color: var(--dim);
+    font: .8125rem/1.6 ui-monospace, Menlo, monospace; overflow-wrap: anywhere;
   }
-  .note { font-size: .82rem; background: var(--chip); border-radius: .3rem; padding: .1rem .4rem; display: inline-block; }
-  .acts { display: flex; gap: .25rem; opacity: 0; }
-  ul.rows li:hover .acts, ul.rows li:focus-within .acts { opacity: 1; }
-  .acts button { padding: .2rem .5rem; font-size: .78rem; }
-  .acts button:disabled { opacity: .5; cursor: default; }
-  /* The one action worth finding without hunting: always visible, not only on hover. */
-  li:not(:hover) .acts { opacity: 1; }
-  li:not(:hover) .acts button:not(:first-child) { opacity: 0; pointer-events: none; }
-  .acts button:first-child { border-color: var(--accent); color: var(--accent); }
-  .empty { color: var(--dim); text-align: center; padding: 4rem 1rem; border: 1px dashed var(--line); border-radius: .8rem; }
-  .empty b { display: block; color: var(--ink); font-size: 1.05rem; margin-bottom: .3rem; }
-  #msg { color: var(--dim); font-size: .82rem; min-height: 1.2rem; margin-top: .5rem; }
-  .panel {
-    background: var(--panel); border: 1px solid var(--line); border-radius: .6rem;
-    padding: .9rem 1rem; margin-bottom: 1rem;
+
+  .acts { display: flex; align-items: center; gap: 4px; }
+  .more { width: 28px; padding: 0; justify-content: center; font-size: 1rem; letter-spacing: .05em; }
+  .menu {
+    position: fixed; inset: auto; margin: 0; min-width: 12rem; padding: 4px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow);
   }
-  .panel p { margin: 0 0 .6rem; color: var(--dim); font-size: .85rem; }
-  .panel .row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .5rem; }
-  .panel .or { color: var(--dim); font-size: .82rem; }
-  .panel textarea {
-    width: 100%; min-height: 6rem; margin-top: .5rem; font-family: ui-monospace, Menlo, monospace;
-    font-size: .78rem; background: var(--bg); color: var(--ink); border: 1px solid var(--line);
-    border-radius: .4rem; padding: .5rem;
+  .menu button {
+    display: flex; width: 100%; min-height: 32px; padding: 6px 10px; justify-content: flex-start;
+    border: 0; border-radius: 6px; background: none;
   }
-  .panel button.go { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  #import-msg { font-size: .82rem; color: var(--dim); }
-  #import-msg.ok { color: var(--ok); } #import-msg.bad { color: var(--bad); }
-  kbd { background: var(--chip); border: 1px solid var(--line); border-bottom-width: 2px;
-        border-radius: .25rem; padding: 0 .25rem; font-size: .78rem; }
+  @media (hover: hover) { .menu button:hover:not(:disabled) { background: var(--chip); } }
+  .menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+
+  .empty {
+    padding: 64px 16px; text-align: center; color: var(--dim);
+    border: 1px dashed var(--line); border-radius: 12px;
+  }
+  .empty .title { margin: 0 0 4px; color: var(--ink); font-size: 1.0625rem; font-weight: 600; }
+  .empty p { margin: 0; }
+  .empty button { margin-top: 16px; }
+  kbd {
+    padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+    background: var(--chip); font: .8125rem ui-sans-serif, -apple-system, sans-serif;
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Link Keeper</h1>
-  <p class="sub" id="sub">loading…</p>
-
-  <div class="meter"><i class="k" id="bar-kept"></i><i class="s" id="bar-seen"></i><i class="x" id="bar-skipped"></i></div>
-
-  <div class="bar">
-    <input id="q" type="search" placeholder="Filter by URL, title, note…" autocomplete="off" spellcheck="false">
-    <div class="chips" role="group">
-      <button class="chip" id="f-all" aria-pressed="true">all</button>
-      <button class="chip" id="f-pending" aria-pressed="false">left</button>
-      <button class="chip" id="f-seen" aria-pressed="false">seen</button>
-      <button class="chip" id="f-skipped" aria-pressed="false">skipped</button>
-      <button class="chip" id="f-kept" aria-pressed="false">kept</button>
+  <header class="top">
+    <div class="heading">
+      <h1>Link Keeper</h1>
+      <p class="sub" id="sub">Loading…</p>
     </div>
-    <select id="groupby" title="Grouping">
-      <option value="domain">by domain</option>
-      <option value="status">by status</option>
-      <option value="flat">flat, newest first</option>
-      <option value="oldest">flat, oldest first</option>
-    </select>
-    <button id="to-cards" title="Judge the pending links as a shuffled card deck">Cards →</button>
-    <button id="show-import" title="Import capture JSONL produced outside the browser">Import…</button>
-    <button id="export">Export captures</button>
-    <button class="danger" id="tidy" title="Remove kept and seen entries from the list">Tidy</button>
-  </div>
+    <div class="page-actions">
+      <a class="btn" href="cards.html" title="Judge what you have read as a shuffled card deck">Cards →</a>
+      <button id="show-import" aria-expanded="false" aria-controls="import-panel"
+        title="Import capture JSONL produced outside the browser">Import…</button>
+      <button id="export">Export captures</button>
+      <button class="danger" id="tidy" title="Remove kept, seen and skipped entries from the list">Tidy…</button>
+    </div>
+  </header>
 
-  <div id="import-panel" class="panel hidden">
-    <p>Import capture JSONL — from <code>importers/enrich-x.py</code>, or an export from this
-    extension. Merged on URL; an imported record only fills in a link that has no text yet.</p>
+  <div class="meter" aria-hidden="true"><i class="k" id="bar-kept"></i><i class="s" id="bar-seen"></i><i class="x" id="bar-skipped"></i></div>
+
+  <section id="import-panel" class="panel" aria-labelledby="import-h" hidden>
+    <h2 id="import-h">Import captures</h2>
+    <p>Capture JSONL from <code>importers/enrich-x.py</code>, or an export from this extension. Records
+    merge on URL, and an imported record only fills in a link that has no text yet.</p>
     <div class="row">
+      <label class="sr-only" for="import-file">Capture file</label>
       <input type="file" id="import-file" accept=".jsonl,.json,.ndjson">
-      <span class="or">or paste it below</span>
+      <span class="sub">or paste it below</span>
     </div>
+    <label class="sr-only" for="import-text">Capture JSONL</label>
     <textarea id="import-text" placeholder='{"url": "https://x.com/…", "text": "…"}&#10;one JSON object per line'></textarea>
     <div class="row">
-      <button class="go" id="do-import">Import</button>
+      <button class="primary" id="do-import">Import</button>
       <button id="hide-import">Close</button>
-      <span id="import-msg"></span>
+      <span id="import-msg" role="status"></span>
     </div>
+  </section>
+
+  <div class="bar">
+    <label class="sr-only" for="q">Filter</label>
+    <input id="q" type="search" placeholder="Filter by URL, title, note…" autocomplete="off" spellcheck="false">
+    <div class="seg" role="group" aria-label="Status">
+      <button class="chip" id="f-all" aria-pressed="true">All</button>
+      <button class="chip" id="f-pending" aria-pressed="false">Left</button>
+      <button class="chip" id="f-seen" aria-pressed="false">Seen</button>
+      <button class="chip" id="f-skipped" aria-pressed="false">Skipped</button>
+      <button class="chip" id="f-kept" aria-pressed="false">Kept</button>
+    </div>
+    <label class="sr-only" for="groupby">Group by</label>
+    <select id="groupby">
+      <option value="domain">By domain</option>
+      <option value="status">By status</option>
+      <option value="flat">Newest first</option>
+      <option value="oldest">Oldest first</option>
+    </select>
   </div>
 
-  <div id="msg"></div>
-  <div class="chips domains" id="domains" role="group" title="Toggle domains; none selected shows all"></div>
+  <p id="msg" role="status"></p>
+  <div class="domains" id="domains" role="group" aria-label="Domains, none selected shows all"></div>
 
   <div id="out"></div>
 </div>

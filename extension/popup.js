@@ -27,11 +27,11 @@ function say(text, cls = "") {
 $("copy-msg").onclick = async () => {
   try {
     await navigator.clipboard.writeText($("msg").textContent);
-    $("copy-msg").textContent = "copied";
+    $("copy-msg").textContent = "Copied";
   } catch (e) {
-    $("copy-msg").textContent = "blocked";
+    $("copy-msg").textContent = "Copy failed";
   }
-  setTimeout(() => ($("copy-msg").textContent = "copy"), 1200);
+  setTimeout(() => ($("copy-msg").textContent = "Copy"), 1200);
 };
 
 function short(url) {
@@ -65,38 +65,65 @@ async function refresh() {
   const s = await send({ type: "status" });
   const { pending = 0, seen = 0, kept = 0, skipped = 0 } = s.counts;
 
-  $("tally").innerHTML = "";
-  $("tally").append(document.createTextNode(""));
-  $("tally").textContent = s.total
-    ? `${kept} kept${skipped ? ` · ${skipped} skipped` : ""} · ${pending} left of ${s.total}`
-    : "no links yet";
+  const tally = $("tally");
+  tally.textContent = "";
+  if (s.total) {
+    const parts = [[kept, "kept"], ...(skipped ? [[skipped, "skipped"]] : []), [pending, `left of ${s.total}`]];
+    parts.forEach(([n, what], i) => {
+      if (i) tally.append(" · ");
+      tally.append(Object.assign(document.createElement("b"), { textContent: n }), ` ${what}`);
+    });
+  } else {
+    tally.textContent = "No links yet";
+  }
   $("bar-kept").style.width = s.total ? `${kept / s.total * 100}%` : "0";
   $("bar-seen").style.width = s.total ? `${seen / s.total * 100}%` : "0";
   $("bar-skipped").style.width = s.total ? `${skipped / s.total * 100}%` : "0";
 
   // Show what you are on if it came from the list, otherwise what is coming next.
-  if (s.current?.isOpen) {
+  const onPage = !!s.current?.isOpen;
+  if (onPage) {
     $("now-lbl").textContent = "on now";
     $("now-url").textContent = short(s.current.url);
+    $("now-url").title = s.current.url;
   } else if (s.next) {
     $("now-lbl").textContent = "next";
     $("now-url").textContent = short(s.next);
+    $("now-url").title = s.next;
   } else {
     $("now-lbl").textContent = s.total ? "done" : "next";
-    $("now-url").textContent = s.total ? "nothing pending" : "list is empty";
+    $("now-url").textContent = s.total ? "Nothing pending" : "The list is empty";
+    $("now-url").title = "";
   }
 
+  // One filled action: Keep while a list item is open in this tab, Next otherwise.
+  $("keep").classList.toggle("primary", onPage);
+  $("next").classList.toggle("primary", !onPage && !!s.next);
   $("next").disabled = !s.next;
 
   $("recent").textContent = "";
   for (const r of s.recent) {
+    const text = r.label || short(r.url);
     const li = document.createElement("li");
-    const b = document.createElement("b");
-    b.textContent = r.label || short(r.url);
-    li.append(b);
-    if (r.links) li.append(document.createTextNode(` +${r.links} link${r.links > 1 ? "s" : ""}`));
+    li.title = text;
+    const lbl = document.createElement("span");
+    lbl.className = "lbl";
+    // "@handle: text" and "@handle — title" read best with the handle set apart.
+    const m = /^(@\S+)(?::| —) (.*)$/s.exec(text);
+    if (m) {
+      lbl.append(Object.assign(document.createElement("span"), { className: "who", textContent: m[1] }), ` ${m[2]}`);
+    } else {
+      lbl.append(Object.assign(document.createElement("span"), { className: "who", textContent: text }));
+    }
+    li.append(lbl);
+    if (r.links) {
+      li.append(Object.assign(document.createElement("span"), {
+        className: "n", textContent: `+${r.links} link${r.links > 1 ? "s" : ""}`,
+      }));
+    }
     $("recent").append(li);
   }
+  $("recent-box").hidden = !s.recent.length;
   $("export").disabled = !s.captures;
 }
 

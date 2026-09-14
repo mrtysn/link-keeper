@@ -37,7 +37,8 @@ async function setCaptures(captures) {
 async function paintBadge(items) {
   const pending = (items || await getItems()).filter(i => i.status === "pending").length;
   await browser.action.setBadgeText({ text: pending ? String(pending) : "" });
-  await browser.action.setBadgeBackgroundColor({ color: "#7a5cff" });
+  await browser.action.setBadgeBackgroundColor({ color: "#6647e6" });
+  await browser.action.setBadgeTextColor({ color: "#ffffff" });
 }
 
 /* --- worklist ------------------------------------------------------------------- */
@@ -64,6 +65,19 @@ function dateOf(item) {
 }
 
 const byNewest = (a, b) => String(dateOf(b)).localeCompare(String(dateOf(a)));
+
+/* X's API dates ("Wed Sep 09 14:06:01 +0000 2026") neither sort nor slice like ISO strings, and
+ * Date.parse is not required to read them, so that shape is converted by hand. */
+const MONTHS = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+function isoDate(value) {
+  if (!value) return null;
+  const m = /^\w{3} (\w{3}) (\d{2}) (\d{2}:\d{2}:\d{2}) ([+-]\d{2})(\d{2}) (\d{4})$/.exec(value);
+  const text = m && MONTHS[m[1]]
+    ? `${m[6]}-${String(MONTHS[m[1]]).padStart(2, "0")}-${m[2]}T${m[3]}${m[4]}:${m[5]}`
+    : value;
+  const t = Date.parse(text);
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+}
 
 async function addItems(entries, note = "") {
   const items = await getItems();
@@ -727,7 +741,7 @@ browser.runtime.onMessage.addListener(async msg => {
             url: c.url,
             status: "kept",
             added_at: c.captured_at,
-            saved_at: c.posted || null,
+            saved_at: isoDate(c.posted),
             note: c.note || null,
             current: false,
             cap: {
