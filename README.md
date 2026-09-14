@@ -55,15 +55,28 @@ Only links that resolved to nothing need anything more, and the command prints t
 
 ## Install
 
-Requires Firefox 128 or newer. No build step, no dependencies.
+Requires Firefox 142 or newer. No build step, no dependencies.
 
 `about:debugging#/runtime/this-firefox` → *Load Temporary Add-on* → select
 `extension/manifest.json`.
 
-Temporary add-ons unload when Firefox restarts. For a permanent install, submit the
-`extension/` directory to [AMO](https://addons.mozilla.org/developers/) as an unlisted add-on
-and install the signed `.xpi` it returns. Unsigned permanent installs work only in Developer
-Edition or Nightly with `xpinstall.signatures.required=false`.
+Temporary add-ons unload when Firefox restarts, so that route is for trying unsigned changes.
+The permanent install is a build signed through [AMO](https://addons.mozilla.org/developers/)'s
+unlisted channel: nothing is listed or published, and the signed `.xpi` is installable only by
+whoever holds the file. A signature covers exactly the files it was issued for, so every change
+ships as a new version.
+
+1. Raise `version` in `extension/manifest.json`; AMO refuses a version it has already signed.
+2. The AMO API credentials, from https://addons.mozilla.org/developers/addon/api/key/, live in
+   Doppler: project `firefox-signing`, config `prd`, as `WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET`
+   — the names web-ext reads. The same keys sign every Firefox extension on this account. A copy
+   sits in the login keychain as `amo-jwt-issuer` and `amo-jwt-secret`; a rotated key goes to both.
+3. Sign from `extension/`:
+
+       doppler run --project firefox-signing --config prd -- npx web-ext sign --channel unlisted
+
+4. Open the new file in `extension/web-ext-artifacts/` with Firefox and confirm the install. It
+   replaces the previous version in place; the pinned add-on id keeps the list and captures.
 
 ## Use
 
