@@ -14,6 +14,13 @@ Reads the same format the importers emit, so it composes:
 
 Non-x.com lines pass through untouched on stderr as a count; they still need the extension.
 
+    ./telegram.py result.json | ./enrich-x.py --reuse link-captures-x.prev.jsonl > link-captures-x.jsonl
+
+`--reuse` hands back the previous run's record for every status id it already holds and fetches
+only the rest. A tweet's content does not change, so this is safe, and it is what keeps a record
+alive when the API has a bad day: without it a single transient failure would erase a capture
+the previous run had.
+
 ## What this cannot get
 
 **Replies.** FxTwitter returns a reply *count*, never reply content, and no `?thread` variant
@@ -64,7 +71,29 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--limit", type=int, help="stop after this many links (for a quick trial)")
     p.add_argument("--pace", type=float, default=0.35, help="seconds between requests (default 0.35)")
     p.add_argument("--timeout", type=float, default=15.0, help="per-request timeout in seconds")
+    p.add_argument("--reuse", metavar="JSONL",
+                   help="previous output; its records are emitted as-is and only new ids are fetched")
     return p.parse_args()
+
+
+def load_previous(path: str | None) -> dict[str, dict]:
+    """status id -> record from an earlier run, empty when there is none yet."""
+    out: dict[str, dict] = {}
+    if not path:
+        return out
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                record = json.loads(line)
+                sid = record.get("status_id")
+                if sid:
+                    out[str(sid)] = record
+    except FileNotFoundError:
+        pass
+    return out
 
 
 def fetch(status_id: str, timeout: float, attempts: int = 2) -> dict | None:
@@ -191,8 +220,17 @@ def main() -> int:
     if args.limit:
         unique = unique[: args.limit]
 
-    print(f"{len(unique)} x.com links to resolve; {skipped} other links left for the extension",
-          file=sys.stderr)
+    previous = load_previous(args.reuse)
+    reused = 0
+    if previous:
+        keep = [(sid, url, date) for sid, url, date in unique if sid in previous]
+        unique = [(sid, url, date) for sid, url, date in unique if sid not in previous]
+        for sid, url, date in keep:
+            print(jsonl(previous[sid]), flush=True)
+        reused = len(keep)
+
+    print(f"{len(unique)} x.com links to resolve, {reused} reused from the previous run; "
+          f"{skipped} other links left for the extension", file=sys.stderr)
 
     ok = failed = 0
     counts = {"tweet": 0, "x-article": 0}
@@ -220,7 +258,7 @@ def main() -> int:
     print(f"  {len(needs)} look like they point at their replies (not retrievable here)", file=sys.stderr)
     # No x.com links in the input is a clean run, not a failure — only report failure when
     # there was work and none of it resolved.
-    return 0 if ok or not unique else 1
+    return 0 if ok or reused or not unique else 1
 
 
 if __name__ == "__main__":

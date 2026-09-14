@@ -143,7 +143,11 @@ fi
 enrich_input=$(print -r -- "$worklist" | grep -vE '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' || true)
 
 print "1/7  x.com via FxTwitter"
-print -r -- "$enrich_input" | "$repo/importers/enrich-x.py" > "$x_jsonl"
+# The previous run's records are reused, so only new ids are fetched and a transient failure
+# cannot erase a capture that already exists. The output must not be the reuse file itself.
+x_prev=$outdir/link-captures-x.prev.jsonl
+[[ -s $x_jsonl ]] && cp "$x_jsonl" "$x_prev"
+print -r -- "$enrich_input" | "$repo/importers/enrich-x.py" --reuse "$x_prev" > "$x_jsonl"
 
 print "\n2/7  everything else via og: tags and free APIs"
 print -r -- "$enrich_input" \
