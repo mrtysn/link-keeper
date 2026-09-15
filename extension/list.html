@@ -5,14 +5,17 @@
 <title>Link Keeper — list</title>
 <style>
   :root {
-    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #6b6b6b; --line: #e4e0da; --mark: #8a857d;
+    /* Measured in WCAG 2 and APCA on every ground these pages use. WCAG overrates light text on a
+       dark ground, so the dark greys, accent and reds were lifted until APCA agreed; only lightness
+       moved. --field is a field's edge (3:1), --prose is text that runs to lines (Lc 75+). */
+    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #555555; --line: #e4e0da; --mark: #8a857d; --field: #95918b; --prose: #555555;
     --accent: #6647e6; --on-accent: #fff; --ok: #107647; --bad: #b33a28; --seen: #8a7a3f; --chip: #f1eee9;
     --img-outline: rgb(0 0 0 / .1); --shadow: 0 8px 24px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .08);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #16171a; --panel: #22252a; --ink: #e8e6e3; --dim: #9a9793; --line: #2c2f34; --mark: #6b6f77;
-      --accent: #a992ff; --on-accent: #16171a; --ok: #4fcf95; --bad: #ff8b74; --seen: #d8c47a; --chip: #2a2e34;
+      --bg: #16171a; --panel: #22252a; --ink: #e8e6e3; --dim: #c0bdb9; --line: #2c2f34; --mark: #6b6f77; --field: #7d8289; --prose: #d8d5d1;
+      --accent: #c1b4fe; --on-accent: #16171a; --ok: #4fcf95; --bad: #ffa693; --seen: #d8c47a; --chip: #2a2e34;
       --img-outline: rgb(255 255 255 / .1); --shadow: 0 8px 24px rgb(0 0 0 / .45), 0 1px 3px rgb(0 0 0 / .3);
     }
   }
@@ -49,7 +52,7 @@
     text-decoration: none; white-space: nowrap;
     transition-property: border-color, background-color, color; transition-duration: 150ms;
   }
-  select { display: inline-block; padding-right: 8px; }
+  select { display: inline-block; padding-right: 8px; border-color: var(--field); }
   button:disabled { opacity: .5; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
   button.danger, .danger { color: var(--bad); }
@@ -72,7 +75,7 @@
   }
   #q {
     flex: 1 1 14rem; min-width: 0; min-height: 34px; padding: 6px 12px; font: inherit; font-size: .9375rem;
-    color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--field); border-radius: 8px;
   }
   .seg { display: flex; flex-wrap: wrap; gap: 4px; }
   .chip {
@@ -96,7 +99,7 @@
   .panel textarea {
     display: block; width: 100%; min-height: 6rem; margin-top: 12px; padding: 8px 10px;
     font: .8125rem/1.5 ui-monospace, Menlo, monospace; color: var(--ink); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 8px;
+    border: 1px solid var(--field); border-radius: 8px;
   }
   #import-msg { font-size: .875rem; color: var(--dim); }
   #import-msg.ok { color: var(--ok); } #import-msg.bad { color: var(--bad); }
@@ -134,7 +137,8 @@
   }
   li[data-status="kept"] .mark::before { content: "✓"; color: var(--ok); }
   li[data-status="skipped"] .mark::before { content: "✕"; color: var(--bad); font-size: 11px; }
-  li[data-status="skipped"] .ttl { opacity: .6; text-decoration: line-through; }
+  /* The strike says skipped; the title stays readable (opacity .6 left it at Lc 43). */
+  li[data-status="skipped"] .ttl { color: var(--dim); text-decoration: line-through; }
 
   .main { min-width: 0; }
   .ttl {
@@ -145,7 +149,7 @@
   .ttl.plain { font: .8125rem/1.6 ui-monospace, Menlo, monospace; -webkit-line-clamp: 2; }
   @media (hover: hover) { a.ttl:hover { color: var(--accent); } }
   .body {
-    margin-top: 2px; color: var(--dim); font-size: .875rem; overflow-wrap: anywhere;
+    margin-top: 2px; color: var(--prose); font-size: .875rem; overflow-wrap: anywhere;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   }
   .meta {

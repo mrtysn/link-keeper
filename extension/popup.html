@@ -4,13 +4,16 @@
 <meta charset="utf-8">
 <style>
   :root {
-    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #6b6b6b; --line: #e4e0da; --mark: #8a857d;
+    /* Measured in WCAG 2 and APCA on every ground these pages use. WCAG overrates light text on a
+       dark ground, so the dark greys, accent and reds were lifted until APCA agreed; only lightness
+       moved. --field is a field's edge (3:1), --prose is text that runs to lines (Lc 75+). */
+    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #555555; --line: #e4e0da; --mark: #8a857d; --field: #95918b; --prose: #555555;
     --accent: #6647e6; --on-accent: #fff; --ok: #107647; --bad: #b33a28; --seen: #8a7a3f; --chip: #f1eee9;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #1c1e22; --panel: #24272c; --ink: #e8e6e3; --dim: #9a9793; --line: #33373d; --mark: #6b6f77;
-      --accent: #a992ff; --on-accent: #16171a; --ok: #4fcf95; --bad: #ff8b74; --seen: #d8c47a; --chip: #2b2f35;
+      --bg: #1c1e22; --panel: #24272c; --ink: #e8e6e3; --dim: #c0bdb9; --line: #33373d; --mark: #6b6f77; --field: #7d8289; --prose: #d8d5d1;
+      --accent: #c1b4fe; --on-accent: #16171a; --ok: #4fcf95; --bad: #ffa693; --seen: #d8c47a; --chip: #2b2f35;
     }
   }
   * { box-sizing: border-box; }
@@ -62,7 +65,7 @@
 
   input, textarea {
     font: inherit; width: 100%; background: var(--panel); color: var(--ink);
-    border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px;
+    border: 1px solid var(--field); border-radius: 8px; padding: 6px 9px;
   }
   textarea { display: block; min-height: 4.5rem; resize: vertical; font: 12px/1.45 ui-monospace, Menlo, monospace; }
 
@@ -98,7 +101,7 @@
   details .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
   .wide { grid-column: 1 / -1; }
   details label { display: block; margin: 12px 0 4px; color: var(--dim); font-size: 12px; }
-  details p { margin: 8px 0 0; color: var(--dim); font-size: 12px; text-wrap: pretty; }
+  details p { margin: 8px 0 0; color: var(--prose); font-size: 12px; text-wrap: pretty; }
   code { background: var(--chip); padding: 0 .2rem; border-radius: .2rem; }
 </style>
 </head>

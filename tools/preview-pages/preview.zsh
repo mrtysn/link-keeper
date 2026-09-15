@@ -11,7 +11,8 @@
 #   preview.zsh --no-serve               # build only; rerun after editing a page
 #   preview.zsh --captures file.jsonl    # default: $DATA_DIR/link-captures-all.jsonl
 #
-# Pages: frame.html shows three popup states side by side; popup.html and list.html open alone.
+# Pages: frame.html shows three popup states side by side; popup.html, list.html and cards.html
+# open alone.
 # Query flags on either page:
 #   msg      restore a message, as if a keep just happened
 #   add      open "Add links"            house   open "Export and housekeeping"
@@ -29,7 +30,7 @@ ext=$repo/extension
 out=$here/out
 
 if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
@@ -56,7 +57,7 @@ fi
 
 mkdir -p "$out"
 stamp=$(date +%s)
-for page in popup list; do
+for page in popup list cards; do
   sed -e "s#<meta charset=\"utf-8\">#<meta charset=\"utf-8\"><meta name=\"darkreader-lock\">#" \
       -e "s#<script src=\"$page.js\"></script>#<script src=\"mock-data.js?v=$stamp\"></script><script src=\"mock-browser.js?v=$stamp\"></script><script src=\"$page.js?v=$stamp\"></script>#" \
       "$ext/$page.html" > "$out/$page.html"
@@ -69,5 +70,6 @@ python3 "$here/make-mock.py" "$captures" "$out/mock-data.js"
 (( serve )) || exit 0
 print "http://127.0.0.1:$port/frame.html"
 print "http://127.0.0.1:$port/list.html"
+print "http://127.0.0.1:$port/cards.html"
 cd "$out"
 exec python3 -m http.server "$port" --bind 127.0.0.1
