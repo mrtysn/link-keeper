@@ -61,8 +61,10 @@ UA = {'User-Agent': 'Mozilla/5.0'}
 TIMEOUT = 30
 # The key metacritic.com ships in its own pages — public, not an account credential.
 MC_KEY = '1MOZgmNFxvmljaQR1X9KAij9Mo4xAY3u'
-# Titles whose common spelling is not the one the score sites file them under.
-ALIAS = {'12monkeys': 'twelvemonkeys'}
+# IMDb's name for a title is not always the one a score site files it under. An alias is tried
+# only after the real title finds nothing, since the sites disagree with each other too: RT has
+# "12 Monkeys" where Metacritic has "Twelve Monkeys". Keyed by normalised title.
+ALIAS = {'12monkeys': 'Twelve Monkeys', 'jurydutypresents': 'Jury Duty'}
 
 norm = lambda x: re.sub(r'[^a-z0-9]', '', html.unescape(x).lower().replace('&', 'and'))
 
@@ -152,17 +154,20 @@ def pick(rows, title, year, tv):
     """The row that is this title: same name, same type, within a year of IMDb's."""
     t = norm(title)
     bare = lambda r: norm(re.sub(r'\s*\(\d{4}\)$', '', r['title']))
-    rows = ([r for r in rows if bare(r) in (t, ALIAS.get(t))]
+    rows = ([r for r in rows if bare(r) in (t, norm(ALIAS.get(t, '')))]
             or [r for r in rows if len(t) > 6 and t in bare(r)])
+    # A site's year is its own release, which can trail IMDb's by more than a year on a foreign
+    # or festival title — so an unambiguous name match outranks the year filter.
     if year:
-        rows = [r for r in rows if r['year'] and abs(r['year'] - year) <= 1]
+        near = [r for r in rows if r['year'] and abs(r['year'] - year) <= 1]
+        # An unambiguous name match survives a wider gap, but never a different decade's title.
+        rows = near or ([r for r in rows if r['year'] and abs(r['year'] - year) <= 3][:1] if len(rows) == 1 else [])
     rows.sort(key=lambda r: (r['tv'] != tv, abs((r['year'] or 0) - (year or 0)), not r['score']))
     return rows[0] if rows else None
 
 
 def metacritic(title, year, tv):
-    q = urllib.parse.quote(title)
-    d = json.loads(get(f'https://backend.metacritic.com/finder/metacritic/search/{q}/web'
+    d = json.loads(get(f'https://backend.metacritic.com/finder/metacritic/search/{urllib.parse.quote(title)}/web'
                        f'?apiKey={MC_KEY}&offset=0&limit=30'))
     rows = [{'title': x['title'], 'year': x.get('premiereYear'),
              'score': (x.get('criticScoreSummary') or {}).get('score'), 'tv': x['type'] == 'show',
@@ -192,9 +197,11 @@ def add_scores(pair):
     item, info = pair
     if not (info and info.get('l')):
         return pair
+    title, alias = info['l'], ALIAS.get(norm(info['l']))
     for key, fetch in (('mc', metacritic), ('rt', rotten)):
         try:
-            info[key] = fetch(info['l'], info.get('y'), 'TV' in info.get('q', ''))
+            tv = 'TV' in info.get('q', '')
+            info[key] = fetch(title, info.get('y'), tv) or (alias and fetch(alias, info.get('y'), tv))
         except Exception as e:
             info[key] = None
             print(f'  ! {key} {info["l"]}: {e}', file=sys.stderr)
