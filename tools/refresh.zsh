@@ -175,12 +175,12 @@ else
   : > "$reels_jsonl"
   print "  no packs yet — reels arrive here once links are shared"
 fi
-# An instagram link whose pack failed (image post, dead reel) must not vanish: it goes onto the
+# An instagram link whose pack failed (deleted reel, private post) must not vanish: it goes onto the
 # unresolved queue so the browser handoff still carries it.
 if [[ -n $reel_urls ]]; then
   while IFS= read -r u; do
     code=$(print -r -- "$u" | sed -nE 's#.*instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+).*#\2#p')
-    [[ -n $code && ! -s $reels_dir/$code/transcript.txt ]] && print -r -- "$u" >> "$unresolved"
+    [[ -n $code && ! -s $reels_dir/$code/meta.json ]] && print -r -- "$u" >> "$unresolved"
   done <<< "$reel_urls"
 fi
 

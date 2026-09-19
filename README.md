@@ -21,7 +21,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`preview-pages/preview.zsh` — render the popup and list pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`watch-reel.zsh` — turn an Instagram reel into a transcript + keyframes an agent can read<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`preview-pages/preview.zsh` — render the popup and list pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -247,7 +247,29 @@ this whenever an export containing messages exists — Instagram exports are per
 A reel is a video, so a captured URL is not yet captured content. `tools/watch-reel.zsh` closes that
 gap: it downloads the MP4 anonymously (yt-dlp, no login involved), transcribes the audio locally
 (mlx-whisper), and extracts one frame per second — a watch-pack an agent can read instead of a video
-only a human could watch. Idempotent per reel; point it at a capture file with `--from`.
+only a human could watch. Idempotent per reel; point it at a capture file with `--from`. A carousel post is not a video at
+all, so it is saved slide by slide instead — each image at full size, each video slide with its own
+frames and transcript — which is what a post whose slides *are* the content needs.
+
+### A chat full of films
+
+`tools/chat-to-watchlist.py` is for the group where films get thrown at each other. It reads a
+Telegram export and renders every title as a poster card carrying its IMDb rating, Metacritic
+score and tomatometer, sortable by any of the three in either direction:
+
+    ./tools/chat-to-watchlist.py result.json -o watchlist.html --overrides chat.json
+
+IMDb links resolve exactly, by id. A typed name resolves to IMDb's top hit and the card says so,
+because that is a guess. Anything else — a Netflix link, a reel, a slide of a carousel — resolves
+only because the overrides file names the title, so the guessing stays in a file you can correct
+rather than in the script. That file holds everything specific to one chat, which is also what
+keeps a private chat's contents out of this repo; the script's header documents its shape. The
+page's opening line is counted from the data at render time, so rebuilding cannot leave it stale.
+
+Scores need no login and no key of yours: IMDb's public GraphQL endpoint, Metacritic's search API
+with the key its own pages embed, and Rotten Tomatoes' search page. A score is only attached when
+the title, the type (film or series) and the year all agree with IMDb's, so *Chernobyl* the
+mini-series does not inherit a same-named film's rating.
 
 ### Links from the replies
 
