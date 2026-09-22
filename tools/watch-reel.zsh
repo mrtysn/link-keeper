@@ -38,8 +38,9 @@ if [[ ${1:-} == -h || ${1:-} == --help || $# -eq 0 ]]; then
   exit 0
 fi
 
-DATA_DIR=${DATA_DIR:-$PWD}
+env_data=${DATA_DIR:-}
 [[ -r $repo/config.local.sh ]] && source "$repo/config.local.sh"
+DATA_DIR=${env_data:-${DATA_DIR:-$repo/data}}
 REELS_DIR=${REELS_DIR:-$DATA_DIR/reels}
 WHISPER_MODEL=${WHISPER_MODEL:-mlx-community/whisper-large-v3-turbo}
 

@@ -45,14 +45,14 @@ for a in "$@"; do
 done
 
 # --- configuration -------------------------------------------------------------
-# Precedence: environment > config.local.sh > built-in default. The env value is captured
-# before sourcing the config, which would otherwise clobber it.
+# Precedence: environment > config.local.sh > built-in default (this repo's own data/). The env
+# value is captured before sourcing the config, which would otherwise clobber it.
 
 env_tg=${TELEGRAM_EXPORT_DIR:-} env_ig=${INSTAGRAM_EXPORT_DIR:-} env_data=${DATA_DIR:-} env_port=${SERVE_PORT:-}
 [[ -r $repo/config.local.sh ]] && source "$repo/config.local.sh"
 TELEGRAM_EXPORT_DIR=${env_tg:-${TELEGRAM_EXPORT_DIR:-$HOME/Downloads/Telegram Desktop}}
 INSTAGRAM_EXPORT_DIR=${env_ig:-${INSTAGRAM_EXPORT_DIR:-$HOME/Downloads}}
-DATA_DIR=${env_data:-${DATA_DIR:-$PWD}}
+DATA_DIR=${env_data:-${DATA_DIR:-$repo/data}}
 SERVE_PORT=${env_port:-${SERVE_PORT:-8790}}
 
 # --- what to read, what to write ------------------------------------------------
@@ -69,7 +69,11 @@ else
 fi
 
 outdir=${args[2]:-$DATA_DIR}
-[[ -d $outdir ]] || { print -u2 "no such directory: $outdir"; exit 1 }
+if [[ -z ${args[2]:-} && $outdir == $repo/data ]]; then
+  mkdir -p "$outdir"
+else
+  [[ -d $outdir ]] || { print -u2 "no such directory: $outdir"; exit 1 }
+fi
 inbox=$outdir/link-inbox.tsv
 
 # Instagram is optional: the newest instagram-* zip or unzipped directory that actually holds

@@ -18,7 +18,8 @@ Usage:
     ./extension-diff.py path/to/link-captures-all.jsonl
     ./extension-diff.py --all                            # list every missing capture, not just 20
 
-DATA_DIR comes from the environment, else from config.local.sh at this repo's root.
+DATA_DIR comes from the environment, else from config.local.sh at this repo's root, else this
+repo's own data/.
 
 Exit status: 0 when the extension holds everything, 1 when something is missing, 2 when a file or the
 extension's storage cannot be read.
@@ -73,16 +74,17 @@ def stamp(p: Path) -> str:
     return datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
 
 
-def data_dir() -> Path | None:
+def data_dir() -> Path:
     if os.environ.get("DATA_DIR"):
         return Path(os.environ["DATA_DIR"]).expanduser()
     cfg = REPO / "config.local.sh"
-    if not cfg.is_file():
-        return None
-    out = subprocess.run(["zsh", "-c", 'source "$1" && print -r -- "${DATA_DIR:-}"', "zsh", str(cfg)],
-                         capture_output=True, text=True)
-    value = out.stdout.strip()
-    return Path(value) if out.returncode == 0 and value else None
+    if cfg.is_file():
+        out = subprocess.run(["zsh", "-c", 'source "$1" && print -r -- "${DATA_DIR:-}"', "zsh", str(cfg)],
+                             capture_output=True, text=True)
+        value = out.stdout.strip()
+        if out.returncode == 0 and value:
+            return Path(value)
+    return REPO / "data"
 
 
 def load_extension_url():
@@ -256,11 +258,7 @@ def main() -> int:
 
     captures_path = args.captures
     if not captures_path:
-        d = data_dir()
-        if not d:
-            return fail("no capture file given, and DATA_DIR is set neither in the environment nor in "
-                        "config.local.sh")
-        captures_path = d / "link-captures-all.jsonl"
+        captures_path = data_dir() / "link-captures-all.jsonl"
     if not captures_path.is_file():
         return fail(f"no such capture file: {captures_path}")
     outdir = captures_path.parent

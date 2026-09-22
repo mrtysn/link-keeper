@@ -47,8 +47,9 @@ Two alternative intakes exist for the same inbox: `importers/telegram-pull.py` r
 directly through Telegram's API (needs a my.telegram.org login), and plain chat exports keep working
 as the manual fallback. All three feed the same refresh; `config.local.sh.example` shows the knobs.
 
-Copy `config.local.sh.example` to `config.local.sh` and set `DATA_DIR` first; that is the only setup,
-and nothing machine-specific is committed. Symlink `tools/refresh.zsh` onto your PATH as
+Rebuilt files land in `data/` at the repo root by default — nothing to set up. Copy
+`config.local.sh.example` to `config.local.sh` only if you want `DATA_DIR` pointed somewhere else;
+nothing machine-specific is committed. Symlink `tools/refresh.zsh` onto your PATH as
 `link-refresh`, or call it by path.
 
 Only links that resolved to nothing need anything more, and the command prints those.

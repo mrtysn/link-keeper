@@ -23,7 +23,7 @@ dedupes. Media and plain notes are ignored — only messages carrying links matt
 
 Usage:
     ./telegram-pull.py --login          # first run, interactive
-    ./telegram-pull.py                  # pull new links into $DATA_DIR/link-inbox.tsv
+    ./telegram-pull.py                  # pull new links into $DATA_DIR/link-inbox.tsv (default: <repo>/data)
     ./telegram-pull.py --inbox f.tsv    # explicit inbox path
     ./telegram-pull.py --all            # ignore state, re-read the whole history
 """
@@ -131,11 +131,11 @@ def main() -> int:
         return 1
 
     if not args.inbox:
-        data_dir = config_value("DATA_DIR")
-        if not data_dir:
-            print("no --inbox and no DATA_DIR configured", file=sys.stderr)
-            return 1
-        args.inbox = str(Path(data_dir) / "link-inbox.tsv")
+        configured = config_value("DATA_DIR")
+        data_dir = Path(configured) if configured else Path(__file__).resolve().parent.parent / "data"
+        if not configured:
+            data_dir.mkdir(parents=True, exist_ok=True)
+        args.inbox = str(data_dir / "link-inbox.tsv")
 
     return asyncio.run(run(args, int(api_id), api_hash))
 

@@ -1,7 +1,8 @@
 # Copy to config.local.sh (gitignored) and fill in. Nothing machine-specific belongs in the repo.
 
-# Where the rebuilt files go — your notes or data directory.
-DATA_DIR=$HOME/dev/notebook
+# Where the rebuilt files go. Optional — defaults to data/ in this repo; set this only to point
+# it somewhere else, such as your notes or a data directory outside the repo.
+#DATA_DIR=$HOME/notes/link-data
 
 # Where Telegram Desktop drops its exports. The default below is Telegram's own default.
 TELEGRAM_EXPORT_DIR="$HOME/Downloads/Telegram Desktop"
@@ -11,7 +12,7 @@ TELEGRAM_EXPORT_DIR="$HOME/Downloads/Telegram Desktop"
 INSTAGRAM_EXPORT_DIR="$HOME/Downloads"
 
 # Where watch-reel.zsh builds its packs (video, transcript, frames). Defaults to $DATA_DIR/reels.
-#REELS_DIR="$HOME/dev/notebook/reels"
+#REELS_DIR="$DATA_DIR/reels"
 
 # Loopback port the rebuilt file is offered on, for the extension to collect.
 SERVE_PORT=8790

@@ -19,8 +19,8 @@
 #   onpage   a list item is open in the current tab
 #   light    drop the dark-scheme rules to show the light palette
 #
-# DATA_DIR comes from the environment, else from config.local.sh at the repo root. out/ holds
-# captured text and is gitignored.
+# DATA_DIR comes from the environment, else from config.local.sh at the repo root, else this
+# repo's own data/. out/ holds captured text and is gitignored.
 
 set -euo pipefail
 
@@ -49,8 +49,7 @@ done
 if [[ -z $captures ]]; then
   env_data=${DATA_DIR:-}
   [[ -r $repo/config.local.sh ]] && source "$repo/config.local.sh"
-  data=${env_data:-${DATA_DIR:-}}
-  [[ -n $data ]] || { print -u2 "DATA_DIR is not set in the environment or config.local.sh; pass --captures"; exit 1 }
+  data=${env_data:-${DATA_DIR:-$repo/data}}
   captures=$data/link-captures-all.jsonl
 fi
 [[ -f $captures ]] || { print -u2 "no such capture file: $captures"; exit 1 }

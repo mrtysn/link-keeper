@@ -13,7 +13,7 @@ The transcript is appended to the caption under a marker line. Silent reels carr
 nothing to read, go watch it.
 
 Usage:
-    ./reels-to-captures.py                      # packs from $DATA_DIR/reels (config.local.sh)
+    ./reels-to-captures.py                      # packs from REELS_DIR / $DATA_DIR/reels / <repo>/data/reels
     ./reels-to-captures.py <reels-dir>          # explicit pack directory
     ./reels-to-captures.py <reels-dir> -o f.jsonl
 """
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -38,18 +39,24 @@ def looks_hallucinated(lines: list[str]) -> bool:
 LINE_SEPARATORS = {0x2028: "\\u2028", 0x2029: "\\u2029"}
 
 
-def default_reels_dir() -> Path | None:
-    """Resolve $DATA_DIR/reels the same way the zsh tools do: config.local.sh wins."""
+def default_reels_dir() -> Path:
+    """Resolve REELS_DIR the same way the zsh tools do: environment, then config.local.sh, then
+    this repo's own data/reels."""
     repo = Path(__file__).resolve().parent.parent
+    env_reels, env_data = os.environ.get("REELS_DIR"), os.environ.get("DATA_DIR")
+    reels_dir = data_dir = None
     config = repo / "config.local.sh"
     if config.is_file():
         out = subprocess.run(
-            ["zsh", "-c", f'source "{config}" && print -rn -- "${{REELS_DIR:-${{DATA_DIR:-}}/reels}}"'],
+            ["zsh", "-c", f'source "{config}" && print -r -- "${{REELS_DIR:-}}\\t${{DATA_DIR:-}}"'],
             capture_output=True, text=True,
-        ).stdout.strip()
-        if out and out != "/reels":
-            return Path(out)
-    return None
+        ).stdout.rstrip("\n")
+        reels_dir, _, data_dir = out.partition("\t")
+    reels_dir = env_reels or reels_dir or None
+    if reels_dir:
+        return Path(reels_dir)
+    data_dir = env_data or data_dir or str(repo / "data")
+    return Path(data_dir) / "reels"
 
 
 def record(pack: Path) -> dict | None:

@@ -3,6 +3,9 @@ link-captures.jsonl
 *.jsonl
 *.token
 
+# This repo's own working data — the built-in default for DATA_DIR.
+data/
+
 __pycache__/
 *.pyc
 
