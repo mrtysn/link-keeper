@@ -21,7 +21,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`preview-pages/preview.zsh` — render the popup and list pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`preview-pages/preview.zsh` — render the popup and list pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -251,6 +251,28 @@ gap: it downloads the MP4 anonymously (yt-dlp, no login involved), transcribes t
 only a human could watch. Idempotent per reel; point it at a capture file with `--from`. A carousel post is not a video at
 all, so it is saved slide by slide instead — each image at full size, each video slide with its own
 frames and transcript — which is what a post whose slides *are* the content needs.
+
+### Triaging a pile of saved links
+
+`tools/telegram-saved-links.py` is for working through a Telegram export's raw links before they
+ever reach the extension — a Tinder-style card stack, one link per card, swipe right to keep,
+left to drop, up to defer for later. It enriches each card from a Link Keeper capture file when
+one exists for that link, so a card carries the real title and text rather than a bare URL:
+
+    ./tools/telegram-saved-links.py result.json -o triage.html -c link-captures-all.jsonl
+
+Decisions live in the page's localStorage and are also exportable to a sidecar JSON
+(`telegram-links-triage.json` by default); pass it back in with `-t` and a re-export of the same
+chat does not re-litigate links already decided. Output and the sidecar both default into
+`DATA_DIR` rather than the current directory. `tools/refresh.zsh` runs this on every export
+alongside the message view, into fixed filenames in `DATA_DIR` so the queue is right there after
+every refresh; `--urls` prints the same `URL<TAB>date` lines as `importers/telegram.py` if you
+just want to paste into *Add links* instead.
+
+The link extraction underneath — walking `result.json`'s messages and text entities, the
+`.sh`/`.py`/`.so`/`.io`-as-TLD wrinkle, schemeless links held out rather than guessed at — lives
+in `importers/telegram_export.py`, shared with `importers/telegram.py` and
+`tools/chat-to-watchlist.py` so the parsing logic exists in exactly one place.
 
 ### A chat full of films
 

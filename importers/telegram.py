@@ -33,6 +33,8 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from telegram_export import extract_links
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -46,58 +48,6 @@ def parse_args() -> argparse.Namespace:
     mode.add_argument("--schemeless", action="store_true", help="list entities that lack a scheme, with context")
     mode.add_argument("--stats", action="store_true", help="summarise instead of listing")
     return p.parse_args()
-
-
-def entity_text(part) -> str:
-    """A message's `text` is a string, or a list mixing strings and entity objects."""
-    if isinstance(part, str):
-        return part
-    if isinstance(part, dict):
-        return part.get("text", "")
-    return ""
-
-
-def message_context(msg: dict, urls: set[str]) -> str:
-    """Everything typed around the links, with the links themselves removed."""
-    text = msg.get("text", "")
-    parts = text if isinstance(text, list) else [text]
-    kept = [t for t in (entity_text(p) for p in parts) if t and t not in urls]
-    return " ".join(" ".join(kept).split())
-
-
-def collect(export_path: Path) -> tuple[list[dict], list[dict], dict]:
-    with export_path.open(encoding="utf-8") as fh:
-        data = json.load(fh)
-
-    messages = data.get("messages") or []
-    linked: list[dict] = []
-    schemeless: list[dict] = []
-    seen: set[str] = set()
-
-    for msg in messages:
-        hits = [e.get("text", "") for e in (msg.get("text_entities") or []) if e.get("type") == "link"]
-        if not hits:
-            continue
-        context = message_context(msg, set(hits))
-        when = (msg.get("date") or "")[:10]
-
-        for url in hits:
-            if not url or url in seen:
-                continue
-            seen.add(url)
-            record = {"url": url, "date": when, "context": context}
-            target = linked if url.lower().startswith(("http://", "https://")) else schemeless
-            target.append(record)
-
-    stats = {
-        "messages": len(messages),
-        "links": len(linked),
-        "schemeless": len(schemeless),
-        "with_context": sum(1 for r in linked if r["context"]),
-        "chat": data.get("name") or data.get("type") or "chat",
-        "dates": sorted(r["date"] for r in linked if r["date"]),
-    }
-    return linked, schemeless, stats
 
 
 def host_of(url: str) -> str:
@@ -119,7 +69,7 @@ def main() -> int:
         print(f"no such file: {args.export}", file=sys.stderr)
         return 1
 
-    linked, schemeless, stats = collect(args.export)
+    linked, schemeless, stats = extract_links(args.export)
     newest = sorted(linked, key=lambda r: r["date"], reverse=True)
 
     if args.stats:

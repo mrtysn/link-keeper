@@ -56,6 +56,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "importers"))
+from telegram_export import load_export, message_text  # noqa: E402
+
 E = html.escape
 UA = {'User-Agent': 'Mozilla/5.0'}
 TIMEOUT = 30
@@ -74,16 +77,11 @@ def get(url, headers=None, **kw):
     return urllib.request.urlopen(req, timeout=TIMEOUT).read()
 
 
-def message_text(m):
-    x = m.get('text')
-    return x if isinstance(x, str) else ''.join(p if isinstance(p, str) else p.get('text', '') for p in x)
-
-
 # --- what the chat holds -------------------------------------------------------------------
 
 def read_export(export, ov):
     """One entry per thing worth looking up: (date, who, kind, value, raw)."""
-    d = json.loads(Path(export).read_text(encoding='utf-8'))
+    d = load_export(export)
     skip, imdb, query, carousel = (ov.get('skip') or []), (ov.get('imdb') or {}), (ov.get('query') or {}), (ov.get('carousel') or {})
     items = []
     for m in d.get('messages', []):
