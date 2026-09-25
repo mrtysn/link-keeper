@@ -9,6 +9,9 @@ Build and install (bare SDK tools, no Gradle):
 
     ./build.zsh --install
 
+`--install` targets `PHONE_ADB_SERIAL` from `../config.local.sh` (see the `.example`), resolved
+through `adb-reconnect`; `ANDROID_SERIAL` overrides it.
+
 Configure once — either in the app (endpoint + token), or over adb without typing:
 
     adb shell am start -n keeper.link.share/.MainActivity \

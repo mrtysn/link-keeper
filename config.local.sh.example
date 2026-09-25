@@ -27,3 +27,8 @@ SERVE_PORT=8790
 # `importers/telegram-pull.py --login`. Leave unset to keep using chat exports only.
 #TELEGRAM_API_ID=123456
 #TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef
+
+# Phone that android/build.zsh --install targets: its hardware serial (adb shell getprop
+# ro.serialno) or its name in ADB Reconnect's devices.json. adb-reconnect resolves it to a live
+# adb serial. ANDROID_SERIAL, when set, wins over this.
+#PHONE_ADB_SERIAL=0123456789abcdef

@@ -61,6 +61,23 @@ fi
 
 print "built  : ${out/#$HOME/~}/linkkeeper.apk ($(du -h "$out/linkkeeper.apk" | cut -f1 | tr -d ' '))"
 
-if [[ ${1:-} == --install ]]; then
-  adb install -r "$out/linkkeeper.apk"
+[[ ${1:-} == --install ]] || exit 0
+
+# Which device: ANDROID_SERIAL names an adb serial outright. Otherwise PHONE_ADB_SERIAL (env, then
+# config.local.sh) names the phone by hardware serial or devices.json name, and adb-reconnect
+# attaches it — past a second device on the same adb, and past a wireless-debugging port that moved.
+serial=${ANDROID_SERIAL:-}
+if [[ -z $serial ]]; then
+  config=${here:h}/config.local.sh
+  want=${PHONE_ADB_SERIAL:-}
+  if [[ -z $want && -r $config ]]; then
+    want=$(zsh -c 'source "$1"; print -r -- ${PHONE_ADB_SERIAL:-}' _ "$config")
+  fi
+  [[ -n $want ]] || { print -u2 "set PHONE_ADB_SERIAL in ${config/#$HOME/~} (adb shell getprop ro.serialno), or ANDROID_SERIAL"; exit 1 }
+  command -v adb-reconnect >/dev/null \
+    || { print -u2 "adb-reconnect is not on PATH — the tools repo's install.sh links it"; exit 1 }
+  serial=$(adb-reconnect --serial "$want" --wait 30) || exit 1
 fi
+
+print "install: $serial"
+adb -s "$serial" install -r "$out/linkkeeper.apk"
