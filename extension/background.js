@@ -564,6 +564,10 @@ browser.commands.onCommand.addListener(async name => {
   else if (name === "next-link") {
     const res = await openNext();
     await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
+  } else if (name === "skip-link") {
+    await markCurrent("skipped");
+    const res = await openNext();
+    await notify(res.ok ? `skipped · ${res.remaining} left` : `failed: ${res.error}`);
   } else if (name === "queue-page") {
     const res = await queueActiveTab();
     await notify(res.added ? "added to the list" : "already on the list");
