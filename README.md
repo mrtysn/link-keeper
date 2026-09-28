@@ -156,6 +156,12 @@ their place.
 - **Move to list** hands a group's web pages, or one, to the reading list with its title and the
   stash date, and takes them out of the stash; local files and browser pages stay. **Delete…** asks first. **Export** downloads every stash as JSON.
 
+**Cards** goes through stashed tabs one at a time as a stack — one stash, or all of them, in the
+order they were stashed. No swiping: each card has **Open** (reopen it now), **Keep**, **Drop** and
+**To list** (web pages only), with `o` `k` `d` `l` and `←` `→` to step. Pressing Keep or Drop again
+clears it. A drop is a flag, shown struck through in the list; **Clear dropped…** on the Stashed tabs
+page is what removes dropped tabs, after a confirm.
+
 `node tools/test-stash.mjs` runs the stash code against a fake browser with 349 tabs and checks
 that every tab is either still open or recorded, and that a restore brings each one back.
 `tools/test-open-local-files.py` checks the helper's refusals without opening anything.
