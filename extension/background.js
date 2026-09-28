@@ -85,10 +85,11 @@ async function addItems(entries, note = "") {
   let added = 0, updated = 0, skipped = 0;
 
   for (const raw of entries) {
-    const { url, saved_at } = typeof raw === "string" ? { url: raw } : raw;
+    const { url, saved_at, title } = typeof raw === "string" ? { url: raw } : raw;
     if (!url) continue;
     const existing = byId.get(keyOf(url));
     if (existing) {
+      if (title && !existing.title) existing.title = title;
       // Re-pasting a list to backfill dates must not be a no-op.
       if (saved_at && existing.saved_at !== saved_at) {
         existing.saved_at = saved_at;
@@ -103,6 +104,8 @@ async function addItems(entries, note = "") {
       status: "pending",
       added_at: new Date().toISOString(),
       saved_at: saved_at || undefined,
+      // A tab title, when the link came from a stash — legible before the page is ever read.
+      title: title || undefined,
       note: note || undefined,
     };
     items.push(item);
@@ -559,6 +562,116 @@ async function queueActiveTab() {
   return { ok: false, error: "no active tab" };
 }
 
+/* --- stashed tabs ----------------------------------------------------------------
+ * OneTab's move: fold a window's tabs into a saved group and close them. A store of its own, apart
+ * from the worklist — a stash means "come back to these", not "read these" — with a move into the
+ * list for a group that turns out to be reading after all.
+ *
+ *   sessions — newest first: { id, created_at, name?, tabs: [{ url, title?, container?, seen_at? }] }
+ *
+ * Only the tab's URL, title and container are recorded. Nothing is injected into the tabs being
+ * stashed. A stash is the only record of the tabs it closes — Firefox remembers 25 closed tabs — so
+ * nothing closes until the record has been read back from storage and found complete.
+ */
+
+const getSessions = () => read("sessions", []);
+const setSessions = sessions => browser.storage.local.set({ sessions });
+const sessionsPage = () => browser.runtime.getURL("sessions.html");
+
+/* Pinned tabs stay by definition, and about:, moz-extension: and file: pages cannot be reopened
+ * by an extension, so they stay open rather than be recorded as something restore would fail on. */
+const stashable = tab => !tab.pinned && /^(https?|ftp):/.test(tab.url || "");
+
+/* Selected tabs when several are selected, otherwise the whole window. */
+async function stashTabs(windowId) {
+  const all = await browser.tabs.query(windowId == null ? { currentWindow: true } : { windowId });
+  if (!all.length) return { ok: false, error: "no window to stash" };
+  const selected = all.filter(t => t.highlighted);
+  const pool = selected.length > 1 ? selected : all;
+  const closing = pool.filter(stashable);
+  if (!closing.length) return { ok: false, error: "no web pages to stash here" };
+
+  // Duplicate tabs all close, and are recorded once.
+  const urls = new Set();
+  const tabs = closing
+    .filter(t => !urls.has(t.url) && urls.add(t.url))
+    .map(t => ({
+      url: t.url,
+      title: t.title && t.title !== t.url ? t.title : undefined,
+      // A container tab reopened outside its container is signed in as someone else.
+      container: t.cookieStoreId && t.cookieStoreId !== "firefox-default" ? t.cookieStoreId : undefined,
+    }));
+  const session = { id: crypto.randomUUID(), created_at: new Date().toISOString(), tabs };
+  await setSessions([session, ...await getSessions()]);
+
+  const stored = (await getSessions()).find(s => s.id === session.id);
+  const kept = new Set((stored?.tabs || []).map(t => t.url));
+  if (!tabs.every(t => kept.has(t.url))) return { ok: false, error: "the stash did not save; no tab was closed" };
+
+  // The sessions page opens before anything closes: closing a window's last tab closes the window.
+  const page = all.find(t => t.url?.startsWith(sessionsPage()));
+  if (page) await browser.tabs.update(page.id, { active: true });
+  else await browser.tabs.create({ url: sessionsPage(), windowId: all[0].windowId, active: true });
+  await browser.tabs.remove(closing.map(t => t.id));
+
+  return { ok: true, stashed: tabs.length, closed: closing.length, left: pool.length - closing.length };
+}
+
+/* Restoring keeps the entries; each one is marked seen instead. Several at once open unloaded, so
+ * forty tabs back is not forty page loads — each loads when you switch to it. */
+async function restoreTabs(id, urls) {
+  const sessions = await getSessions();
+  const session = sessions.find(s => s.id === id);
+  if (!session) return { ok: false, error: "that stash is gone" };
+  const wanted = urls ? session.tabs.filter(t => urls.includes(t.url)) : session.tabs;
+  const lazy = wanted.length > 1;
+  const at = new Date().toISOString();
+  for (const t of wanted) {
+    const props = { url: t.url, active: !lazy };
+    if (t.container) props.cookieStoreId = t.container;
+    if (lazy) Object.assign(props, { discarded: true }, t.title ? { title: t.title } : {});
+    // An unloaded tab is refused for a few URLs, and a container may since have been deleted;
+    // each fallback drops only the part that failed, the tab itself always opens.
+    try {
+      await browser.tabs.create(props);
+    } catch (e) {
+      try {
+        await browser.tabs.create({ url: t.url, active: false, ...(t.container && { cookieStoreId: t.container }) });
+      } catch (e2) {
+        await browser.tabs.create({ url: t.url, active: false });
+      }
+    }
+    t.seen_at = at;
+  }
+  await setSessions(sessions);
+  return { ok: true, restored: wanted.length };
+}
+
+/* Take tabs out of a stash; a stash left empty goes with them. */
+async function dropFromStash(id, urls) {
+  const sessions = await getSessions();
+  const session = sessions.find(s => s.id === id);
+  if (!session) return [];
+  const taken = urls ? session.tabs.filter(t => urls.includes(t.url)) : session.tabs;
+  session.tabs = session.tabs.filter(t => !taken.includes(t));
+  await setSessions(sessions.filter(s => s.tabs.length));
+  return taken;
+}
+
+/* The stash date stands in as the saved date: it is when you set the tab aside. */
+async function moveStashToList(id, urls) {
+  const session = (await getSessions()).find(s => s.id === id);
+  if (!session) return { ok: false, error: "that stash is gone" };
+  const taken = await dropFromStash(id, urls);
+  const res = await addItems(taken.map(t => ({ url: t.url, title: t.title, saved_at: session.created_at })));
+  return { ...res, moved: taken.length };
+}
+
+async function notifyStash(res) {
+  if (!res.ok) return notify(`failed: ${res.error}`);
+  if (res.left) await notify(`stashed ${res.stashed} · ${res.left} left open (pinned or not a web page)`);
+}
+
 browser.commands.onCommand.addListener(async name => {
   if (name === "capture-page") await notify(describe(await captureActive()));
   else if (name === "next-link") {
@@ -568,6 +681,8 @@ browser.commands.onCommand.addListener(async name => {
     await markCurrent("skipped");
     const res = await openNext();
     await notify(res.ok ? `skipped · ${res.remaining} left` : `failed: ${res.error}`);
+  } else if (name === "stash-tabs") {
+    await notifyStash(await stashTabs());
   } else if (name === "queue-page") {
     const res = await queueActiveTab();
     await notify(res.added ? "added to the list" : "already on the list");
@@ -589,6 +704,10 @@ const MENU = [
   { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
   { id: "menu-list", title: "See the whole list", contexts: ["page", "selection", "image"] },
   { id: "menu-cards", title: "Judge links as cards", contexts: ["page", "selection", "image"] },
+  { id: "menu-sep-stash", type: "separator", contexts: ["page", "selection", "image"] },
+  { id: "menu-stash", title: "Stash tabs", contexts: ["page", "selection", "image"] },
+  { id: "menu-sessions", title: "See stashed tabs", contexts: ["page", "selection", "image"] },
+  { id: "menu-stash-tab", title: "Stash tabs to Link Keeper", contexts: ["tab"] },
   { id: "menu-queue-link", title: "Add this link to Link Keeper", contexts: ["link"] },
 ];
 
@@ -624,6 +743,9 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     }
     case "menu-list": await browser.tabs.create({ url: browser.runtime.getURL("list.html") }); break;
     case "menu-cards": await browser.tabs.create({ url: browser.runtime.getURL("cards.html") }); break;
+    case "menu-stash": await notifyStash(await stashTabs(tab?.windowId)); break;
+    case "menu-stash-tab": await notifyStash(await stashTabs(tab?.windowId)); break;
+    case "menu-sessions": await browser.tabs.create({ url: sessionsPage() }); break;
     case "menu-queue-link":
       if (info.linkUrl) {
         const res = await addItems([{ url: info.linkUrl.split("#")[0], saved_at: new Date().toISOString() }]);
@@ -719,6 +841,7 @@ browser.runtime.onMessage.addListener(async msg => {
             status: i.status,
             added_at: i.added_at,
             saved_at: i.saved_at || null,
+            title: i.title || null,
             note: i.note || cap?.note || null,
             current: current?.key === keyOf(i.url),
             cap: cap && {
@@ -832,6 +955,34 @@ browser.runtime.onMessage.addListener(async msg => {
     case "open-cards":
       await browser.tabs.create({ url: browser.runtime.getURL("cards.html") });
       return { ok: true };
+
+    case "open-sessions":
+      await browser.tabs.create({ url: sessionsPage() });
+      return { ok: true };
+
+    case "stash":
+      return stashTabs();
+
+    case "sessions":
+      return { sessions: await getSessions() };
+
+    case "restore-stash":
+      return restoreTabs(msg.id, msg.urls);
+
+    case "rename-stash": {
+      const sessions = await getSessions();
+      const session = sessions.find(s => s.id === msg.id);
+      if (!session) return { ok: false, error: "that stash is gone" };
+      session.name = String(msg.name || "").trim() || undefined;
+      await setSessions(sessions);
+      return { ok: true };
+    }
+
+    case "delete-stash":
+      return { ok: true, removed: (await dropFromStash(msg.id, msg.urls)).length };
+
+    case "move-stash":
+      return moveStashToList(msg.id, msg.urls);
 
     case "add":
       return addItems(msg.urls, msg.note);

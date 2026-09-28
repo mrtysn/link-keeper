@@ -16,6 +16,7 @@
     "storage",
     "unlimitedStorage",
     "tabs",
+    "cookies",
     "scripting",
     "activeTab",
     "menus",
@@ -69,6 +70,13 @@
         "mac": "MacCtrl+Shift+X"
       },
       "description": "Skip this link and go to the next"
+    },
+    "stash-tabs": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "MacCtrl+Shift+S"
+      },
+      "description": "Stash the selected tabs, or the whole window, and close them"
     }
   },
   "optional_host_permissions": [

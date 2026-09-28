@@ -38,7 +38,7 @@ function isTextPost(cap) {
 
 function labelOf(row) {
   const cap = row.cap;
-  if (!cap) return null;
+  if (!cap) return row.title || null;
   const body = (cap.text || "").replace(/\s+/g, " ").trim();
   if (isTextPost(cap)) return (cap.handle ? `${cap.handle}: ` : "") + body;
   if (cap.handle && cap.title && !cap.title.includes(cap.handle)) return `${cap.handle} — ${cap.title}`;
