@@ -159,11 +159,19 @@ their place.
 - **Move to list** hands a group's web pages, or one, to the reading list with its title and the
   stash date, and takes them out of the stash; local files and browser pages stay. **Delete…** asks first. **Export** downloads every stash as JSON.
 
-**Cards** goes through stashed tabs one at a time as a stack — one stash, or all of them, in the
-order they were stashed. No swiping: each card has **Open** (reopen it now), **Keep**, **Drop** and
-**To list** (web pages only), with `o` `k` `d` `l` and `←` `→` to step. Pressing Keep or Drop again
-clears it. A drop is a flag, shown struck through in the list; **Clear dropped…** on the Stashed tabs
-page is what removes dropped tabs, after a confirm.
+**Explore** shows every stashed tab in a sidebar — one stash or all, in the order they were stashed,
+with a filter and Undecided / Kept / Dropped chips — and the chosen tab in full beside it. Click any
+row to jump to it, or walk with `↑` `↓`. The detail pane shows the tabs that sat beside it in the tab
+strip, its capture if the page was ever read, whether it is on the reading list or in another stash,
+and how many stashed tabs share its site. **Open**, **Keep**, **Drop**, **To list** and **Read** act
+on it (`o` `k` `d` `l` `r`); pressing Keep or Drop again clears it. A drop is a flag, struck through
+in the list; **Clear dropped…** on the Stashed tabs page removes dropped tabs, after a confirm.
+
+The **live preview** (`p`) shows the page itself, half a second after you land on a tab. Most sites
+forbid being framed, so for frames inside this page only, the extension strips `X-Frame-Options` and
+CSP `frame-ancestors` from the response (`webRequestBlocking`, plus all-sites access asked on the
+first preview). The frame is sandboxed without top navigation, and it loads logged out — Firefox keeps
+a framed page's cookies apart. Local files and browser pages cannot be framed at all.
 
 `node tools/test-stash.mjs` runs the stash code against a fake browser with 349 tabs and checks
 that every tab is either still open or recorded, and that a restore brings each one back.
