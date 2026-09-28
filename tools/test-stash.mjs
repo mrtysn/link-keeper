@@ -307,4 +307,46 @@ await check("a verdict is a flag: set, cleared by null, and only Clear dropped r
   assert.equal((await browser.handle({ type: "judge-stashed", id: "a", url: "nope", verdict: "keep" })).ok, false);
 });
 
+await check("frame headers are stripped only for frames inside the explore page", async () => {
+  const { browser } = makeBrowser([]);
+  let listener;
+  browser.webRequest = { onHeadersReceived: { addListener(fn) { listener = fn; } } };
+  await load(browser);
+  const headers = () => [
+    { name: "X-Frame-Options", value: "DENY" },
+    { name: "Content-Security-Policy", value: "default-src 'self'; frame-ancestors 'none'; img-src *" },
+    { name: "Content-Type", value: "text/html" },
+  ];
+  // Results come from the VM's realm; compare by value.
+  const plain = v => JSON.parse(JSON.stringify(v));
+  const ours = listener({ type: "sub_frame", documentUrl: "moz-extension://fake-uuid/stash-cards.html?stash=a", responseHeaders: headers() });
+  assert.deepEqual(plain(ours.responseHeaders), [
+    { name: "Content-Security-Policy", value: "default-src 'self'; img-src *" },
+    { name: "Content-Type", value: "text/html" },
+  ]);
+  const only = listener({ type: "sub_frame", documentUrl: "moz-extension://fake-uuid/stash-cards.html",
+    responseHeaders: [{ name: "content-security-policy", value: "frame-ancestors 'self'" }] });
+  assert.deepEqual(plain(only.responseHeaders), [], "a CSP that was only frame-ancestors goes entirely");
+  assert.deepEqual(plain(listener({ type: "sub_frame", documentUrl: "https://evil.example/", responseHeaders: headers() })), {});
+  assert.deepEqual(plain(listener({ type: "sub_frame", documentUrl: "moz-extension://fake-uuid/list.html", responseHeaders: headers() })), {});
+  assert.deepEqual(plain(listener({ type: "main_frame", documentUrl: "moz-extension://fake-uuid/stash-cards.html", responseHeaders: headers() })), {});
+});
+
+await check("known info joins captures by visited or canonical URL, and the reading list", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [
+    { url: "https://x.com/i/status/123" }, { url: "https://t.example/short" }, { url: "file:///r/a.html" }] }];
+  store.captures = [
+    { url: "https://x.com/someone/status/123", text: "hello", author: { handle: "@someone" } },
+    { url: "https://long.example/article", source_url: "https://t.example/short", title: "Article" },
+  ];
+  store.items = [{ url: "https://x.com/someone/status/123", status: "kept" }];
+  await load(browser);
+  const { known } = await browser.handle({ type: "stash-known" });
+  assert.equal(known["https://x.com/i/status/123"].cap.text, "hello");
+  assert.equal(known["https://x.com/i/status/123"].list, "kept");
+  assert.equal(known["https://t.example/short"].cap.title, "Article");
+  assert.equal(known["file:///r/a.html"].cap, undefined);
+});
+
 console.log(`\n${passed} checks passed`);

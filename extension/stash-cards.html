@@ -2,195 +2,172 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Link Keeper — stashed tabs as cards</title>
+<title>Link Keeper — explore stashed tabs</title>
 <style>
   :root {
     /* Measured in WCAG 2 and APCA on every ground these pages use. WCAG overrates light text on a
        dark ground, so the dark greys, accent and reds were lifted until APCA agreed; only lightness
        moved. --field is a field's edge (3:1), --prose is text that runs to lines (Lc 75+). */
-    --bg: #fbfaf8; --panel: #ffffff; --ink: #1a1a1a; --dim: #555555; --prose: #555555;
-    --line: #e4e0da; --accent: #6647e6; --chip: #f1eee9;
-    --keep: #057c4d; --keep-bg: #e4f5ec; --skip: #bf3f2d; --skip-bg: #fbe9e5;
-    --shadow: 0 10px 30px rgba(0,0,0,.10), 0 2px 6px rgba(0,0,0,.06);
+    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #555555; --line: #e4e0da; --mark: #8a857d; --field: #95918b; --prose: #555555;
+    --accent: #6647e6; --on-accent: #fff; --ok: #107647; --bad: #b33a28; --seen: #8a7a3f; --chip: #f1eee9;
+    --img-outline: rgb(0 0 0 / .1); --shadow: 0 8px 24px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .08);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #16171a; --panel: #22252a; --ink: #e8e6e3; --dim: #c0bdb9; --prose: #d8d5d1;
-      --line: #2c2f34; --accent: #c1b4fe; --chip: #2a2e34;
-      --keep: #54d399; --keep-bg: #17301f; --skip: #ffa693; --skip-bg: #33191a;
-      --shadow: 0 14px 34px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
+      --bg: #16171a; --panel: #22252a; --ink: #e8e6e3; --dim: #c0bdb9; --line: #2c2f34; --mark: #6b6f77; --field: #7d8289; --prose: #d8d5d1;
+      --accent: #c1b4fe; --on-accent: #16171a; --ok: #4fcf95; --bad: #ffa693; --seen: #d8c47a; --chip: #2a2e34;
+      --img-outline: rgb(255 255 255 / .1); --shadow: 0 8px 24px rgb(0 0 0 / .45), 0 1px 3px rgb(0 0 0 / .3);
     }
   }
+  :root { --keep-bg: #e4f5ec; --drop-bg: #fbe9e5; }
+  @media (prefers-color-scheme: dark) { :root { --keep-bg: #17301f; --drop-bg: #33191a; } }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
   body {
-    margin: 0; padding: 2rem 1.25rem 4rem; background: var(--bg); color: var(--ink);
+    margin: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--bg); color: var(--ink);
     font: 15px/1.5 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
-    -webkit-font-smoothing: antialiased;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
-  .wrap { max-width: 34rem; margin: 0 auto; }
-  header { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .6rem; }
-  h1 { font-size: 1.2rem; margin: 0; letter-spacing: -.02em; }
-  header a { margin-left: auto; color: var(--accent); font-size: .85rem; text-decoration: none; }
-  header a:hover { text-decoration: underline; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button, select, .btn {
+    font: inherit; font-size: .875rem; line-height: 1.2; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 12px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+    text-decoration: none; white-space: nowrap;
+  }
+  select { border-color: var(--field); }
+  button:disabled { opacity: .5; cursor: default; }
+  @media (hover: hover) { button:hover:not(:disabled), .btn:hover, select:hover { border-color: var(--accent); } }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  button.keep { color: var(--ok); font-weight: 600; } button.drop { color: var(--bad); font-weight: 600; }
+  button.keep[aria-pressed="true"] { background: var(--keep-bg); border-color: var(--ok); }
+  button.drop[aria-pressed="true"] { background: var(--drop-bg); border-color: var(--bad); }
 
-  .meter { height: 5px; background: var(--chip); border-radius: 3px; overflow: hidden; }
-  .meter i { display: block; height: 100%; width: 0; background: var(--accent); }
-  @media (prefers-reduced-motion: no-preference) {
-    .meter i { transition: width .25s ease; }
+  /* --- top bar --- */
+  .top {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px;
+    border-bottom: 1px solid var(--line); background: var(--bg);
   }
-  .tally {
-    display: flex; gap: 1rem; flex-wrap: wrap; color: var(--dim); font-size: .82rem;
-    margin: .5rem 0 1.2rem; font-variant-numeric: tabular-nums;
+  h1 { margin: 0 8px 0 0; font-size: 1.125rem; letter-spacing: -.01em; white-space: nowrap; }
+  #scope { max-width: 16rem; }
+  #q {
+    flex: 1 1 12rem; min-width: 0; min-height: 32px; padding: 5px 10px; font: inherit; font-size: .875rem;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--field); border-radius: 8px;
   }
-  .tally b { color: var(--ink); }
-  .tally .k b { color: var(--keep); } .tally .x b { color: var(--skip); }
+  .seg { display: flex; gap: 4px; }
+  .chip { min-height: 30px; padding: 4px 10px; border-radius: 999px; font-size: .8125rem; font-variant-numeric: tabular-nums; }
+  .chip .n { color: var(--dim); }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .chip[aria-pressed="true"] .n { color: inherit; }
+  .top a.back { color: var(--accent); font-size: .875rem; text-decoration: none; margin-left: auto; }
 
-  #stage { position: relative; height: 27rem; touch-action: none; }
-  .card {
-    position: absolute; inset: 0; background: var(--panel); border: 1px solid var(--line);
-    border-radius: 1rem; box-shadow: var(--shadow); padding: 1.4rem 1.4rem 1.2rem;
-    display: flex; flex-direction: column; gap: .7rem; overflow: hidden;
-    will-change: transform; user-select: none;
+  /* --- two panes --- */
+  .panes { display: grid; grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr); min-height: 0; }
+  #side { overflow-y: auto; border-right: 1px solid var(--line); padding: 4px 0 24px; }
+  #side h2 {
+    position: sticky; top: 0; z-index: 1; margin: 0; padding: 10px 14px 6px; background: var(--bg);
+    font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim);
+    display: flex; gap: 8px;
   }
-  .card > .title, .card > .body { min-height: 0; }
-  .card.top { cursor: grab; }
-  .card.top:active { cursor: grabbing; }
-  .head { display: flex; align-items: center; gap: .75rem; }
-  .mono {
-    width: 2.5rem; height: 2.5rem; border-radius: .6rem; display: grid; place-items: center;
-    font-weight: 700; font-size: 1.1rem; color: #fff; flex: none;
+  #side h2 .n { margin-left: auto; font-variant-numeric: tabular-nums; }
+  #side ul { list-style: none; margin: 0; padding: 0 6px; }
+  #side li button {
+    display: grid; grid-template-columns: 16px minmax(0, 1fr) 14px; gap: 8px; align-items: center;
+    width: 100%; min-height: 30px; padding: 4px 8px; border: 0; border-radius: 6px; background: none;
+    text-align: left; font-size: .8125rem;
   }
-  .host { font-size: 1.05rem; font-weight: 650; overflow-wrap: anywhere; }
-  .when { color: var(--dim); font-size: .78rem; font-variant-numeric: tabular-nums; }
-  .title {
-    font-weight: 600; overflow-wrap: anywhere;
-    display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .body {
-    color: var(--prose); font-size: .9rem; overflow-wrap: anywhere;
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .path {
-    font-family: ui-monospace, Menlo, monospace; font-size: .82rem; color: var(--dim);
-    overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .note { background: var(--chip); border-radius: .5rem; padding: .5rem .7rem; font-size: .88rem; }
-  .inner { display: flex; flex-wrap: wrap; gap: .3rem; }
-  .inner a {
-    font-size: .8rem; color: var(--accent); text-decoration: none; background: var(--chip);
-    border-radius: 1rem; padding: .15rem .55rem; max-width: 100%; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap;
-  }
-  .inner.replies a { background: transparent; border: 1px dashed var(--line); }
-  .inner.replies a.from-author { border-style: solid; border-color: var(--keep); color: var(--keep); }
-  .done kbd { background: var(--chip); border: 1px solid var(--line); border-radius: .3rem; padding: 0 .25rem; }
-  .thumbs { display: flex; gap: .35rem; flex-wrap: wrap; }
-  .thumbs { flex: none; }
-  .thumbs img {
-    height: 3.5rem; max-width: 7rem; object-fit: cover; border-radius: .3rem; border: 1px solid var(--line);
-  }
-  .foot { margin-top: auto; display: flex; align-items: center; gap: .7rem; flex: none; }
-  .open {
-    font: inherit; font-size: .88rem; color: var(--accent); text-decoration: none;
-    border: 1px solid var(--line); border-radius: .5rem; padding: .35rem .75rem;
-  }
-  .open:hover { border-color: var(--accent); }
-  .siblings { color: var(--dim); font-size: .78rem; }
+  @media (hover: hover) { #side li button:hover { background: var(--chip); } }
+  #side li button[aria-current="true"] { background: var(--accent); color: var(--on-accent); }
+  #side li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #side li .t.plain { font-family: ui-monospace, Menlo, monospace; font-size: .75rem; }
+  #side li.drop .t { text-decoration: line-through; opacity: .75; }
+  #side li .m { font-size: .75rem; font-weight: 700; text-align: center; }
+  #side li.keep .m::before { content: "✓"; color: var(--ok); }
+  #side li.drop .m::before { content: "✕"; color: var(--bad); }
+  #side li button[aria-current="true"] .m::before { color: inherit; }
+  .src { display: inline-block; width: 16px; height: 16px; background: center/contain no-repeat; border-radius: 4px; }
+  .side-empty { padding: 24px 16px; color: var(--dim); font-size: .875rem; }
 
-  .stamp {
-    position: absolute; top: 1.2rem; padding: .25rem .65rem; border-radius: .4rem; font-weight: 700;
-    font-size: .9rem; letter-spacing: .08em; text-transform: uppercase; opacity: 0;
-    pointer-events: none; border: 2px solid currentColor;
-  }
-  .stamp.keep { right: 1.2rem; color: var(--keep); background: var(--keep-bg); transform: rotate(9deg); }
-  .stamp.skip { left: 1.2rem; color: var(--skip); background: var(--skip-bg); transform: rotate(-9deg); }
+  #detail { overflow-y: auto; padding: 20px 24px 48px; }
+  .dhead { display: flex; align-items: center; gap: 12px; }
+  .dhead .src { width: 36px; height: 36px; border-radius: 8px; }
+  .where { font-weight: 650; }
+  .when { color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+  .pos { margin-left: auto; white-space: nowrap; color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+  .dtitle { margin: 14px 0 6px; font-size: 1.5rem; line-height: 1.25; letter-spacing: -.015em; overflow-wrap: anywhere; text-wrap: pretty; }
+  .dtitle.plain { font: 1.05rem/1.5 ui-monospace, Menlo, monospace; }
+  .durl { font: .8125rem/1.5 ui-monospace, Menlo, monospace; color: var(--dim); overflow-wrap: anywhere; user-select: all; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .badge { padding: 1px 9px; border-radius: 999px; background: var(--chip); font-size: .75rem; line-height: 1.6; }
+  .badge.keep { color: var(--ok); background: var(--keep-bg); font-weight: 600; }
+  .badge.drop { color: var(--bad); background: var(--drop-bg); font-weight: 600; }
+  button.link { min-height: 0; padding: 1px 9px; border: 0; border-radius: 999px; background: var(--chip); color: var(--accent); font-size: .75rem; }
 
-  .actions { display: flex; justify-content: center; gap: .5rem; flex-wrap: wrap; margin-top: 1.1rem; }
-  .actions button {
-    font: inherit; cursor: pointer; border-radius: .6rem; border: 1px solid var(--line);
-    background: var(--panel); color: var(--ink); padding: .5rem 1rem;
+  section.box { margin-top: 22px; }
+  section.box > h3 {
+    margin: 0 0 8px; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim);
   }
-  .actions button:hover:not(:disabled) { border-color: var(--accent); }
-  /* Dim, but still legible as the three moves (Lc 35+); .4 left them at Lc 18. */
-  .actions button:disabled { opacity: .65; cursor: default; }
-  .actions .no { color: var(--skip); font-weight: 600; min-width: 7rem; }
-  .actions .yes { color: var(--keep); font-weight: 600; min-width: 7rem; }
-  .keys { text-align: center; color: var(--dim); font-size: .8rem; margin-top: .8rem; }
-  kbd { background: var(--chip); border: 1px solid var(--line); border-bottom-width: 2px;
-        border-radius: .3rem; padding: .05rem .3rem; font: inherit; font-size: .76rem; }
-  .done {
-    text-align: center; padding: 4rem 1rem; border: 1px dashed var(--line); border-radius: 1rem;
-    color: var(--prose);
-  }
-  .done b { display: block; color: var(--ink); font-size: 1.1rem; margin-bottom: .3rem; }
-  .done a { color: var(--accent); }
-  #msg { text-align: center; color: var(--dim); font-size: .8rem; min-height: 1.1rem; margin-top: .6rem; }
+  .captext { color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16rem; overflow-y: auto; }
+  .who { font-weight: 600; color: var(--ink); }
+  .thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .thumbs img { height: 6rem; max-width: 12rem; object-fit: cover; border-radius: 6px; background: var(--chip); outline: 1px solid var(--img-outline); outline-offset: -1px; }
+  .inner { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .inner a { max-width: 24rem; padding: 1px 10px; border-radius: 999px; background: var(--chip); color: var(--accent); font-size: .8125rem; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .facts { margin: 0; padding: 0; list-style: none; color: var(--prose); font-size: .875rem; display: grid; gap: 4px; }
+  .facts li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .muted { color: var(--dim); font-size: .875rem; margin: 0; }
 
-  /* --- stash deck only --- */
-  :root { --field: #95918b; --on-accent: #fff; }
-  @media (prefers-color-scheme: dark) { :root { --field: #7d8289; --on-accent: #16171a; } }
-  header select {
-    margin-left: auto; font: inherit; font-size: .85rem; min-height: 32px; padding: 4px 8px; max-width: 16rem;
-    color: var(--ink); background: var(--panel); border: 1px solid var(--field); border-radius: .5rem;
+  ol.neigh { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  ol.neigh button {
+    display: grid; grid-template-columns: 2.2rem 16px minmax(0, 1fr); gap: 8px; align-items: center; width: 100%;
+    min-height: 28px; padding: 3px 8px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: .8125rem;
   }
-  header a { margin-left: 0; }
-  /* The next two cards peek out below the top one. */
-  .card.behind { pointer-events: none; }
-  .card.behind-1 { transform: translateY(10px) scale(.965); opacity: .75; }
-  .card.behind-2 { transform: translateY(20px) scale(.93); opacity: .45; }
-  .card .src { width: 2.5rem; height: 2.5rem; border-radius: .6rem; background: center/contain no-repeat; flex: none; }
-  .card .title { font-size: 1.3rem; line-height: 1.3; letter-spacing: -.01em; -webkit-line-clamp: 6; }
-  .card .title.plain { font: 1rem/1.5 ui-monospace, Menlo, monospace; font-weight: 400; }
-  .card.top { cursor: default; }
-  .badges { display: flex; flex-wrap: wrap; gap: .35rem; }
-  .badge { padding: .05rem .55rem; border-radius: 1rem; background: var(--chip); font-size: .78rem; }
-  .badge.keep { color: var(--keep); background: var(--keep-bg); font-weight: 600; }
-  .badge.drop { color: var(--skip); background: var(--skip-bg); font-weight: 600; }
-  .card.dropped .title { text-decoration: line-through; color: var(--dim); }
-  .actions .open-btn { font-weight: 600; background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-  .actions .yes[aria-pressed="true"] { background: var(--keep-bg); border-color: var(--keep); }
-  .actions .no[aria-pressed="true"] { background: var(--skip-bg); border-color: var(--skip); }
-  .actions { flex-wrap: nowrap; margin-top: 2rem; }
-  .actions button, .actions .yes, .actions .no { min-width: 0; flex: 1 1 auto; padding: .5rem .6rem; white-space: nowrap; }
-  .actions .step { flex: none; min-width: 2.75rem; }
-  #stage { height: 17rem; }
-  header { flex-wrap: wrap; row-gap: .5rem; }
-  h1 { white-space: nowrap; }
-  header select { min-width: 0; flex: 1 1 12rem; max-width: 20rem; }
+  ol.neigh .off { color: var(--dim); font-variant-numeric: tabular-nums; text-align: right; font-size: .75rem; }
+  ol.neigh .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  ol.neigh li.self button { background: var(--chip); font-weight: 600; cursor: default; }
+  @media (hover: hover) { ol.neigh li:not(.self) button:hover { background: var(--chip); } }
+
+  .pvbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .pvbar label { display: inline-flex; align-items: center; gap: 6px; font-size: .875rem; cursor: pointer; }
+  #pv-frame { display: block; width: 100%; height: 70vh; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .pvnote { margin: 8px 0 0; color: var(--dim); font-size: .8125rem; }
+  kbd { padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--chip); font: .75rem ui-sans-serif, -apple-system, sans-serif; }
+  .keys { margin-top: 14px; color: var(--dim); font-size: .8125rem; }
+  #msg { margin: 10px 0 0; color: var(--dim); font-size: .875rem; }
+  #msg:empty { display: none; }
+  .captext + .facts, .thumbs + .facts, .inner + .facts { margin-top: 12px; }
+  .empty { margin: 15vh auto; max-width: 28rem; text-align: center; color: var(--dim); }
+  .empty b { display: block; color: var(--ink); font-size: 1.1rem; margin-bottom: 4px; }
+
+  @media (max-width: 48rem) {
+    body { display: block; height: auto; }
+    .panes { display: block; }
+    #side { max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--line); }
+    #detail { overflow: visible; padding: 16px; }
+    .top a.back { margin-left: 0; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>Stashed tabs</h1>
-    <select id="scope" aria-label="Which stash to deal"></select>
-    <a href="sessions.html">as a list →</a>
-  </header>
-
-  <div class="meter"><i id="bar"></i></div>
-  <div class="tally">
-    <span id="pos">—</span>
-    <span class="k">kept <b id="t-kept">0</b></span>
-    <span class="x">dropped <b id="t-dropped">0</b></span>
-    <span>undecided <b id="t-left">0</b></span>
+<header class="top">
+  <h1>Stashed tabs</h1>
+  <select id="scope" aria-label="Which stash"></select>
+  <label class="sr-only" for="q">Filter</label>
+  <input id="q" type="search" placeholder="Filter by title or URL…" autocomplete="off" spellcheck="false">
+  <div class="seg" role="group" aria-label="Verdict">
+    <button class="chip" data-f="all" aria-pressed="true">All</button>
+    <button class="chip" data-f="open" aria-pressed="false">Undecided</button>
+    <button class="chip" data-f="keep" aria-pressed="false">Kept</button>
+    <button class="chip" data-f="drop" aria-pressed="false">Dropped</button>
   </div>
-
-  <div id="stage"></div>
-
-  <div class="actions">
-    <button class="step" id="prev" title="Previous card (←)" aria-label="Previous card">←</button>
-    <button class="open-btn" id="open" title="Reopen this tab now (o)">Open</button>
-    <button class="yes" id="keep" aria-pressed="false" title="Keep it in the stash (k)">Keep</button>
-    <button class="no" id="drop" aria-pressed="false" title="Flag it dropped; Clear dropped on the list removes it (d)">Drop</button>
-    <button id="tolist" title="Move this web page to the reading list (l)">To list</button>
-    <button class="step" id="next" title="Next card (→)" aria-label="Next card">→</button>
-  </div>
-  <p class="keys">
-    <kbd>o</kbd> open · <kbd>k</kbd> keep · <kbd>d</kbd> drop · <kbd>l</kbd> to list ·
-    <kbd>←</kbd> <kbd>→</kbd> step · pressing Keep or Drop again clears it
-  </p>
-  <div id="msg" role="status"></div>
+  <a class="back" href="sessions.html">as a list →</a>
+</header>
+<div class="panes">
+  <nav id="side" aria-label="Stashed tabs"></nav>
+  <main id="detail"></main>
 </div>
 <script src="icons.js"></script>
 <script src="stash-cards.js"></script>

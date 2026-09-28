@@ -69,6 +69,18 @@
               ],
             };
           }
+          case "stash-known": {
+            // What the background joins from captures and the list, keyed by stashed URL.
+            const known = {};
+            for (const r of M.dump.items) {
+              known[r.url] = {
+                key: r.url, list: r.status,
+                cap: r.cap && { title: r.cap.title, handle: r.cap.handle, text: r.cap.text,
+                  images: r.cap.images || [], links: r.cap.links || [], captured_at: "2026-09-20T10:00:00Z" },
+              };
+            }
+            return { known };
+          }
           case "get-folder": return { folder: "link-keeper", fallback: "link-keeper" };
           case "fetch-pending": return { ok: false, quiet: true };
           default: return { ok: true, remaining: 0, added: 0, total: M.status.total };
@@ -79,7 +91,7 @@
       local: { get: async key => ({ [key]: store[key] }), set: async () => {} },
       onChanged: { addListener() {} },
     },
-    permissions: { request: async () => true },
+    permissions: { request: async () => true, contains: async () => true },
     tabs: { update: async () => {} },
   };
 })();

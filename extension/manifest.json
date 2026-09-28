@@ -18,6 +18,8 @@
     "tabs",
     "cookies",
     "nativeMessaging",
+    "webRequest",
+    "webRequestBlocking",
     "scripting",
     "activeTab",
     "menus",

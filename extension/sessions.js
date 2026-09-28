@@ -178,7 +178,7 @@ function heading(session, shown) {
       () => act({ type: "move-stash", id: session.id },
         r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}` +
           (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : ""))),
-    button("Cards", "", "Go through this stash as a stack of cards",
+    button("Explore", "", "Browse this stash with a sidebar, details and a live preview",
       () => send({ type: "open-stash-cards", id: session.id })),
     button("Rename", "ghost", "", () => { renaming = session.id; render(); }),
     button("Delete…", "ghost danger", "Remove this stash; its tabs are closed, so this is their only record", () => {

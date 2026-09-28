@@ -731,6 +731,65 @@ async function moveStashToList(id, urls) {
   return { ...res, moved: taken.length, stayed: (urls || session.tabs).length - taken.length };
 }
 
+/* --- live preview ---------------------------------------------------------------
+ * The explore page shows a stashed tab in a frame. Most sites forbid framing with X-Frame-Options or
+ * a CSP frame-ancestors directive, so for frames whose parent is that page — and nothing else — both
+ * are removed from the response. The frame is sandboxed without top navigation, so a framed page
+ * cannot navigate the extension page away. Runs only for sites the user has granted access to.
+ */
+
+const PREVIEW_PAGE = () => browser.runtime.getURL("stash-cards.html");
+
+function unframeHeaders(details) {
+  if (details.type !== "sub_frame" || !String(details.documentUrl || "").startsWith(PREVIEW_PAGE())) return {};
+  const responseHeaders = [];
+  for (const h of details.responseHeaders || []) {
+    const name = h.name.toLowerCase();
+    if (name === "x-frame-options") continue;
+    if (name === "content-security-policy" || name === "content-security-policy-report-only") {
+      const kept = String(h.value || "").split(";").filter(d => !/^\s*frame-ancestors\b/i.test(d)).join(";").trim();
+      if (kept) responseHeaders.push({ name: h.name, value: kept });
+      continue;
+    }
+    responseHeaders.push(h);
+  }
+  return { responseHeaders };
+}
+
+browser.webRequest?.onHeadersReceived.addListener(unframeHeaders,
+  { urls: ["<all_urls>"], types: ["sub_frame"] }, ["blocking", "responseHeaders"]);
+
+/* Everything already stored about each stashed URL: its capture if the page was ever read (matched
+ * on the visited URL too, since a capture is filed under its canonical one) and its reading-list
+ * status. */
+async function stashKnown() {
+  const [captures, items, sessions] = [await getCaptures(), await getItems(), await getSessions()];
+  const capBy = new Map();
+  for (const c of captures) {
+    capBy.set(keyOf(c.url), c);
+    if (c.source_url) capBy.set(keyOf(c.source_url), c);
+  }
+  const listBy = new Map(items.map(i => [keyOf(i.url), i.status]));
+  const known = {};
+  for (const t of sessions.flatMap(s => s.tabs)) {
+    const k = keyOf(t.url);
+    const c = capBy.get(k);
+    known[t.url] = {
+      key: k,
+      list: listBy.get(k) || null,
+      cap: c && {
+        title: c.title || null,
+        handle: c.author?.handle || null,
+        text: c.text || null,
+        images: (c.images || []).slice(0, 8),
+        links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean).slice(0, 8),
+        captured_at: c.captured_at || null,
+      },
+    };
+  }
+  return { known };
+}
+
 async function notifyStash(res) {
   if (!res.ok) return notify(`failed: ${res.error}`);
   if (res.why) await notify(`stashed ${res.stashed} · left open: ${res.why}`);
@@ -1070,6 +1129,9 @@ browser.runtime.onMessage.addListener(async msg => {
       await setSessions(sessions.filter(s => s.tabs.length));
       return { ok: true, removed };
     }
+
+    case "stash-known":
+      return stashKnown();
 
     case "open-stash-cards":
       await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html") + (msg.id ? `?stash=${msg.id}` : "") });
