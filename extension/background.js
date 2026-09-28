@@ -578,9 +578,27 @@ const getSessions = () => read("sessions", []);
 const setSessions = sessions => browser.storage.local.set({ sessions });
 const sessionsPage = () => browser.runtime.getURL("sessions.html");
 
-/* Pinned tabs stay by definition, and about:, moz-extension: and file: pages cannot be reopened
- * by an extension, so they stay open rather than be recorded as something restore would fail on. */
-const stashable = tab => !tab.pinned && /^(https?|ftp):/.test(tab.url || "");
+/* Everything is stashed but pinned tabs, empty tabs, and this page. How a tab comes back depends
+ * on what it is — see restoreTabs. */
+const EMPTY_TAB = /^about:(blank|newtab|home|privatebrowsing)$/;
+const stashable = tab => !tab.pinned && !!tab.url && !EMPTY_TAB.test(tab.url) && !tab.url.startsWith(sessionsPage());
+
+/* Firefox lets an extension open web pages and its own pages. A file: URL goes to the native helper
+ * (native/open-local-files.py); about: pages and other extensions' pages get a stand-in tab that
+ * shows the URL with click-to-copy, as OneTab and Sidebery do. */
+const HELPER = "link_keeper_open_files";
+function reopenRoute(url) {
+  if (/^(https?|ftp):/.test(url) || url.startsWith(browser.runtime.getURL(""))) return "direct";
+  if (/^file:/.test(url)) return "helper";
+  return "standin";
+}
+
+function standinUrl(t, why) {
+  const q = new URLSearchParams({ url: t.url });
+  if (t.title) q.set("title", t.title);
+  if (why) q.set("why", why);
+  return `${browser.runtime.getURL("standin.html")}?${q}`;
+}
 
 /* Selected tabs when several are selected, otherwise the whole window. */
 async function stashTabs(windowId) {
@@ -592,7 +610,7 @@ async function stashTabs(windowId) {
   const why = leftOpen(pool.filter(t => !stashable(t) && !t.url?.startsWith(sessionsPage())));
   if (!closing.length) {
     const scope = selected.length > 1 ? `the ${pool.length} selected tabs` : "this window";
-    return { ok: false, error: `nothing stashed: ${scope} holds only ${why}, which an extension cannot reopen; all left open` };
+    return { ok: false, error: `nothing stashed: ${scope} holds only ${why || "this page"}` };
   }
 
   // Duplicate tabs all close, and are recorded once.
@@ -621,15 +639,12 @@ async function stashTabs(windowId) {
   return { ok: true, stashed: tabs.length, closed: closing.length, left: pool.length - closing.length, why };
 }
 
-/* "49 local files, 9 extension pages, 2 pinned" — what stayed open, by the reason it stayed. */
+/* "2 pinned, 1 empty tab" — what stayed open, by the reason it stayed. */
 function leftOpen(tabs) {
-  const n = { pinned: 0, file: 0, page: 0 };
-  for (const t of tabs) n[t.pinned ? "pinned" : /^file:/.test(t.url || "") ? "file" : "page"]++;
-  return [
-    n.file && `${n.file} local file${n.file > 1 ? "s" : ""}`,
-    n.page && `${n.page} browser or extension page${n.page > 1 ? "s" : ""}`,
-    n.pinned && `${n.pinned} pinned`,
-  ].filter(Boolean).join(", ");
+  const pinned = tabs.filter(t => t.pinned).length;
+  const empty = tabs.length - pinned;
+  return [pinned && `${pinned} pinned`, empty && `${empty} empty tab${empty > 1 ? "s" : ""}`]
+    .filter(Boolean).join(", ");
 }
 
 /* Restoring keeps the entries; each one is marked seen instead. Several at once open unloaded, so
@@ -641,8 +656,34 @@ async function restoreTabs(id, urls) {
   const wanted = urls ? session.tabs.filter(t => urls.includes(t.url)) : session.tabs;
   const lazy = wanted.length > 1;
   const at = new Date().toISOString();
-  for (const t of wanted) {
-    const props = { url: t.url, active: !lazy };
+
+  const direct = wanted.filter(t => reopenRoute(t.url) === "direct");
+  const files = wanted.filter(t => reopenRoute(t.url) === "helper");
+  const standins = wanted.filter(t => reopenRoute(t.url) === "standin").map(t => ({ t, why: "" }));
+
+  // All local files in one request; whatever the helper does not open falls back to a stand-in.
+  let helperError = null, viaHelper = 0;
+  if (files.length) {
+    let res;
+    try {
+      res = await browser.runtime.sendNativeMessage(HELPER, { open: files.map(t => t.url) });
+    } catch (e) {
+      res = { ok: false, error: "the helper is not installed" };
+    }
+    if (!res?.ok) helperError = res?.error || "the helper did not answer";
+    const opened = new Set(res?.ok ? res.opened : []);
+    const failed = new Map((res?.failed || []).map(f => [f.url, f.error]));
+    viaHelper = opened.size;
+    for (const t of files) if (!opened.has(t.url)) standins.push({ t, why: failed.get(t.url) || helperError });
+  }
+
+  const jobs = [
+    ...direct.map(t => ({ t, url: t.url, container: t.container })),
+    ...standins.map(({ t, why }) => ({ t, url: standinUrl(t, why) })),
+  ];
+  for (const { t, url, container } of jobs) {
+    const props = { url, active: !lazy };
+    if (container) props.cookieStoreId = container;
     if (t.container) props.cookieStoreId = t.container;
     if (lazy) Object.assign(props, { discarded: true }, t.title ? { title: t.title } : {});
     // An unloaded tab is refused for a few URLs, and a container may since have been deleted;
@@ -651,15 +692,15 @@ async function restoreTabs(id, urls) {
       await browser.tabs.create(props);
     } catch (e) {
       try {
-        await browser.tabs.create({ url: t.url, active: false, ...(t.container && { cookieStoreId: t.container }) });
+        await browser.tabs.create({ url, active: false, ...(container && { cookieStoreId: container }) });
       } catch (e2) {
-        await browser.tabs.create({ url: t.url, active: false });
+        await browser.tabs.create({ url, active: false });
       }
     }
-    t.seen_at = at;
   }
+  for (const t of wanted) t.seen_at = at;
   await setSessions(sessions);
-  return { ok: true, restored: wanted.length };
+  return { ok: true, restored: wanted.length, viaHelper, standins: standins.length, helperError };
 }
 
 /* Take tabs out of a stash; a stash left empty goes with them. */
@@ -677,9 +718,13 @@ async function dropFromStash(id, urls) {
 async function moveStashToList(id, urls) {
   const session = (await getSessions()).find(s => s.id === id);
   if (!session) return { ok: false, error: "that stash is gone" };
-  const taken = await dropFromStash(id, urls);
+  // The reading list walks links by navigating a tab, which works for web pages only; local files
+  // and browser pages stay in the stash.
+  const web = (urls || session.tabs.map(t => t.url)).filter(u => /^(https?|ftp):/.test(u));
+  if (!web.length) return { ok: false, error: "only web pages can go to the reading list" };
+  const taken = await dropFromStash(id, web);
   const res = await addItems(taken.map(t => ({ url: t.url, title: t.title, saved_at: session.created_at })));
-  return { ...res, moved: taken.length };
+  return { ...res, moved: taken.length, stayed: (urls || session.tabs).length - taken.length };
 }
 
 async function notifyStash(res) {

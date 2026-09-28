@@ -17,6 +17,7 @@
     "unlimitedStorage",
     "tabs",
     "cookies",
+    "nativeMessaging",
     "scripting",
     "activeTab",
     "menus",

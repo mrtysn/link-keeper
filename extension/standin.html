@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stashed tab</title>
+<style>
+  :root {
+    /* Measured in WCAG 2 and APCA on every ground these pages use. WCAG overrates light text on a
+       dark ground, so the dark greys, accent and reds were lifted until APCA agreed; only lightness
+       moved. --field is a field's edge (3:1), --prose is text that runs to lines (Lc 75+). */
+    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #555555; --line: #e4e0da; --mark: #8a857d; --field: #95918b; --prose: #555555;
+    --accent: #6647e6; --on-accent: #fff; --ok: #107647; --bad: #b33a28; --seen: #8a7a3f; --chip: #f1eee9;
+    --img-outline: rgb(0 0 0 / .1); --shadow: 0 8px 24px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a; --panel: #22252a; --ink: #e8e6e3; --dim: #c0bdb9; --line: #2c2f34; --mark: #6b6f77; --field: #7d8289; --prose: #d8d5d1;
+      --accent: #c1b4fe; --on-accent: #16171a; --ok: #4fcf95; --bad: #ffa693; --seen: #d8c47a; --chip: #2a2e34;
+      --img-outline: rgb(255 255 255 / .1); --shadow: 0 8px 24px rgb(0 0 0 / .45), 0 1px 3px rgb(0 0 0 / .3);
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; padding: 64px 20px; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  main { max-width: 40rem; margin: 0 auto; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .lbl { margin: 0 0 4px; color: var(--dim); font-size: .8125rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+  h1 { margin: 0 0 16px; font-size: 1.375rem; line-height: 1.25; letter-spacing: -.01em; overflow-wrap: anywhere; text-wrap: pretty; }
+  .url {
+    display: block; width: 100%; padding: 10px 12px; font: .875rem/1.5 ui-monospace, Menlo, monospace;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--field); border-radius: 8px;
+    overflow-wrap: anywhere; user-select: all;
+  }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+  button {
+    font: inherit; font-size: .9375rem; cursor: pointer; min-height: 36px; padding: 7px 14px;
+    background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 8px; font-weight: 600;
+  }
+  .hint { margin: 0; color: var(--dim); font-size: .875rem; }
+  kbd {
+    padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+    background: var(--chip); font: .8125rem ui-sans-serif, -apple-system, sans-serif;
+  }
+  .why { margin: 24px 0 0; padding: 10px 12px; border-left: 2px solid var(--line); color: var(--prose); font-size: .875rem; }
+  code { background: var(--chip); padding: 0 .25rem; border-radius: .25rem; font-size: .8125rem; }
+</style>
+</head>
+<body>
+<main>
+  <p class="lbl">Stashed tab</p>
+  <h1 id="title"></h1>
+  <output class="url" id="url"></output>
+  <div class="row">
+    <button id="copy">Copy URL</button>
+    <p class="hint" id="hint">then <kbd>⌘L</kbd> <kbd>⌘V</kbd> <kbd>Return</kbd> to load it here</p>
+  </div>
+  <p class="why" id="why" hidden></p>
+</main>
+<script src="standin.js"></script>
+</body>
+</html>

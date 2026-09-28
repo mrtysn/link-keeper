@@ -34,6 +34,7 @@
 
   window.browser = {
     runtime: {
+      getURL: p => `${location.origin}/${p}`,
       sendMessage: async msg => {
         switch (msg.type) {
           case "status": {
@@ -54,13 +55,16 @@
               url: r.url,
               title: i % 4 === 3 ? undefined : (r.cap?.title || r.cap?.text?.slice(0, 120) || undefined),
             }));
-            const first = tabs.slice(0, 5).map((t, i) => ({
+            tabs.splice(3, 0,
+              { url: "file:///Users/someone/dev/notes/out/2026-09-27-report.html", title: "Companion Link Report" },
+              { url: "moz-extension://4b1c/bookmarks.html", title: "Visual bookmarks" });
+            const first = tabs.slice(0, 7).map((t, i) => ({
               ...t, ...(i === 1 && { seen_at: "2026-09-28T09:12:00Z" }), ...(i === 2 && { container: "firefox-container-7" }),
             }));
             return {
               sessions: [
                 { id: "a", name: "Research for the jam", created_at: "2026-09-28T08:40:00Z", tabs: first },
-                { id: "b", created_at: "2026-09-21T19:05:00Z", tabs: tabs.slice(5) },
+                { id: "b", created_at: "2026-09-21T19:05:00Z", tabs: tabs.slice(7) },
               ],
             };
           }

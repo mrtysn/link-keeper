@@ -27,6 +27,21 @@ const el = (tag, props = {}, ...children) => {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+/* Mirrors reopenRoute in background.js: what a restore of this URL will actually open. */
+const isWeb = url => /^(https?|ftp):/.test(url);
+function kindOf(url) {
+  if (isWeb(url) || url.startsWith(browser.runtime.getURL(""))) return "web";
+  return /^file:/.test(url) ? "file" : "other";
+}
+
+function restored(r) {
+  const parts = [`Reopened ${plural(r.restored, "tab")}`];
+  if (r.viaHelper) parts.push(`${r.viaHelper} local through the helper`);
+  if (r.standins) parts.push(`${r.standins} as stand-ins`);
+  const fix = /not installed/.test(r.helperError || "") ? "; run native/install.zsh in the link-keeper repo once" : "";
+  return parts.join(" · ") + (r.helperError ? ` — local files came back as stand-ins: ${r.helperError}${fix}` : "");
+}
+
 function whenOf(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -60,9 +75,9 @@ function rowMenu(session, tab) {
     return b;
   };
   menu.append(
-    item("Open", () => act({ type: "restore-stash", id: session.id, urls: [tab.url] })),
-    item("Move to list", () => act({ type: "move-stash", id: session.id, urls: [tab.url] },
-      r => r.added ? "Moved to the list" : "Already on the list; taken out of the stash")),
+    item("Open", () => act({ type: "restore-stash", id: session.id, urls: [tab.url] }, restored)),
+    ...(isWeb(tab.url) ? [item("Move to list", () => act({ type: "move-stash", id: session.id, urls: [tab.url] },
+      r => r.added ? "Moved to the list" : "Already on the list; taken out of the stash"))] : []),
     el("hr"),
     item("Remove from stash", () => act({ type: "delete-stash", id: session.id, urls: [tab.url] }), "danger"),
   );
@@ -97,11 +112,21 @@ function rowEl(session, tab) {
   a.addEventListener("click", e => {
     if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    act({ type: "restore-stash", id: session.id, urls: [tab.url] });
+    act({ type: "restore-stash", id: session.id, urls: [tab.url] }, restored);
   });
   main.append(a);
 
-  const meta = el("div", { className: "meta" }, el("span", { textContent: hostOf(tab.url) }));
+  const kind = kindOf(tab.url);
+  const meta = el("div", { className: "meta" });
+  if (kind === "web") meta.append(el("span", { textContent: hostOf(tab.url) }));
+  if (kind === "file") {
+    meta.append(el("span", { className: "badge", textContent: "Local file",
+      title: "Reopened through Link Keeper's helper, or as a stand-in if the helper is not installed" }));
+  }
+  if (kind === "other") {
+    meta.append(el("span", { className: "badge", textContent: "Stand-in",
+      title: "Firefox will not let an extension open this page; restore opens a tab with the URL to paste" }));
+  }
   if (tab.container) meta.append(el("span", { className: "badge", textContent: "Container", title: tab.container }));
   if (tab.seen_at) {
     const t = el("time", { dateTime: tab.seen_at, textContent: `restored ${whenOf(tab.seen_at)}` });
@@ -145,10 +170,11 @@ function heading(session, shown) {
   const n = session.tabs.length;
   h2.append(el("div", { className: "gacts" },
     button("Restore all", "primary", "Reopen every tab, unloaded until you switch to it; the stash stays",
-      () => act({ type: "restore-stash", id: session.id }, r => `Reopened ${plural(r.restored, "tab")}`)),
+      () => act({ type: "restore-stash", id: session.id }, restored)),
     button("Move to list", "", "Add these to the reading list and take them out of the stash",
       () => act({ type: "move-stash", id: session.id },
-        r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}`)),
+        r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}` +
+          (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : ""))),
     button("Rename", "ghost", "", () => { renaming = session.id; render(); }),
     button("Delete…", "ghost danger", "Remove this stash; its tabs are closed, so this is their only record", () => {
       if (!confirm(`Delete this stash of ${plural(n, "tab")}? They are closed, so this removes the only record of them.`)) return;
