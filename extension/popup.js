@@ -199,6 +199,18 @@ $("open-cards").onclick = async () => {
   window.close();
 };
 
+$("open-sessions").onclick = async () => {
+  await send({ type: "open-sessions" });
+  window.close();
+};
+
+/* The stash opens its own page as the tabs close, so the popup has nothing left to show. */
+$("stash").onclick = async () => {
+  const res = await send({ type: "stash" });
+  if (res.ok) window.close();
+  else say(res.error, "bad");
+};
+
 $("queue").onclick = async () => {
   const res = await send({ type: "queue-active", note: $("note").value.trim() });
   say(res.ok

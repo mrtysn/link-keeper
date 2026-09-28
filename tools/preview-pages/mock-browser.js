@@ -46,6 +46,24 @@
             for (const row of dump.loose) row.saved_at = toIso(row.saved_at);
             return dump;
           }
+          case "sessions": {
+            if (params.has("empty")) return { sessions: [] };
+            // Two stashes cut from the mock rows: a named one with a restored tab and a container
+            // tab, and a larger unnamed one where some tabs have no title.
+            const tabs = M.dump.items.map((r, i) => ({
+              url: r.url,
+              title: i % 4 === 3 ? undefined : (r.cap?.title || r.cap?.text?.slice(0, 120) || undefined),
+            }));
+            const first = tabs.slice(0, 5).map((t, i) => ({
+              ...t, ...(i === 1 && { seen_at: "2026-09-28T09:12:00Z" }), ...(i === 2 && { container: "firefox-container-7" }),
+            }));
+            return {
+              sessions: [
+                { id: "a", name: "Research for the jam", created_at: "2026-09-28T08:40:00Z", tabs: first },
+                { id: "b", created_at: "2026-09-21T19:05:00Z", tabs: tabs.slice(5) },
+              ],
+            };
+          }
           case "get-folder": return { folder: "link-keeper", fallback: "link-keeper" };
           case "fetch-pending": return { ok: false, quiet: true };
           default: return { ok: true, remaining: 0, added: 0, total: M.status.total };
