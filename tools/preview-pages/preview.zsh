@@ -62,6 +62,7 @@ for page in popup list cards; do
       "$ext/$page.html" > "$out/$page.html"
   ln -sf "$ext/$page.js" "$out/$page.js"
 done
+ln -sf "$ext/icons.js" "$out/icons.js"
 ln -sf "$here/mock-browser.js" "$out/mock-browser.js"
 ln -sf "$here/frame.html" "$out/frame.html"
 python3 "$here/make-mock.py" "$captures" "$out/mock-data.js"
