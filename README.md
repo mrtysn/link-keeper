@@ -21,7 +21,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`preview-pages/preview.zsh` — render the popup and list pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`preview-pages/preview.zsh` — render the popup, list and stashed-tabs pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -89,6 +89,7 @@ Three keys, and you never leave the tab you are in.
 | `Ctrl+Shift+K` | keep this page — read it and store the capture |
 | `Ctrl+Shift+U` | add the page you are on to the list |
 | `Ctrl+Shift+X` | skip this one — an explicit rejection — and advance |
+| `Ctrl+Shift+S` | stash tabs — see [Stashing tabs](#stashing-tabs) (`Alt+Shift+S` off macOS, where Firefox's screenshot owns the other) |
 
 Every one of these is also a **popup button** and a **right-click menu** item, so the keyboard
 is optional. Right-clicking a *link* offers "Add this link to Link Keeper" — queueing something
@@ -129,6 +130,27 @@ click reverses it. Deferring records nothing, so the card returns next session.
 
 The deck is shuffled fresh each visit: ordered by date it would be 133 x.com cards in a row, and
 mixing the domains keeps each card an actual decision.
+
+### Stashing tabs
+
+OneTab's move, kept apart from the reading list. **Stash** (`Ctrl+Shift+S`, the popup, the page's
+right-click menu, or right-click on the tab strip) folds tabs into a saved group and closes them:
+the selected tabs if you have selected several, otherwise the whole window. *Stashed tabs* opens in
+their place.
+
+- Pinned tabs stay open, and so do `file:`, `about:` and extension pages, which an extension is not
+  allowed to reopen. Duplicate tabs all close and are recorded once.
+- Only the URL, the tab title and the tab's container are recorded. Nothing runs inside the tabs.
+- A stash is the only record of the tabs it closes (Firefox remembers 25 closed tabs), so no tab
+  closes until the saved group has been read back from storage and found complete.
+- **Restore all** reopens every tab unloaded — each one loads when you switch to it — in its
+  original container. The stash stays, with each entry marked restored. A tab's back/forward
+  history does not come back; that lives in Firefox's session, not in a URL.
+- **Move to list** hands a group, or one tab, to the reading list with its title and the stash date,
+  and takes it out of the stash. **Delete…** asks first. **Export** downloads every stash as JSON.
+
+`node tools/test-stash.mjs` runs the stash code against a fake browser with 349 tabs and checks
+that every tab is either still open or recorded, and that a restore brings each one back.
 
 ### Seeing the whole list
 
