@@ -22,7 +22,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `native/` | the helper that reopens stashed local-file tabs — `native/install.zsh` registers it with Firefox |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the Firefox profile<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, list and stashed-tabs pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the Firefox profile<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, list and stashed-tabs pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -77,6 +77,9 @@ ships as a new version.
 
        doppler run --project firefox-signing --config prd -- npx web-ext sign --channel unlisted
 
+   If approval outlasts web-ext's wait, it exits without a file and a rerun reports "already
+   submitted"; `tools/fetch-signed-xpi.py`, run under the same `doppler run`, downloads the signed
+   version instead.
 4. Open the new file in `extension/web-ext-artifacts/` with Firefox and confirm the install. It
    replaces the previous version in place; the pinned add-on id keeps the list and captures.
 
