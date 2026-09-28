@@ -59,7 +59,8 @@
               { url: "file:///Users/someone/dev/notes/out/2026-09-27-report.html", title: "Companion Link Report" },
               { url: "moz-extension://4b1c/bookmarks.html", title: "Visual bookmarks" });
             const first = tabs.slice(0, 7).map((t, i) => ({
-              ...t, ...(i === 1 && { seen_at: "2026-09-28T09:12:00Z" }), ...(i === 2 && { container: "firefox-container-7" }),
+              ...t, ...(i === 1 && { seen_at: "2026-09-28T09:12:00Z", verdict: "keep" }), ...(i === 2 && { container: "firefox-container-7" }),
+              ...(i === 5 && { verdict: "drop" }),
             }));
             return {
               sessions: [

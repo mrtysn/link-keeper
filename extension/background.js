@@ -567,7 +567,11 @@ async function queueActiveTab() {
  * from the worklist — a stash means "come back to these", not "read these" — with a move into the
  * list for a group that turns out to be reading after all.
  *
- *   sessions — newest first: { id, created_at, name?, tabs: [{ url, title?, container?, seen_at? }] }
+ *   sessions — newest first: { id, created_at, name?,
+ *                              tabs: [{ url, title?, container?, seen_at?, verdict?, judged_at? }] }
+ *
+ * verdict is "keep" or "drop", set from the stash card deck. A drop is a flag, not a deletion —
+ * the stash is the only record of these tabs — and "Clear dropped" is what removes them.
  *
  * Only the tab's URL, title and container are recorded. Nothing is injected into the tabs being
  * stashed. A stash is the only record of the tabs it closes — Firefox remembers 25 closed tabs — so
@@ -1043,6 +1047,33 @@ browser.runtime.onMessage.addListener(async msg => {
 
     case "move-stash":
       return moveStashToList(msg.id, msg.urls);
+
+    case "judge-stashed": {
+      const sessions = await getSessions();
+      const tab = sessions.find(s => s.id === msg.id)?.tabs.find(t => t.url === msg.url);
+      if (!tab) return { ok: false, error: "that tab is no longer stashed" };
+      if (msg.verdict) Object.assign(tab, { verdict: msg.verdict, judged_at: new Date().toISOString() });
+      else { delete tab.verdict; delete tab.judged_at; }
+      await setSessions(sessions);
+      return { ok: true };
+    }
+
+    case "clear-dropped": {
+      const sessions = await getSessions();
+      let removed = 0;
+      for (const s of sessions) {
+        if (msg.id && s.id !== msg.id) continue;
+        const before = s.tabs.length;
+        s.tabs = s.tabs.filter(t => t.verdict !== "drop");
+        removed += before - s.tabs.length;
+      }
+      await setSessions(sessions.filter(s => s.tabs.length));
+      return { ok: true, removed };
+    }
+
+    case "open-stash-cards":
+      await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html") + (msg.id ? `?stash=${msg.id}` : "") });
+      return { ok: true };
 
     case "add":
       return addItems(msg.urls, msg.note);

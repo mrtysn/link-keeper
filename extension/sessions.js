@@ -96,6 +96,7 @@ function rowMenu(session, tab) {
 function rowEl(session, tab) {
   const li = el("li");
   if (tab.seen_at) li.classList.add("restored");
+  if (tab.verdict === "drop") li.classList.add("dropped");
   li.append(srcIcon(tab.url));
 
   const main = el("div", { className: "main" });
@@ -127,6 +128,8 @@ function rowEl(session, tab) {
     meta.append(el("span", { className: "badge", textContent: "Stand-in",
       title: "Firefox will not let an extension open this page; restore opens a tab with the URL to paste" }));
   }
+  if (tab.verdict === "keep") meta.append(el("span", { className: "badge keep", textContent: "✓ Kept" }));
+  if (tab.verdict === "drop") meta.append(el("span", { className: "badge drop", textContent: "✕ Dropped" }));
   if (tab.container) meta.append(el("span", { className: "badge", textContent: "Container", title: tab.container }));
   if (tab.seen_at) {
     const t = el("time", { dateTime: tab.seen_at, textContent: `restored ${whenOf(tab.seen_at)}` });
@@ -175,6 +178,8 @@ function heading(session, shown) {
       () => act({ type: "move-stash", id: session.id },
         r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}` +
           (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : ""))),
+    button("Cards", "", "Go through this stash as a stack of cards",
+      () => send({ type: "open-stash-cards", id: session.id })),
     button("Rename", "ghost", "", () => { renaming = session.id; render(); }),
     button("Delete…", "ghost danger", "Remove this stash; its tabs are closed, so this is their only record", () => {
       if (!confirm(`Delete this stash of ${plural(n, "tab")}? They are closed, so this removes the only record of them.`)) return;
@@ -191,6 +196,9 @@ function render() {
     ? `${plural(total, "tab")} in ${sessions.length === 1 ? "1 stash" : `${sessions.length} stashes`}`
     : "Nothing stashed";
   $("export").disabled = !total;
+  const dropped = sessions.reduce((n, s) => n + s.tabs.filter(t => t.verdict === "drop").length, 0);
+  $("clear-dropped").hidden = !dropped;
+  $("clear-dropped").textContent = `Clear ${dropped} dropped…`;
 
   const out = $("out");
   out.textContent = "";
@@ -222,6 +230,12 @@ $("q").addEventListener("input", render);
 
 $("stash").onclick = () => act({ type: "stash" }, r =>
   `Stashed ${plural(r.stashed, "tab")}${r.why ? ` · left open: ${r.why}` : ""}`);
+
+$("clear-dropped").onclick = () => {
+  const n = sessions.reduce((sum, s) => sum + s.tabs.filter(t => t.verdict === "drop").length, 0);
+  if (!confirm(`Remove the ${n} tabs you dropped? They are closed, so this removes the only record of them.`)) return;
+  act({ type: "clear-dropped" }, r => `Removed ${plural(r.removed, "dropped tab")}`);
+};
 
 $("export").onclick = () => {
   const a = document.createElement("a");

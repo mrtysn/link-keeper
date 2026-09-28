@@ -52,7 +52,8 @@ function makeBrowser(tabs, { failWrites = false, helper = "installed" } = {}) {
         for (const url of opened) tabs.push({ id: nextId++, windowId: 1, url, cookieStoreId: "firefox-default", pinned: false });
         return { ok: true, opened, failed: msg.open.filter(u => u.includes("gone")).map(url => ({ url, error: "file no longer exists" })) };
       },
-      onInstalled: listeners(), onStartup: listeners(), onMessage: listeners(),
+      onInstalled: listeners(), onStartup: listeners(),
+      onMessage: { addListener(fn) { browser.handle = fn; } },
     },
     tabs: {
       onUpdated: listeners(),
@@ -278,6 +279,32 @@ await check("move to list carries title and stash date, and empties the stash", 
   assert.equal(store.items.length, web.length, "only web pages go to the list");
   assert.equal(rest.stayed, session.tabs.length - 1 - (web.length - 1));
   assert.ok(store.sessions[0].tabs.every(t => !/^https?:/.test(t.url)), "local and browser pages stay in the stash");
+});
+
+await check("a verdict is a flag: set, cleared by null, and only Clear dropped removes a tab", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [
+    { id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/" }, { url: "file:///r/2.html" }] },
+    { id: "b", created_at: "2026-09-27T00:00:00Z", tabs: [{ url: "https://3.example/" }] },
+  ];
+  await load(browser);
+  assert.equal((await browser.handle({ type: "judge-stashed", id: "a", url: "https://1.example/", verdict: "drop" })).ok, true);
+  assert.equal((await browser.handle({ type: "judge-stashed", id: "a", url: "file:///r/2.html", verdict: "keep" })).ok, true);
+  assert.equal((await browser.handle({ type: "judge-stashed", id: "b", url: "https://3.example/", verdict: "drop" })).ok, true);
+  assert.equal(store.sessions[0].tabs[0].verdict, "drop");
+  assert.equal(store.sessions.flatMap(s => s.tabs).length, 3, "a drop deletes nothing");
+
+  await browser.handle({ type: "judge-stashed", id: "b", url: "https://3.example/", verdict: null });
+  assert.equal(store.sessions[1].tabs[0].verdict, undefined, "null clears");
+
+  const res = await browser.handle({ type: "clear-dropped" });
+  assert.equal(res.removed, 1);
+  assert.deepEqual(store.sessions.flatMap(s => s.tabs.map(t => t.url)), ["file:///r/2.html", "https://3.example/"]);
+
+  await browser.handle({ type: "judge-stashed", id: "a", url: "file:///r/2.html", verdict: "drop" });
+  await browser.handle({ type: "clear-dropped", id: "a" });
+  assert.deepEqual(store.sessions.map(s => s.id), ["b"], "a stash emptied by clearing goes");
+  assert.equal((await browser.handle({ type: "judge-stashed", id: "a", url: "nope", verdict: "keep" })).ok, false);
 });
 
 console.log(`\n${passed} checks passed`);

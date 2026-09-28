@@ -57,7 +57,7 @@ fi
 
 mkdir -p "$out"
 stamp=$(date +%s)
-for page in popup list cards sessions standin; do
+for page in popup list cards sessions standin stash-cards; do
   sed -e "s#<meta charset=\"utf-8\">#<meta charset=\"utf-8\"><meta name=\"darkreader-lock\">#" \
       -e "s#<script src=\"$page.js\"></script>#<script src=\"mock-data.js?v=$stamp\"></script><script src=\"mock-browser.js?v=$stamp\"></script><script src=\"$page.js?v=$stamp\"></script>#" \
       "$ext/$page.html" > "$out/$page.html"
@@ -73,6 +73,7 @@ print "http://127.0.0.1:$port/frame.html"
 print "http://127.0.0.1:$port/list.html"
 print "http://127.0.0.1:$port/cards.html"
 print "http://127.0.0.1:$port/sessions.html"
+print "http://127.0.0.1:$port/stash-cards.html"
 print "http://127.0.0.1:$port/standin.html?url=file:///tmp/x.html&title=Report&why=the+helper+is+not+installed"
 cd "$out"
 exec python3 -m http.server "$port" --bind 127.0.0.1

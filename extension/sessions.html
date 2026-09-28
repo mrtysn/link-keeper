@@ -218,6 +218,8 @@
   }
   ul.rows.stash > li { grid-template-columns: 16px minmax(0, 1fr) auto; }
   li.restored .ttl { color: var(--dim); }
+  li.dropped .ttl { color: var(--dim); text-decoration: line-through; }
+  .badge.keep { color: var(--ok); } .badge.drop { color: var(--bad); }
   @media (max-width: 40rem) { .group > h2 .gacts { width: 100%; margin-left: 0; } }
 </style>
 </head>
@@ -230,6 +232,8 @@
     </div>
     <div class="page-actions">
       <a class="btn" href="list.html">← List</a>
+      <a class="btn" href="stash-cards.html" title="Go through every stash as a stack of cards">Cards</a>
+      <button class="danger" id="clear-dropped" hidden title="Remove every tab you dropped from the cards">Clear dropped…</button>
       <button id="export" title="Download every stash as JSON, a backup of tabs that are no longer open">Export</button>
       <button class="primary" id="stash" title="Stash the selected tabs, or every other tab in this window, and close them">Stash this window</button>
     </div>
