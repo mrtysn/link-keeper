@@ -21,7 +21,8 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `importers/` | scripts that turn an existing pile of saved links into paste-ready lines, dates intact |
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`preview-pages/preview.zsh` — render the popup, list and stashed-tabs pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `native/` | the helper that reopens stashed local-file tabs — `native/install.zsh` registers it with Firefox |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, list and stashed-tabs pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -138,19 +139,26 @@ right-click menu, or right-click on the tab strip) folds tabs into a saved group
 the selected tabs if you have selected several, otherwise the whole window. *Stashed tabs* opens in
 their place.
 
-- Pinned tabs stay open, and so do `file:`, `about:` and extension pages, which an extension is not
-  allowed to reopen. Duplicate tabs all close and are recorded once.
+- Pinned and empty tabs stay open; everything else is stashed. Duplicate tabs all close and are
+  recorded once.
 - Only the URL, the tab title and the tab's container are recorded. Nothing runs inside the tabs.
 - A stash is the only record of the tabs it closes (Firefox remembers 25 closed tabs), so no tab
   closes until the saved group has been read back from storage and found complete.
-- **Restore all** reopens every tab unloaded — each one loads when you switch to it — in its
+- **Restore all** reopens every web page unloaded — each one loads when you switch to it — in its
   original container. The stash stays, with each entry marked restored. A tab's back/forward
   history does not come back; that lives in Firefox's session, not in a URL.
-- **Move to list** hands a group, or one tab, to the reading list with its title and the stash date,
-  and takes it out of the stash. **Delete…** asks first. **Export** downloads every stash as JSON.
+- Firefox lets no extension open a `file:` URL, an `about:` page or another extension's page. Local
+  files reopen through `native/open-local-files.py`, a native-messaging helper that accepts only
+  `file:` URLs of files that exist and opens them in the Firefox that started it. Run
+  `native/install.zsh` once to register it. Anything the helper cannot open — and every `about:`
+  or other extension's page — comes back as a stand-in tab carrying the original title, with the
+  URL one click from the clipboard, as OneTab and Sidebery do.
+- **Move to list** hands a group's web pages, or one, to the reading list with its title and the
+  stash date, and takes them out of the stash; local files and browser pages stay. **Delete…** asks first. **Export** downloads every stash as JSON.
 
 `node tools/test-stash.mjs` runs the stash code against a fake browser with 349 tabs and checks
 that every tab is either still open or recorded, and that a restore brings each one back.
+`tools/test-open-local-files.py` checks the helper's refusals without opening anything.
 
 ### Seeing the whole list
 
