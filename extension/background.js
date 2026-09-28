@@ -589,7 +589,11 @@ async function stashTabs(windowId) {
   const selected = all.filter(t => t.highlighted);
   const pool = selected.length > 1 ? selected : all;
   const closing = pool.filter(stashable);
-  if (!closing.length) return { ok: false, error: "no web pages to stash here" };
+  const why = leftOpen(pool.filter(t => !stashable(t) && !t.url?.startsWith(sessionsPage())));
+  if (!closing.length) {
+    const scope = selected.length > 1 ? `the ${pool.length} selected tabs` : "this window";
+    return { ok: false, error: `nothing stashed: ${scope} holds only ${why}, which an extension cannot reopen; all left open` };
+  }
 
   // Duplicate tabs all close, and are recorded once.
   const urls = new Set();
@@ -614,7 +618,18 @@ async function stashTabs(windowId) {
   else await browser.tabs.create({ url: sessionsPage(), windowId: all[0].windowId, active: true });
   await browser.tabs.remove(closing.map(t => t.id));
 
-  return { ok: true, stashed: tabs.length, closed: closing.length, left: pool.length - closing.length };
+  return { ok: true, stashed: tabs.length, closed: closing.length, left: pool.length - closing.length, why };
+}
+
+/* "49 local files, 9 extension pages, 2 pinned" — what stayed open, by the reason it stayed. */
+function leftOpen(tabs) {
+  const n = { pinned: 0, file: 0, page: 0 };
+  for (const t of tabs) n[t.pinned ? "pinned" : /^file:/.test(t.url || "") ? "file" : "page"]++;
+  return [
+    n.file && `${n.file} local file${n.file > 1 ? "s" : ""}`,
+    n.page && `${n.page} browser or extension page${n.page > 1 ? "s" : ""}`,
+    n.pinned && `${n.pinned} pinned`,
+  ].filter(Boolean).join(", ");
 }
 
 /* Restoring keeps the entries; each one is marked seen instead. Several at once open unloaded, so
@@ -669,7 +684,7 @@ async function moveStashToList(id, urls) {
 
 async function notifyStash(res) {
   if (!res.ok) return notify(`failed: ${res.error}`);
-  if (res.left) await notify(`stashed ${res.stashed} · ${res.left} left open (pinned or not a web page)`);
+  if (res.why) await notify(`stashed ${res.stashed} · left open: ${res.why}`);
 }
 
 browser.commands.onCommand.addListener(async name => {

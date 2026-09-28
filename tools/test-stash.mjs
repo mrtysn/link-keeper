@@ -141,6 +141,16 @@ await check("a stash whose write does not land closes nothing", async () => {
   assert.equal(tabs.length, N, "nothing opened, nothing closed");
 });
 
+await check("a selection of only local files and extension pages says why nothing closed", async () => {
+  const tabs = makeTabs(60).map(t => ({ ...t, url: t.id % 5 ? `file:///r/${t.id}.html` : `moz-extension://other/${t.id}.html`, highlighted: true, pinned: false }));
+  const { browser, closed } = makeBrowser(tabs);
+  const bg = await load(browser);
+  const res = await bg.stashTabs();
+  assert.equal(res.ok, false);
+  assert.equal(closed.length, 0);
+  assert.match(res.error, /the 60 selected tabs holds only 48 local files, 12 browser or extension pages/);
+});
+
 await check("selected tabs only, when several are selected", async () => {
   const tabs = makeTabs(40);
   for (const i of [10, 11, 12]) tabs[i].highlighted = true;

@@ -195,7 +195,7 @@ function render() {
 $("q").addEventListener("input", render);
 
 $("stash").onclick = () => act({ type: "stash" }, r =>
-  `Stashed ${plural(r.stashed, "tab")}${r.left ? ` · ${r.left} left open (pinned or not a web page)` : ""}`);
+  `Stashed ${plural(r.stashed, "tab")}${r.why ? ` · left open: ${r.why}` : ""}`);
 
 $("export").onclick = () => {
   const a = document.createElement("a");
