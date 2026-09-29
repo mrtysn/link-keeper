@@ -32,7 +32,18 @@
     });
   }
 
+  const bookmarkListeners = {};
   // Panels and views of the Stashed tabs page, opened as a click or a pick would.
+  // import-run pastes 300 OneTab lines and presses Import.
+  if (params.has("import-run")) {
+    addEventListener("load", () => setTimeout(() => {
+      document.getElementById("import").click();
+      const box = document.getElementById("import-text");
+      box.value = Array.from({ length: 300 }, (_, i) => `https://site-${i}.example/ | Page ${i}${i % 100 === 99 ? "\n" : ""}`).join("\n");
+      box.dispatchEvent(new Event("input"));
+      document.getElementById("import-go").click();
+    }, 200));
+  }
   if (params.has("view")) try { localStorage.setItem("stashView", params.get("view")); } catch (e) { /* no storage */ }
   for (const panel of ["settings", "import"]) {
     if (params.has(panel)) addEventListener("load", () => setTimeout(() => document.getElementById(panel)?.click(), 200));
@@ -82,6 +93,15 @@
               ],
             };
           }
+          case "import-stashes": {
+            // Writes one bookmark every 10 ms, as Firefox reports them, so the progress shows.
+            const tabs = msg.stashes.flatMap(st => st.tabs);
+            for (const [i, t] of tabs.entries()) {
+              await new Promise(r => setTimeout(r, 10));
+              for (const fn of bookmarkListeners.onCreated || []) fn(`imp${i}`, { id: `imp${i}`, url: t.url });
+            }
+            return { ok: true, stashes: msg.stashes.length, tabs: tabs.length };
+          }
           case "stash-settings":
             return { settings: { afterStash: "show", afterRestore: "keep", exclude: ["mail.google.com", "calendar.google.com"] } };
           case "stash-known": {
@@ -106,7 +126,10 @@
       local: { get: async key => ({ [key]: store[key] }), set: async () => {} },
       onChanged: { addListener() {} },
     },
-    bookmarks: Object.fromEntries(["onCreated", "onRemoved", "onChanged", "onMoved"].map(k => [k, { addListener() {} }])),
+    bookmarks: Object.fromEntries(["onCreated", "onRemoved", "onChanged", "onMoved"].map(k => [k, {
+      addListener(fn) { (bookmarkListeners[k] ||= new Set()).add(fn); },
+      removeListener(fn) { bookmarkListeners[k]?.delete(fn); },
+    }])),
     permissions: { request: async () => true, contains: async () => true },
     tabs: { update: async () => {} },
   };

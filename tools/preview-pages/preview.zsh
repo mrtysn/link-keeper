@@ -20,6 +20,7 @@
 #   light    drop the dark-scheme rules to show the light palette
 #   empty    sessions.html with nothing stashed
 #   settings, import   sessions.html with that panel open
+#   import-run         sessions.html importing 300 tabs, slowly enough to see the progress
 #   view=day|month     sessions.html grouped by date
 #
 # DATA_DIR comes from the environment, else from config.local.sh at the repo root, else this
@@ -33,7 +34,7 @@ ext=$repo/extension
 out=$here/out
 
 if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-  sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
