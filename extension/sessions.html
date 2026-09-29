@@ -102,6 +102,7 @@
     border: 1px solid var(--field); border-radius: 8px;
   }
   #import-msg { font-size: .875rem; color: var(--dim); }
+  #import-progress { width: 12rem; height: 6px; accent-color: var(--accent); }
   #import-msg.ok { color: var(--ok); } #import-msg.bad { color: var(--bad); }
 
   /* --- rows --- */
@@ -301,6 +302,7 @@
     <textarea id="import-text" spellcheck="false" aria-label="Text to import" placeholder="https://example.com/ | Example"></textarea>
     <div class="row">
       <input type="file" id="import-file" accept=".json,.csv,.txt,text/*,application/json" aria-label="Import from a file">
+      <progress id="import-progress" hidden></progress>
       <span id="import-msg" role="status"></span>
     </div>
     <div class="row">

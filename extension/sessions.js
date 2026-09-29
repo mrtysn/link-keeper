@@ -398,6 +398,7 @@ const FORMAT_NAMES = {
 let parsed = null;
 
 function previewImport() {
+  $("import-cancel").textContent = "Cancel";
   parsed = parseStashImport($("import-text").value);
   const n = parsed.stashes.reduce((sum, s) => sum + s.tabs.length, 0);
   const note = $("import-msg");
@@ -417,18 +418,55 @@ $("import-file").onchange = async e => {
   $("import-text").value = await file.text();
   previewImport();
 };
-$("import-cancel").onclick = () => { $("import-panel").hidden = true; $("import").setAttribute("aria-expanded", "false"); };
+function closeImport() {
+  $("import-panel").hidden = true;
+  $("import").setAttribute("aria-expanded", "false");
+}
+$("import-cancel").onclick = closeImport;
+
+/* Writing a few hundred bookmarks takes seconds, so the panel counts them as Firefox reports each
+ * one, then stays open with the result instead of vanishing. */
 $("import-go").onclick = async () => {
   if (!parsed?.stashes.length) return;
-  $("import-go").disabled = true;
-  const res = await act({ type: "import-stashes", stashes: parsed.stashes },
-    r => `Imported ${plural(r.tabs, "tab")} in ${plural(r.stashes, "stash")}`);
+  const total = parsed.stashes.reduce((sum, s) => sum + s.tabs.length, 0);
+  const note = $("import-msg"), bar = $("import-progress");
+  const controls = ["import-go", "import-cancel", "import-text", "import-file"].map($);
+  for (const c of controls) c.disabled = true;
+  let written = 0;
+  const onCreated = (id, node) => {
+    if (!node.url) return;
+    written++;
+    bar.value = Math.min(written, total);
+    note.textContent = `Importing… ${written} of ${total} tabs`;
+  };
+  note.className = "";
+  note.textContent = `Importing… 0 of ${total} tabs`;
+  bar.max = total;
+  bar.value = 0;
+  bar.hidden = false;
+  browser.bookmarks.onCreated.addListener(onCreated);
+  let res;
+  try {
+    res = await send({ type: "import-stashes", stashes: parsed.stashes });
+  } finally {
+    browser.bookmarks.onCreated.removeListener(onCreated);
+    bar.hidden = true;
+    for (const c of controls) c.disabled = false;
+  }
   if (res?.ok) {
     $("import-text").value = "";
     $("import-file").value = "";
-    $("import-panel").hidden = true;
-    $("import").setAttribute("aria-expanded", "false");
-  } else previewImport();
+    parsed = null;
+    $("import-go").disabled = true;
+    $("import-cancel").textContent = "Close";
+    note.className = "ok";
+    note.textContent = `Imported ${plural(res.tabs, "tab")} in ${plural(res.stashes, "stash")}; they are at the top of the list.`;
+  } else {
+    previewImport();
+    note.className = "bad";
+    note.textContent = res?.error || "The import did not go through; nothing was written.";
+  }
+  await load();
 };
 
 /* --- page actions ------------------------------------------------------------------------ */
