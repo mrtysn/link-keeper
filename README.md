@@ -142,6 +142,11 @@ right-click menu, or right-click on the tab strip) folds tabs into a saved group
 the selected tabs if you have selected several, otherwise the whole window. *Stashed tabs* opens in
 their place.
 
+There is one Stashed tabs page, like OneTab's tab: pin it, and stashing, the popup's **Stashed**
+button and the menu all switch to that tab, in whichever window it is, instead of opening another.
+A new one opens only when none is open. Stashing a whole window while the page is pinned in a
+different window closes the stashed window, as OneTab does.
+
 - Pinned and empty tabs stay open; everything else is stashed. Duplicate tabs all close and are
   recorded once.
 - Only the URL, the tab title and the tab's container are recorded. Nothing runs inside the tabs.
