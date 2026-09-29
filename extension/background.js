@@ -582,6 +582,18 @@ const getSessions = () => read("sessions", []);
 const setSessions = sessions => browser.storage.local.set({ sessions });
 const sessionsPage = () => browser.runtime.getURL("sessions.html");
 
+/* There is one Stashed tabs page, like OneTab's tab: every way in switches to the open one — in
+ * this window if it has one, else in any window, pinned or not — and a new tab opens only when
+ * none is open. Pinning it is left to the user. */
+async function showSessions(windowId) {
+  const open = (await browser.tabs.query({})).filter(t => t.url?.startsWith(sessionsPage()));
+  const page = open.find(t => t.windowId === windowId) || open[0];
+  if (!page) return browser.tabs.create({ url: sessionsPage(), ...(windowId != null && { windowId }), active: true });
+  await browser.tabs.update(page.id, { active: true });
+  if (page.windowId !== windowId) await browser.windows?.update(page.windowId, { focused: true });
+  return page;
+}
+
 /* Everything is stashed but pinned tabs, empty tabs, and this page. How a tab comes back depends
  * on what it is — see restoreTabs. */
 const EMPTY_TAB = /^about:(blank|newtab|home|privatebrowsing)$/;
@@ -634,10 +646,9 @@ async function stashTabs(windowId) {
   const kept = new Set((stored?.tabs || []).map(t => t.url));
   if (!tabs.every(t => kept.has(t.url))) return { ok: false, error: "the stash did not save; no tab was closed" };
 
-  // The sessions page opens before anything closes: closing a window's last tab closes the window.
-  const page = all.find(t => t.url?.startsWith(sessionsPage()));
-  if (page) await browser.tabs.update(page.id, { active: true });
-  else await browser.tabs.create({ url: sessionsPage(), windowId: all[0].windowId, active: true });
+  // The sessions page shows before anything closes: closing a window's last tab closes the window.
+  // It opens here unless one is open elsewhere; then this window may close, as OneTab's does.
+  await showSessions(all[0].windowId);
   await browser.tabs.remove(closing.map(t => t.id));
 
   return { ok: true, stashed: tabs.length, closed: closing.length, left: pool.length - closing.length, why };
@@ -868,7 +879,7 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     case "menu-cards": await browser.tabs.create({ url: browser.runtime.getURL("cards.html") }); break;
     case "menu-stash": await notifyStash(await stashTabs(tab?.windowId)); break;
     case "menu-stash-tab": await notifyStash(await stashTabs(tab?.windowId)); break;
-    case "menu-sessions": await browser.tabs.create({ url: sessionsPage() }); break;
+    case "menu-sessions": await showSessions(tab?.windowId); break;
     case "menu-queue-link":
       if (info.linkUrl) {
         const res = await addItems([{ url: info.linkUrl.split("#")[0], saved_at: new Date().toISOString() }]);
@@ -1080,7 +1091,7 @@ browser.runtime.onMessage.addListener(async msg => {
       return { ok: true };
 
     case "open-sessions":
-      await browser.tabs.create({ url: sessionsPage() });
+      await showSessions((await browser.windows.getLastFocused()).id);
       return { ok: true };
 
     case "stash":

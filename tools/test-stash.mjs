@@ -55,6 +55,11 @@ function makeBrowser(tabs, { failWrites = false, helper = "installed" } = {}) {
       onInstalled: listeners(), onStartup: listeners(),
       onMessage: { addListener(fn) { browser.handle = fn; } },
     },
+    windows: {
+      focused: null,
+      getLastFocused: async () => ({ id: 1 }),
+      update: async (id, props) => { if (props.focused) browser.windows.focused = id; },
+    },
     tabs: {
       onUpdated: listeners(),
       query: async q => tabs.filter(t => q.windowId == null || t.windowId === q.windowId).map(t => ({ ...t })),
@@ -194,6 +199,29 @@ await check("an open sessions page is reused, not duplicated", async () => {
   const { browser } = makeBrowser(tabs);
   const bg = await load(browser);
   await bg.stashTabs();
+  assert.equal(tabs.filter(t => t.url.endsWith("sessions.html")).length, 1);
+});
+
+await check("a sessions page pinned in another window is the one shown, from every entry point", async () => {
+  const tabs = makeTabs(20);
+  tabs.push({ id: 998, windowId: 2, url: "moz-extension://fake-uuid/sessions.html", pinned: true, cookieStoreId: "firefox-default" });
+  const { browser } = makeBrowser(tabs);
+  const bg = await load(browser);
+  const res = await bg.stashTabs(1);
+  assert.equal(res.ok, true);
+  await browser.handle({ type: "open-sessions" });
+  const pages = tabs.filter(t => t.url.endsWith("sessions.html"));
+  assert.deepEqual(pages.map(t => t.id), [998], "no second sessions page");
+  assert.equal(pages[0].active, true);
+  assert.equal(browser.windows.focused, 2);
+});
+
+await check("with no sessions page open, the popup's Stashed button opens exactly one", async () => {
+  const tabs = makeTabs(5);
+  const { browser } = makeBrowser(tabs);
+  const bg = await load(browser);
+  await browser.handle({ type: "open-sessions" });
+  await browser.handle({ type: "open-sessions" });
   assert.equal(tabs.filter(t => t.url.endsWith("sessions.html")).length, 1);
 });
 
