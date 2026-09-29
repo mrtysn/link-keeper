@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-# DESC: List the tab stashes the Firefox extension holds, read straight out of the profile.
+# DESC: List the tab stashes the Firefox extension holds, read straight out of the profile's bookmarks.
 """Show what Link Keeper's stashes hold, without opening Firefox or the extension.
 
-Reads the add-on's storage.local the way extension-diff.py does — a copy of its IndexedDB, decoded —
-and prints each stash with its time and how many URLs of each kind it recorded (https, file,
-moz-extension, …). Answers "did my stash work" after the tabs have closed.
+Since 5.9 stashes are bookmarks — Other Bookmarks / Link Keeper stashes / one folder per stash — so
+this reads a copy of the profile's places.sqlite and prints each stash with its time and how many
+URLs of each kind it holds (https, file, moz-extension, …). Answers "did my stash work" after the
+tabs have closed. If the add-on still holds stashes from before bookmarks (not yet moved over), it
+says so.
 
 Usage:
     ./stash-status.py
@@ -15,16 +17,16 @@ from __future__ import annotations
 
 import argparse
 import collections
+import datetime
 import importlib.util
-import re
+import shutil
 import sqlite3
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-ISO = re.compile(r"\d{4}-\d\d-\d\dT[\d:.]+Z")
-SCHEMES = {"http", "https", "ftp", "file", "moz-extension", "about", "view-source", "chrome", "data"}
+ROOT_TITLE = "Link Keeper stashes"
 
 
 def load(name: str, file: str):
@@ -32,6 +34,35 @@ def load(name: str, file: str):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def read_places(profile: Path) -> list[tuple[str, int, list[str]]]:
+    """(title, dateAdded µs, [urls]) per stash folder, in bookmark order."""
+    with tempfile.TemporaryDirectory() as tmp:
+        # Firefox holds places.sqlite open; a copy with its WAL reads consistently.
+        for suffix in ("", "-wal"):
+            src = profile / f"places.sqlite{suffix}"
+            if src.exists():
+                shutil.copyfile(src, Path(tmp) / f"places.sqlite{suffix}")
+        db = sqlite3.connect(Path(tmp) / "places.sqlite")
+        try:
+            root = db.execute(
+                "SELECT b.id FROM moz_bookmarks b JOIN moz_bookmarks p ON b.parent = p.id "
+                "WHERE p.guid = 'unfiled_____' AND b.type = 2 AND b.title = ?", (ROOT_TITLE,)).fetchone()
+            if not root:
+                return []
+            folders = db.execute(
+                "SELECT id, title, dateAdded FROM moz_bookmarks WHERE parent = ? AND type = 2 ORDER BY position",
+                (root[0],)).fetchall()
+            out = []
+            for fid, title, added in folders:
+                urls = [u for (u,) in db.execute(
+                    "SELECT p.url FROM moz_bookmarks b JOIN moz_places p ON b.fk = p.id "
+                    "WHERE b.parent = ? AND b.type = 1 ORDER BY b.position", (fid,))]
+                out.append((title or "", added or 0, urls))
+            return out
+        finally:
+            db.close()
 
 
 def main() -> int:
@@ -47,34 +78,30 @@ def main() -> int:
         print(f"no install of {ident or 'the add-on'} recorded in any Firefox profile", file=sys.stderr)
         return 2
     profile, uuid = install
+
     try:
-        values, written = diff.read_storage(profile, uuid)
-    except (OSError, sqlite3.Error, ValueError) as exc:
-        print(f"could not read the extension's storage: {exc}", file=sys.stderr)
+        stashes = read_places(profile)
+    except (OSError, sqlite3.Error) as exc:
+        print(f"could not read the profile's bookmarks: {exc}", file=sys.stderr)
         return 2
 
-    blob = values.get("sessions")
-    if not blob:
-        print("no stashes")
+    try:
+        values, _ = diff.read_storage(profile, uuid)
+        if values.get("sessions"):
+            print("the add-on still holds stashes from before bookmarks; they move over when 5.9 or later first runs")
+    except (OSError, sqlite3.Error, ValueError):
+        pass
+
+    if not stashes:
+        print(f"no stashes in {ROOT_TITLE}  ({profile.name})")
         return 0
-
-    # A stash is { id, created_at, name?, tabs: [...] }; its uuid id is the first string of each one.
-    stashes, cur = [], None
-    for s in diff.clone_strings(blob):
-        if UUID.fullmatch(s):
-            cur = {"when": None, "name": None, "kinds": collections.Counter()}
-            stashes.append(cur)
-        elif cur is None:
-            continue
-        elif cur["when"] is None and ISO.fullmatch(s):
-            cur["when"] = s
-        elif (m := re.match(r"^([a-z-]+):", s)) and m.group(1) in SCHEMES:
-            cur["kinds"][m.group(1)] += 1
-
-    print(f"{len(stashes)} stashes, last written {diff.stamp(written['sessions'])}  ({profile.name})")
-    for st in stashes:
-        kinds = ", ".join(f"{n} {k}" for k, n in st["kinds"].most_common())
-        print(f"  {st['when'] or '?'}  {sum(st['kinds'].values()):>4} tabs  {kinds}")
+    total = sum(len(u) for _, _, u in stashes)
+    print(f"{len(stashes)} stashes, {total} tabs, in Other Bookmarks / {ROOT_TITLE}  ({profile.name})")
+    for title, added, urls in stashes:
+        kinds = collections.Counter(u.split(":", 1)[0] for u in urls)
+        when = datetime.datetime.fromtimestamp(added / 1e6).strftime("%Y-%m-%d %H:%M") if added else "?"
+        detail = ", ".join(f"{n} {k}" for k, n in kinds.most_common())
+        print(f"  {when}  {len(urls):>4} tabs  {title[:40]:<40}  {detail}")
     return 0
 
 
