@@ -232,8 +232,6 @@ hundreds of entries, rather than a 22rem popup.
   already read is legible without opening it again.
 - Per row: **Re-read** reads it again in the background, and **⋯** holds **Open in this tab**
   (loads it here and makes it current), **Mark kept**, **Skip** and **Remove from list**.
-- **Remove all…** per group, and **Tidy…** to clear every finished entry at once. Neither
-  touches your captures.
 
 Clicking a title opens it in a new tab and marks that entry current, so a `Ctrl+Shift+K`
 there attaches the capture to the right list entry.

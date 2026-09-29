@@ -389,14 +389,7 @@ function render() {
   const mode = $("groupby").value;
   for (const [name, list] of groupRows(visible, mode)) {
     const section = el("section", { className: "group" });
-    if (name) {
-      const rm = el("button", { className: "small ghost danger", textContent: "Remove all…" });
-      rm.onclick = () => {
-        if (!confirm(`Remove all ${list.length} from ${name}? Captures are kept.`)) return;
-        send({ type: "remove", urls: list.map(r => r.url) }).then(load);
-      };
-      section.append(el("h2", {}, el("span", { textContent: name }), el("span", { className: "n", textContent: list.length }), rm));
-    }
+    if (name) section.append(el("h2", {}, el("span", { textContent: name }), el("span", { className: "n", textContent: list.length })));
     const ul = el("ul", { className: "rows" });
     for (const row of list) {
       try {
@@ -500,15 +493,6 @@ $("do-import").onclick = () => {
     return;
   }
   runImport(raw);
-};
-
-$("tidy").onclick = async () => {
-  const done = rows.filter(r => r.status !== "pending").map(r => r.url);
-  if (!done.length) return say("Nothing to tidy: everything is still pending");
-  if (!confirm(`Remove ${done.length} finished entries from the list? Captures are kept.`)) return;
-  await send({ type: "remove", urls: done });
-  say(`Removed ${done.length} from the list`);
-  load();
 };
 
 if (location.hash === "#import") showImport(true);
