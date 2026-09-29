@@ -563,30 +563,177 @@ async function queueActiveTab() {
 }
 
 /* --- stashed tabs ----------------------------------------------------------------
- * OneTab's move: fold a window's tabs into a saved group and close them. A store of its own, apart
- * from the worklist — a stash means "come back to these", not "read these" — with a move into the
- * list for a group that turns out to be reading after all.
+ * OneTab's move: fold tabs into a saved group and close them. Apart from the worklist — a stash
+ * means "come back to these", not "read these" — with a move into the list for a group that turns
+ * out to be reading after all.
  *
- *   sessions — newest first: { id, created_at, name?,
- *                              tabs: [{ url, title?, container?, seen_at?, verdict?, judged_at? }] }
+ * Stashes are Firefox bookmarks, as TidyTab's were, so they outlive the extension and travel with
+ * Firefox Sync:
  *
- * verdict is "keep" or "drop", set from the stash card deck. A drop is a flag, not a deletion —
- * the stash is the only record of these tabs — and "Clear dropped" is what removes them.
+ *   Other Bookmarks / Link Keeper stashes / <one folder per stash> / <one bookmark per tab>
+ *
+ * A folder's title is the stash's name — its time until renamed — and its bookmarks keep tab order.
+ * What a bookmark cannot hold sits beside it in storage.local, keyed by bookmark id; losing it (an
+ * uninstall) loses containers, verdicts and marks, never a tab:
+ *
+ *   stashRoot     — the root folder's id
+ *   stashMeta     — { stashes: { [folderId]: { created_at, locked?, starred? } },
+ *                     tabs:    { [bookmarkId]: { container?, seen_at?, verdict?, judged_at? } } }
+ *   stashSettings — { afterStash: "show" | "stay", afterRestore: "keep" | "remove", exclude: [host] }
+ *
+ * verdict is "keep" or "drop", set from the explorer. A drop is a flag, not a deletion, and
+ * "Clear dropped" is what removes them. A locked stash cannot lose tabs: no delete, no remove, no
+ * move out, and restoring always keeps it.
  *
  * Only the tab's URL, title and container are recorded. Nothing is injected into the tabs being
  * stashed. A stash is the only record of the tabs it closes — Firefox remembers 25 closed tabs — so
- * nothing closes until the record has been read back from storage and found complete.
+ * nothing closes until every bookmark has been read back and found present.
  */
 
-const getSessions = () => read("sessions", []);
-const setSessions = sessions => browser.storage.local.set({ sessions });
+const ROOT_TITLE = "Link Keeper stashes";
+const TAB_META = ["container", "seen_at", "verdict", "judged_at"];
+const STASH_SETTINGS = { afterStash: "show", afterRestore: "keep", exclude: [] };
 const sessionsPage = () => browser.runtime.getURL("sessions.html");
+const isSessionsPage = url => !!url?.startsWith(sessionsPage());
+const hostOfUrl = url => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } };
+const stashTitle = iso => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+/* One at a time, so two stashes at once cannot each create a root folder, and two edits of the
+ * metadata cannot each overwrite the other. */
+function serial() {
+  let tail = Promise.resolve();
+  return fn => {
+    const run = tail.then(fn);
+    tail = run.catch(() => {});
+    return run;
+  };
+}
+const rootQueue = serial();
+const metaQueue = serial();
+
+/* The root folder: the remembered id, else a folder of that name in Other Bookmarks — a reinstall
+ * finds the stashes it left — else a new one. */
+const stashRoot = () => rootQueue(async () => {
+  const id = await read("stashRoot", null);
+  if (id) {
+    const [node] = await browser.bookmarks.get(id).catch(() => []);
+    if (node && !node.url) return node.id;
+  }
+  const found = (await browser.bookmarks.getChildren("unfiled_____")).find(n => !n.url && n.title === ROOT_TITLE);
+  const node = found || await browser.bookmarks.create({ parentId: "unfiled_____", title: ROOT_TITLE });
+  await browser.storage.local.set({ stashRoot: node.id });
+  return node.id;
+});
+
+async function getMeta() {
+  const m = await read("stashMeta", {});
+  return { stashes: m.stashes || {}, tabs: m.tabs || {} };
+}
+const editMeta = fn => metaQueue(async () => {
+  const m = await getMeta();
+  await fn(m);
+  await browser.storage.local.set({ stashMeta: m });
+  return m;
+});
+
+const getStashSettings = async () => ({ ...STASH_SETTINGS, ...await read("stashSettings", {}) });
+
+/* Newest first, starred ones on top: { id, name, created_at, locked, starred,
+ * tabs: [{ id, url, title?, container?, seen_at?, verdict?, judged_at? }] }. Bookmarks moved or
+ * edited in Firefox's own library show up here as they are. */
+async function getSessions() {
+  await migrateStashes();
+  const [tree] = await browser.bookmarks.getSubTree(await stashRoot());
+  const meta = await getMeta();
+  const sessions = (tree.children || []).filter(n => !n.url).map(folder => {
+    const m = meta.stashes[folder.id] || {};
+    return {
+      id: folder.id,
+      name: folder.title,
+      created_at: m.created_at || new Date(folder.dateAdded).toISOString(),
+      locked: !!m.locked,
+      starred: !!m.starred,
+      tabs: (folder.children || []).filter(n => n.url).map(b => ({
+        id: b.id,
+        url: b.url,
+        ...(b.title && b.title !== b.url && { title: b.title }),
+        ...meta.tabs[b.id],
+      })),
+    };
+  });
+  return [...sessions.filter(s => s.starred), ...sessions.filter(s => !s.starred)];
+}
+
+async function findStash(id) {
+  return (await getSessions()).find(s => s.id === id) || null;
+}
+
+/* Writes one stash at the top: the folder, one bookmark per tab in order, then its metadata, then
+ * reads it all back. ok is false unless every URL and container is there. onFolder hears the new
+ * folder's id before anything else is written, so a caller can undo a write that fails halfway. */
+async function writeStash(tabs, { name, created_at, onFolder } = {}) {
+  const at = created_at || new Date().toISOString();
+  const folder = await browser.bookmarks.create({ parentId: await stashRoot(), index: 0, title: name || stashTitle(at) });
+  await onFolder?.(folder.id);
+  const made = [];
+  for (const t of tabs) made.push(await browser.bookmarks.create({ parentId: folder.id, title: t.title || t.url, url: t.url }));
+  await editMeta(m => {
+    m.stashes[folder.id] = { created_at: at };
+    made.forEach((b, i) => {
+      const extra = Object.fromEntries(TAB_META.filter(k => tabs[i][k] != null).map(k => [k, tabs[i][k]]));
+      if (Object.keys(extra).length) m.tabs[b.id] = extra;
+    });
+  });
+
+  const have = new Set((await browser.bookmarks.getChildren(folder.id)).map(b => b.url));
+  const meta = await getMeta();
+  const ok = tabs.every(t => have.has(t.url)) &&
+    made.every((b, i) => !tabs[i].container || meta.tabs[b.id]?.container === tabs[i].container);
+  return { id: folder.id, ok };
+}
+
+async function removeStashFolder(id) {
+  await browser.bookmarks.removeTree(id).catch(() => {});
+  await editMeta(m => { delete m.stashes[id]; });
+}
+
+/* Stashes kept in storage.local before 5.9 move into bookmarks once. The old record stays until
+ * every stash has been read back from bookmarks, and is then kept as sessions_before_bookmarks. A
+ * run cut short leaves its folders listed in stashMigrating; the next run removes those and starts
+ * over, since the old record still holds everything. */
+let migration = null;
+function migrateStashes() {
+  migration ??= (async () => {
+    const old = await read("sessions", null);
+    if (!Array.isArray(old)) return;
+    for (const id of await read("stashMigrating", [])) await removeStashFolder(id);
+    const made = [];
+    // Oldest first, each written at the top, so the newest ends up first as before.
+    for (const s of [...old].reverse()) {
+      if (!s.tabs?.length) continue;
+      const res = await writeStash(s.tabs, {
+        name: s.name, created_at: s.created_at,
+        onFolder: id => browser.storage.local.set({ stashMigrating: [...made, id] }),
+      });
+      made.push(res.id);
+      if (!res.ok) throw new Error("moving stashes into bookmarks did not read back; the old record is untouched");
+    }
+    await browser.storage.local.set({ sessions_before_bookmarks: old });
+    await browser.storage.local.remove(["sessions", "stashMigrating"]);
+  })().catch(e => { migration = null; throw e; });
+  return migration;
+}
+
+// Moved as soon as the new version runs, not only when a stash page first opens. A failure
+// leaves the old record in place and is retried by the next page or stash.
+browser.runtime.onInstalled.addListener(() => migrateStashes().catch(() => {}));
+browser.runtime.onStartup.addListener(() => migrateStashes().catch(() => {}));
 
 /* There is one Stashed tabs page, like OneTab's tab: every way in switches to the open one — in
  * this window if it has one, else in any window, pinned or not — and a new tab opens only when
  * none is open. Pinning it is left to the user. */
 async function showSessions(windowId) {
-  const open = (await browser.tabs.query({})).filter(t => t.url?.startsWith(sessionsPage()));
+  const open = (await browser.tabs.query({})).filter(t => isSessionsPage(t.url));
   const page = open.find(t => t.windowId === windowId) || open[0];
   if (!page) return browser.tabs.create({ url: sessionsPage(), ...(windowId != null && { windowId }), active: true });
   await browser.tabs.update(page.id, { active: true });
@@ -594,10 +741,11 @@ async function showSessions(windowId) {
   return page;
 }
 
-/* Everything is stashed but pinned tabs, empty tabs, and this page. How a tab comes back depends
- * on what it is — see restoreTabs. */
+/* Pinned tabs, empty tabs, sites on the never-stash list and the Stashed tabs page stay open.
+ * Stashing one tab by name takes it whatever it is. How a tab comes back depends on what it is —
+ * see restoreTabs. */
 const EMPTY_TAB = /^about:(blank|newtab|home|privatebrowsing)$/;
-const stashable = tab => !tab.pinned && !!tab.url && !EMPTY_TAB.test(tab.url) && !tab.url.startsWith(sessionsPage());
+const recordable = tab => !!tab.url && !EMPTY_TAB.test(tab.url) && !isSessionsPage(tab.url);
 
 /* Firefox lets an extension open web pages and its own pages. A file: URL goes to the native helper
  * (native/open-local-files.py); about: pages and other extensions' pages get a stand-in tab that
@@ -616,61 +764,124 @@ function standinUrl(t, why) {
   return `${browser.runtime.getURL("standin.html")}?${q}`;
 }
 
-/* Selected tabs when several are selected, otherwise the whole window. */
-async function stashTabs(windowId) {
-  const all = await browser.tabs.query(windowId == null ? { currentWindow: true } : { windowId });
-  if (!all.length) return { ok: false, error: "no window to stash" };
-  const selected = all.filter(t => t.highlighted);
-  const pool = selected.length > 1 ? selected : all;
-  const closing = pool.filter(stashable);
-  const why = leftOpen(pool.filter(t => !stashable(t) && !t.url?.startsWith(sessionsPage())));
-  if (!closing.length) {
-    const scope = selected.length > 1 ? `the ${pool.length} selected tabs` : "this window";
-    return { ok: false, error: `nothing stashed: ${scope} holds only ${why || "this page"}` };
+/* Which tabs of one window a scope names, relative to tab `at`:
+ *   auto   — the selected tabs if several are selected, otherwise the whole window
+ *   tab · left · right · others · window */
+function scopeTabs(all, scope, at) {
+  switch (scope) {
+    case "tab": return at ? [at] : [];
+    case "left": return at ? all.filter(t => t.index < at.index) : [];
+    case "right": return at ? all.filter(t => t.index > at.index) : [];
+    case "others": return at ? all.filter(t => t.id !== at.id) : all;
+    case "window": return all;
+    default: {
+      const selected = all.filter(t => t.highlighted);
+      return selected.length > 1 ? selected : all;
+    }
+  }
+}
+
+const SCOPE_WORDS = {
+  tab: "this tab", left: "the tabs to the left", right: "the tabs to the right", others: "the other tabs",
+  window: "this window", "all-windows": "any window",
+};
+
+/* Stash tabs and close them. { windowId, scope, tabId } — tabId is the tab a scope is relative to,
+ * the active one by default; scope "all-windows" makes one stash per window. */
+async function stashTabs({ windowId, scope = "auto", tabId } = {}) {
+  await migrateStashes();
+  const settings = await getStashSettings();
+  const excluded = t => settings.exclude.includes(hostOfUrl(t.url));
+
+  let windows;
+  if (scope === "all-windows") {
+    windows = (await browser.windows.getAll({ populate: true, windowTypes: ["normal"] })).map(w => w.tabs);
+  } else {
+    windows = [await browser.tabs.query(windowId == null ? { currentWindow: true } : { windowId })];
+  }
+  if (!windows.some(w => w.length)) return { ok: false, error: "no window to stash" };
+
+  const plans = [];
+  const stayed = [];
+  let selectionWord = null;
+  for (const all of windows) {
+    if (!all.length) continue;
+    const at = all.find(t => t.id === tabId) || all.find(t => t.active);
+    const pool = scopeTabs(all, scope, at);
+    if (scope === "auto" && pool.length < all.length) selectionWord = `the ${pool.length} selected tabs`;
+    const take = scope === "tab" ? recordable : t => recordable(t) && !t.pinned && !excluded(t);
+    const closing = pool.filter(take);
+    stayed.push(...pool.filter(t => !take(t) && !isSessionsPage(t.url)));
+    // Duplicate tabs all close, and are recorded once.
+    const urls = new Set();
+    const tabs = closing
+      .filter(t => !urls.has(t.url) && urls.add(t.url))
+      .map(t => ({
+        url: t.url,
+        title: t.title && t.title !== t.url ? t.title : undefined,
+        // A container tab reopened outside its container is signed in as someone else.
+        container: t.cookieStoreId && t.cookieStoreId !== "firefox-default" ? t.cookieStoreId : undefined,
+      }));
+    if (closing.length) plans.push({ windowId: all[0].windowId, closing, tabs, emptiesWindow: closing.length === all.length });
   }
 
-  // Duplicate tabs all close, and are recorded once.
-  const urls = new Set();
-  const tabs = closing
-    .filter(t => !urls.has(t.url) && urls.add(t.url))
-    .map(t => ({
-      url: t.url,
-      title: t.title && t.title !== t.url ? t.title : undefined,
-      // A container tab reopened outside its container is signed in as someone else.
-      container: t.cookieStoreId && t.cookieStoreId !== "firefox-default" ? t.cookieStoreId : undefined,
-    }));
-  const session = { id: crypto.randomUUID(), created_at: new Date().toISOString(), tabs };
-  await setSessions([session, ...await getSessions()]);
+  const why = leftOpen(stayed, excluded);
+  if (!plans.length) {
+    const scopeWord = selectionWord || SCOPE_WORDS[scope] || "this window";
+    return { ok: false, error: `nothing stashed: ${scopeWord} holds only ${why || "this page"}` };
+  }
 
-  const stored = (await getSessions()).find(s => s.id === session.id);
-  const kept = new Set((stored?.tabs || []).map(t => t.url));
-  if (!tabs.every(t => kept.has(t.url))) return { ok: false, error: "the stash did not save; no tab was closed" };
+  // Every stash is written and read back before any tab closes; if one fails, the others are
+  // taken back out and nothing closes.
+  const written = [];
+  try {
+    for (const plan of plans) {
+      const res = await writeStash(plan.tabs, { onFolder: id => { written.push(id); } });
+      if (!res.ok) throw new Error("the stash did not save");
+    }
+  } catch (e) {
+    for (const id of written) await removeStashFolder(id);
+    return { ok: false, error: `${e.message}; no tab was closed` };
+  }
 
-  // The sessions page shows before anything closes: closing a window's last tab closes the window.
-  // It opens here unless one is open elsewhere; then this window may close, as OneTab's does.
-  await showSessions(all[0].windowId);
-  await browser.tabs.remove(closing.map(t => t.id));
+  // Closing a window's last tab closes the window, so whatever stays on screen opens first: the
+  // Stashed tabs page (here, unless it is open elsewhere, in which case this window may close as
+  // OneTab's does), or with "stay", a new tab in each window that would otherwise close.
+  const focused = scope === "all-windows" ? (await browser.windows.getLastFocused()).id : plans[0].windowId;
+  if (settings.afterStash === "stay") {
+    for (const plan of plans.filter(p => p.emptiesWindow)) await browser.tabs.create({ windowId: plan.windowId, active: true });
+  } else {
+    await showSessions(focused);
+  }
+  for (const plan of plans) await browser.tabs.remove(plan.closing.map(t => t.id));
 
-  return { ok: true, stashed: tabs.length, closed: closing.length, left: pool.length - closing.length, why };
+  const stashed = plans.reduce((n, p) => n + p.tabs.length, 0);
+  const closed = plans.reduce((n, p) => n + p.closing.length, 0);
+  return { ok: true, stashed, closed, stashes: plans.length, left: stayed.length, why };
 }
 
-/* "2 pinned, 1 empty tab" — what stayed open, by the reason it stayed. */
-function leftOpen(tabs) {
+/* "2 pinned, 1 empty tab, 3 never-stash sites" — what stayed open, by the reason it stayed. */
+function leftOpen(tabs, excluded = () => false) {
   const pinned = tabs.filter(t => t.pinned).length;
-  const empty = tabs.length - pinned;
-  return [pinned && `${pinned} pinned`, empty && `${empty} empty tab${empty > 1 ? "s" : ""}`]
-    .filter(Boolean).join(", ");
+  const skipped = tabs.filter(t => !t.pinned && recordable(t) && excluded(t)).length;
+  const empty = tabs.length - pinned - skipped;
+  return [
+    pinned && `${pinned} pinned`,
+    empty && `${empty} empty tab${empty > 1 ? "s" : ""}`,
+    skipped && `${skipped} never-stash site${skipped > 1 ? "s" : ""}`,
+  ].filter(Boolean).join(", ");
 }
 
-/* Restoring keeps the entries; each one is marked seen instead. Several at once open unloaded, so
- * forty tabs back is not forty page loads — each loads when you switch to it. */
-async function restoreTabs(id, urls) {
-  const sessions = await getSessions();
-  const session = sessions.find(s => s.id === id);
+/* Reopens tabs of one stash: all of them, or the bookmark ids given. Several at once open unloaded,
+ * so forty tabs back is not forty page loads — each loads when you switch to it. Afterwards the
+ * entries are marked restored, or with afterRestore "remove", taken out — never from a locked
+ * stash. */
+async function restoreTabs(id, ids) {
+  const session = await findStash(id);
   if (!session) return { ok: false, error: "that stash is gone" };
-  const wanted = urls ? session.tabs.filter(t => urls.includes(t.url)) : session.tabs;
+  const wanted = ids ? session.tabs.filter(t => ids.includes(t.id)) : session.tabs;
+  if (!wanted.length) return { ok: false, error: "those tabs are no longer in the stash" };
   const lazy = wanted.length > 1;
-  const at = new Date().toISOString();
 
   const direct = wanted.filter(t => reopenRoute(t.url) === "direct");
   const files = wanted.filter(t => reopenRoute(t.url) === "helper");
@@ -699,7 +910,6 @@ async function restoreTabs(id, urls) {
   for (const { t, url, container } of jobs) {
     const props = { url, active: !lazy };
     if (container) props.cookieStoreId = container;
-    if (t.container) props.cookieStoreId = t.container;
     if (lazy) Object.assign(props, { discarded: true }, t.title ? { title: t.title } : {});
     // An unloaded tab is refused for a few URLs, and a container may since have been deleted;
     // each fallback drops only the part that failed, the tab itself always opens.
@@ -713,33 +923,99 @@ async function restoreTabs(id, urls) {
       }
     }
   }
-  for (const t of wanted) t.seen_at = at;
-  await setSessions(sessions);
-  return { ok: true, restored: wanted.length, viaHelper, standins: standins.length, helperError };
+
+  const remove = (await getStashSettings()).afterRestore === "remove" && !session.locked;
+  if (remove) await dropFromStash(id, wanted.map(t => t.id));
+  else {
+    const at = new Date().toISOString();
+    await editMeta(m => { for (const t of wanted) m.tabs[t.id] = { ...m.tabs[t.id], seen_at: at }; });
+  }
+  return { ok: true, restored: wanted.length, removed: remove, viaHelper, standins: standins.length, helperError };
 }
 
-/* Take tabs out of a stash; a stash left empty goes with them. */
-async function dropFromStash(id, urls) {
-  const sessions = await getSessions();
-  const session = sessions.find(s => s.id === id);
-  if (!session) return [];
-  const taken = urls ? session.tabs.filter(t => urls.includes(t.url)) : session.tabs;
-  session.tabs = session.tabs.filter(t => !taken.includes(t));
-  await setSessions(sessions.filter(s => s.tabs.length));
+/* Take tabs out of a stash — all of them, or the bookmark ids given, which must be in it. A stash
+ * left empty goes with them. Returns what was taken; a locked stash gives up nothing. */
+async function dropFromStash(id, ids) {
+  const session = await findStash(id);
+  if (!session || session.locked) return [];
+  const taken = ids ? session.tabs.filter(t => ids.includes(t.id)) : session.tabs;
+  for (const t of taken) await browser.bookmarks.remove(t.id);
+  // Only an empty folder goes: one the user put anything else in stays.
+  const emptied = !(await browser.bookmarks.getChildren(id)).length;
+  if (emptied) await browser.bookmarks.remove(id);
+  await editMeta(m => {
+    for (const t of taken) delete m.tabs[t.id];
+    if (emptied) delete m.stashes[id];
+  });
   return taken;
 }
 
 /* The stash date stands in as the saved date: it is when you set the tab aside. */
-async function moveStashToList(id, urls) {
-  const session = (await getSessions()).find(s => s.id === id);
+async function moveStashToList(id, ids) {
+  const session = await findStash(id);
   if (!session) return { ok: false, error: "that stash is gone" };
+  if (session.locked) return { ok: false, error: "that stash is locked" };
+  const asked = ids ? session.tabs.filter(t => ids.includes(t.id)) : session.tabs;
   // The reading list walks links by navigating a tab, which works for web pages only; local files
   // and browser pages stay in the stash.
-  const web = (urls || session.tabs.map(t => t.url)).filter(u => /^(https?|ftp):/.test(u));
+  const web = asked.filter(t => /^(https?|ftp):/.test(t.url));
   if (!web.length) return { ok: false, error: "only web pages can go to the reading list" };
-  const taken = await dropFromStash(id, web);
+  const taken = await dropFromStash(id, web.map(t => t.id));
   const res = await addItems(taken.map(t => ({ url: t.url, title: t.title, saved_at: session.created_at })));
-  return { ...res, moved: taken.length, stayed: (urls || session.tabs).length - taken.length };
+  return { ...res, moved: taken.length, stayed: asked.length - taken.length };
+}
+
+/* Drag and drop: move bookmarks, in order, into stash `to` ahead of bookmark `before` (the end if
+ * none). Only bookmarks in stashes move, never out of a locked one; a stash left empty goes. */
+async function moveStashed(ids, to, before) {
+  const sessions = await getSessions();
+  const target = sessions.find(s => s.id === to);
+  if (!target) return { ok: false, error: "that stash is gone" };
+  const from = new Map(sessions.flatMap(s => s.tabs.map(t => [t.id, s])));
+  const moving = ids.filter(id => from.has(id));
+  if (moving.some(id => from.get(id).locked && from.get(id).id !== to)) return { ok: false, error: "that stash is locked" };
+  for (const id of moving) {
+    // Firefox reads index as the final position, so it is counted without the moving bookmark.
+    const rest = (await browser.bookmarks.getChildren(to)).filter(b => b.id !== id);
+    const at = before ? rest.findIndex(b => b.id === before) : -1;
+    await browser.bookmarks.move(id, { parentId: to, index: at < 0 ? rest.length : at });
+  }
+  for (const s of new Set(moving.map(id => from.get(id)))) {
+    if (s.id !== to && !(await browser.bookmarks.getChildren(s.id)).length) await removeStashFolder(s.id);
+  }
+  return { ok: true, moved: moving.length };
+}
+
+/* Stashes from a file: [{ name?, created_at?, tabs: [{ url, title?, container?, verdict?, seen_at? }] }],
+ * already parsed by the page (stash-import.js). Written in the order given, above the others. */
+async function importStashes(stashes) {
+  await migrateStashes();
+  const clean = (Array.isArray(stashes) ? stashes : []).map(s => {
+    const urls = new Set();
+    const tabs = (s.tabs || [])
+      .filter(t => typeof t?.url === "string" && /^[a-z][a-z0-9+.-]*:/i.test(t.url) && !urls.has(t.url) && urls.add(t.url))
+      .map(t => ({
+        url: t.url,
+        title: typeof t.title === "string" && t.title.trim() ? t.title.trim().slice(0, 500) : undefined,
+        container: typeof t.container === "string" ? t.container : undefined,
+        verdict: t.verdict === "keep" || t.verdict === "drop" ? t.verdict : undefined,
+        seen_at: typeof t.seen_at === "string" ? t.seen_at : undefined,
+      }));
+    const when = new Date(s.created_at);
+    return {
+      name: typeof s.name === "string" && s.name.trim() ? s.name.trim().slice(0, 200) : undefined,
+      created_at: Number.isNaN(when.getTime()) ? undefined : when.toISOString(),
+      tabs,
+    };
+  }).filter(s => s.tabs.length);
+  if (!clean.length) return { ok: false, error: "nothing to import" };
+  let tabs = 0;
+  for (const s of [...clean].reverse()) {
+    const res = await writeStash(s.tabs, s);
+    if (!res.ok) return { ok: false, error: "an imported stash did not read back; stopped there" };
+    tabs += s.tabs.length;
+  }
+  return { ok: true, stashes: clean.length, tabs };
 }
 
 /* --- live preview ---------------------------------------------------------------
@@ -806,6 +1082,16 @@ async function notifyStash(res) {
   if (res.why) await notify(`stashed ${res.stashed} · left open: ${res.why}`);
 }
 
+/* Adds a site to the never-stash list, or takes it off. */
+async function toggleExcluded(host) {
+  if (!host) return { ok: false, error: "only web pages have a site to exclude" };
+  const settings = await getStashSettings();
+  const on = !settings.exclude.includes(host);
+  const exclude = on ? [...settings.exclude, host].sort() : settings.exclude.filter(h => h !== host);
+  await browser.storage.local.set({ stashSettings: { ...settings, exclude } });
+  return { ok: true, host, excluded: on };
+}
+
 browser.commands.onCommand.addListener(async name => {
   if (name === "capture-page") await notify(describe(await captureActive()));
   else if (name === "next-link") {
@@ -817,6 +1103,10 @@ browser.commands.onCommand.addListener(async name => {
     await notify(res.ok ? `skipped · ${res.remaining} left` : `failed: ${res.error}`);
   } else if (name === "stash-tabs") {
     await notifyStash(await stashTabs());
+  } else if (name === "stash-this-tab") {
+    await notifyStash(await stashTabs({ scope: "tab" }));
+  } else if (name === "show-stashed") {
+    await showSessions((await browser.windows.getLastFocused()).id);
   } else if (name === "queue-page") {
     const res = await queueActiveTab();
     await notify(res.added ? "added to the list" : "already on the list");
@@ -839,11 +1129,42 @@ const MENU = [
   { id: "menu-list", title: "See the whole list", contexts: ["page", "selection", "image"] },
   { id: "menu-cards", title: "Judge links as cards", contexts: ["page", "selection", "image"] },
   { id: "menu-sep-stash", type: "separator", contexts: ["page", "selection", "image"] },
-  { id: "menu-stash", title: "Stash tabs", contexts: ["page", "selection", "image"] },
-  { id: "menu-sessions", title: "See stashed tabs", contexts: ["page", "selection", "image"] },
-  { id: "menu-stash-tab", title: "Stash tabs to Link Keeper", contexts: ["tab"] },
+  ...stashMenu("page", "Stash", ["page", "selection", "image"]),
+  ...stashMenu("tab", "Stash to Link Keeper", ["tab"]),
   { id: "menu-queue-link", title: "Add this link to Link Keeper", contexts: ["link"] },
 ];
+
+/* The same stash submenu on a page and on a tab in the tab strip, OneTab's range of scopes: on the
+ * tab strip, "this tab" is the one right-clicked. The never-stash item is retitled for the site as
+ * the menu opens. */
+function stashMenu(where, title, contexts) {
+  const parentId = `stash:${where}`;
+  const item = (scope, text) => ({ id: `stash:${where}:${scope}`, parentId, title: text, contexts });
+  return [
+    { id: parentId, title, contexts },
+    item("auto", "Selected tabs, or the whole window"),
+    item("tab", "Only this tab"),
+    item("left", "Tabs to the left"),
+    item("right", "Tabs to the right"),
+    item("others", "All tabs except this one"),
+    item("all-windows", "Every window"),
+    { id: `stash:${where}:sep`, parentId, type: "separator", contexts },
+    item("exclude", "Never stash this site"),
+    item("show", "Show stashed tabs"),
+  ];
+}
+
+browser.menus.onShown?.addListener(async (info, tab) => {
+  if (!info.menuIds.some(id => String(id).startsWith("stash:"))) return;
+  const where = info.contexts.includes("tab") ? "tab" : "page";
+  const host = hostOfUrl(tab?.url || "");
+  const excluded = (await getStashSettings()).exclude.includes(host);
+  await browser.menus.update(`stash:${where}:exclude`, {
+    title: !host ? "Never stash this site" : excluded ? `Stash ${host} again` : `Never stash ${host}`,
+    enabled: !!host,
+  });
+  await browser.menus.refresh();
+});
 
 function buildMenus() {
   browser.menus.removeAll().then(() => {
@@ -856,6 +1177,16 @@ browser.runtime.onStartup.addListener(buildMenus);
 buildMenus();
 
 browser.menus.onClicked.addListener(async (info, tab) => {
+  const stash = /^stash:(page|tab):(.+)$/.exec(info.menuItemId);
+  if (stash) {
+    const scope = stash[2];
+    if (scope === "show") await showSessions(tab?.windowId);
+    else if (scope === "exclude") {
+      const res = await toggleExcluded(hostOfUrl(tab?.url || ""));
+      await notify(res.ok ? (res.excluded ? `${res.host} will not be stashed` : `${res.host} will be stashed again`) : res.error);
+    } else await notifyStash(await stashTabs({ windowId: tab?.windowId, scope, tabId: tab?.id }));
+    return;
+  }
   switch (info.menuItemId) {
     case "menu-keep": await notify(describe(await captureActive())); break;
     case "menu-shot": await notify(describe(await captureActive("", true))); break;
@@ -877,9 +1208,6 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     }
     case "menu-list": await browser.tabs.create({ url: browser.runtime.getURL("list.html") }); break;
     case "menu-cards": await browser.tabs.create({ url: browser.runtime.getURL("cards.html") }); break;
-    case "menu-stash": await notifyStash(await stashTabs(tab?.windowId)); break;
-    case "menu-stash-tab": await notifyStash(await stashTabs(tab?.windowId)); break;
-    case "menu-sessions": await showSessions(tab?.windowId); break;
     case "menu-queue-link":
       if (info.linkUrl) {
         const res = await addItems([{ url: info.linkUrl.split("#")[0], saved_at: new Date().toISOString() }]);
@@ -1095,51 +1423,84 @@ browser.runtime.onMessage.addListener(async msg => {
       return { ok: true };
 
     case "stash":
-      return stashTabs();
+      return stashTabs({ scope: msg.scope || "auto" });
 
     case "sessions":
       return { sessions: await getSessions() };
 
     case "restore-stash":
-      return restoreTabs(msg.id, msg.urls);
+      return restoreTabs(msg.id, msg.ids);
 
     case "rename-stash": {
-      const sessions = await getSessions();
-      const session = sessions.find(s => s.id === msg.id);
+      const session = await findStash(msg.id);
       if (!session) return { ok: false, error: "that stash is gone" };
-      session.name = String(msg.name || "").trim() || undefined;
-      await setSessions(sessions);
+      const name = String(msg.name || "").trim().slice(0, 200);
+      await browser.bookmarks.update(msg.id, { title: name || stashTitle(session.created_at) });
       return { ok: true };
     }
 
-    case "delete-stash":
-      return { ok: true, removed: (await dropFromStash(msg.id, msg.urls)).length };
+    case "delete-stash": {
+      const session = await findStash(msg.id);
+      if (session?.locked) return { ok: false, error: "that stash is locked; unlock it first" };
+      return { ok: true, removed: (await dropFromStash(msg.id, msg.ids)).length };
+    }
 
     case "move-stash":
-      return moveStashToList(msg.id, msg.urls);
+      return moveStashToList(msg.id, msg.ids);
+
+    case "move-stashed":
+      return moveStashed(msg.ids || [], msg.to, msg.before || null);
+
+    case "flag-stash": {
+      if (!await findStash(msg.id)) return { ok: false, error: "that stash is gone" };
+      await editMeta(m => {
+        const s = m.stashes[msg.id] || (m.stashes[msg.id] = {});
+        for (const k of ["locked", "starred"]) {
+          if (k in msg) msg[k] ? (s[k] = true) : delete s[k];
+        }
+      });
+      return { ok: true };
+    }
 
     case "judge-stashed": {
-      const sessions = await getSessions();
-      const tab = sessions.find(s => s.id === msg.id)?.tabs.find(t => t.url === msg.url);
+      const tab = (await findStash(msg.id))?.tabs.find(t => t.id === msg.tab);
       if (!tab) return { ok: false, error: "that tab is no longer stashed" };
-      if (msg.verdict) Object.assign(tab, { verdict: msg.verdict, judged_at: new Date().toISOString() });
-      else { delete tab.verdict; delete tab.judged_at; }
-      await setSessions(sessions);
+      await editMeta(m => {
+        const t = { ...m.tabs[tab.id] };
+        if (msg.verdict) Object.assign(t, { verdict: msg.verdict, judged_at: new Date().toISOString() });
+        else { delete t.verdict; delete t.judged_at; }
+        m.tabs[tab.id] = t;
+      });
       return { ok: true };
     }
 
     case "clear-dropped": {
-      const sessions = await getSessions();
       let removed = 0;
-      for (const s of sessions) {
+      for (const s of await getSessions()) {
         if (msg.id && s.id !== msg.id) continue;
-        const before = s.tabs.length;
-        s.tabs = s.tabs.filter(t => t.verdict !== "drop");
-        removed += before - s.tabs.length;
+        const dropped = s.tabs.filter(t => t.verdict === "drop").map(t => t.id);
+        if (dropped.length) removed += (await dropFromStash(s.id, dropped)).length;
       }
-      await setSessions(sessions.filter(s => s.tabs.length));
       return { ok: true, removed };
     }
+
+    case "stash-settings":
+      return { settings: await getStashSettings() };
+
+    case "set-stash-settings": {
+      const settings = await getStashSettings();
+      const patch = {};
+      if (["show", "stay"].includes(msg.afterStash)) patch.afterStash = msg.afterStash;
+      if (["keep", "remove"].includes(msg.afterRestore)) patch.afterRestore = msg.afterRestore;
+      await browser.storage.local.set({ stashSettings: { ...settings, ...patch } });
+      return { ok: true };
+    }
+
+    case "toggle-excluded":
+      return toggleExcluded(String(msg.host || "").trim().toLowerCase().replace(/^www\./, ""));
+
+    case "import-stashes":
+      return importStashes(msg.stashes);
 
     case "stash-known":
       return stashKnown();

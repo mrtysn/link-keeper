@@ -45,8 +45,10 @@ function kindOf(url) {
   if (isWeb(url) || url.startsWith(browser.runtime.getURL(""))) return "web";
   return /^file:/.test(url) ? "file" : "other";
 }
-const keyOf = c => c && `${c.session.id} ${c.tab.url}`;
+const keyOf = c => c && `${c.session.id} ${c.tab.id}`;
 const stashName = s => s.name || whenOf(s.created_at);
+// A stash is named after its time until renamed; only a real name is worth showing beside the time.
+const renamed = s => s.name && s.name !== whenOf(s.created_at);
 
 /* --- data ----------------------------------------------------------------------- */
 
@@ -163,7 +165,7 @@ function renderDetail() {
   pane.append(el("div", { className: "dhead" }, srcIcon(tab.url),
     el("div", {},
       el("div", { className: "where", textContent: kind === "web" ? hostOf(tab.url) : kind === "file" ? "Local file" : "Browser page" }),
-      el("div", { className: "when", textContent: `stashed ${whenOf(session.created_at)}${session.name ? ` · ${session.name}` : ""}` })),
+      el("div", { className: "when", textContent: `stashed ${whenOf(session.created_at)}${renamed(session) ? ` · ${session.name}` : ""}` })),
     el("div", { className: "pos", textContent: i === -1 ? "" : `${i + 1} / ${visible.length}` })));
 
   pane.append(tab.title
@@ -235,7 +237,7 @@ function knownBox({ session, tab }, info) {
   const elsewhere = sessions.filter(s => s.id !== session.id && s.tabs.some(t => known[t.url]?.key === info.key));
   for (const s of elsewhere) {
     const b = el("button", { className: "link", textContent: stashName(s) });
-    b.onclick = () => select(`${s.id} ${s.tabs.find(t => known[t.url]?.key === info.key).url}`);
+    b.onclick = () => select(`${s.id} ${s.tabs.find(t => known[t.url]?.key === info.key).id}`);
     facts.append(el("li", {}, "Also stashed in ", b));
   }
   if (kindOf(tab.url) === "web") {
@@ -262,7 +264,7 @@ function neighboursBox({ session, pos }) {
       el("span", { className: "off", textContent: off === 0 ? "" : off > 0 ? `+${off}` : String(off) }),
       srcIcon(t.url),
       el("span", { className: "t", textContent: t.title || shortUrl(t.url) }));
-    if (off) b.onclick = () => { ensureVisible(); select(`${session.id} ${t.url}`); };
+    if (off) b.onclick = () => { ensureVisible(); select(`${session.id} ${t.id}`); };
     else b.setAttribute("aria-current", "true");
     ol.append(el("li", { className: off ? "" : "self" }, b));
   }
@@ -320,7 +322,7 @@ async function setPreview(on) {
 
 async function judge(card, verdict) {
   const clearing = card.tab.verdict === verdict;
-  const res = await send({ type: "judge-stashed", id: card.session.id, url: card.tab.url, verdict: clearing ? null : verdict });
+  const res = await send({ type: "judge-stashed", id: card.session.id, tab: card.tab.id, verdict: clearing ? null : verdict });
   if (!res?.ok) return say(res?.error || "That did not work");
   if (!clearing) step(1);
   await load();
@@ -328,7 +330,7 @@ async function judge(card, verdict) {
 }
 
 async function openNow(card) {
-  const res = await send({ type: "restore-stash", id: card.session.id, urls: [card.tab.url] });
+  const res = await send({ type: "restore-stash", id: card.session.id, ids: [card.tab.id] });
   if (!res?.ok) return say(res?.error || "Unable to open it");
   say(res.viaHelper ? "Opened through the helper" : res.standins ? `Opened as a stand-in${res.helperError ? `: ${res.helperError}` : ""}` : "Opened in a new tab");
 }
@@ -336,7 +338,7 @@ async function openNow(card) {
 async function toList(card) {
   if (!isWeb(card.tab.url)) return;
   step(1);
-  const res = await send({ type: "move-stash", id: card.session.id, urls: [card.tab.url] });
+  const res = await send({ type: "move-stash", id: card.session.id, ids: [card.tab.id] });
   if (!res?.ok) return say(res?.error || "Unable to move it");
   await load();
   say(res.added ? "Moved to the reading list" : "Already on the reading list; taken out of the stash");
@@ -387,8 +389,13 @@ addEventListener("keydown", e => {
   if (act) { e.preventDefault(); act(); }
 });
 
+/* Stashes are bookmarks, so a change can come from Firefox's own library as well as from here; a
+ * stash of forty tabs is forty events, taken as one. */
+let reloadTimer = null;
+const reloadSoon = () => { clearTimeout(reloadTimer); reloadTimer = setTimeout(load, 150); };
 browser.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.sessions || changes.captures || changes.items)) load();
+  if (area === "local" && (changes.stashMeta || changes.captures || changes.items)) reloadSoon();
 });
+for (const ev of ["onCreated", "onRemoved", "onChanged", "onMoved"]) browser.bookmarks?.[ev].addListener(reloadSoon);
 
 load();

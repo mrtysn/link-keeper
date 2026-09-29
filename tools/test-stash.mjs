@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // DESC: Run background.js's tab stash against a fake browser and prove no tab is lost.
 //
-// Loads extension/background.js into a VM with a fake WebExtension API holding one window of
-// synthetic tabs — web pages, container tabs, file: and extension pages, pinned tabs, duplicates —
-// then stashes, restores, moves and deletes, and checks after every step that each tab is either
-// still open or recorded in a stash. No real browser is involved.
+// Loads extension/background.js into a VM with a fake WebExtension API — windows of synthetic tabs
+// (web pages, container tabs, file: and extension pages, pinned tabs, duplicates) and an in-memory
+// bookmark tree — then stashes, restores, moves, locks, imports and migrates, and checks after
+// each step that every tab is either still open or recorded in a stash. No real browser is
+// involved; tools/run-in-headless-firefox.zsh runs tools/e2e-stash.js for that.
 //
 // Usage: node tools/test-stash.mjs [--tabs N]      (default 349)
 
@@ -14,31 +15,106 @@ import vm from "node:vm";
 import assert from "node:assert/strict";
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 9).join("\n").replace(/^\/\/ ?/gm, ""));
+  console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 10).join("\n").replace(/^\/\/ ?/gm, ""));
   process.exit(0);
 }
 const N = Number(process.argv[process.argv.indexOf("--tabs") + 1]) || 349;
 const source = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8");
 
-function makeBrowser(tabs, { failWrites = false, helper = "installed" } = {}) {
+/* Firefox's bookmark API over a map: index is the final position on move, a non-empty folder
+ * cannot be removed without removeTree, and everything handed out is a copy. `fail` makes
+ * bookmark creates misbehave: "silent" drops them without an error, "throw" fails the fifth one. */
+function makeBookmarks({ fail = null } = {}) {
+  const nodes = new Map();
+  let seq = 0, clock = Date.parse("2026-09-29T10:00:00Z"), creates = 0;
+  const add = (node, parentId, index) => {
+    nodes.set(node.id, node);
+    if (parentId) {
+      const kids = nodes.get(parentId).children;
+      kids.splice(index == null ? kids.length : Math.min(index, kids.length), 0, node.id);
+    }
+  };
+  add({ id: "root________", title: "", children: [] });
+  for (const id of ["menu________", "toolbar_____", "unfiled_____", "mobile______"]) add({ id, parentId: "root________", title: id, children: [] }, "root________");
+  const need = id => {
+    const n = nodes.get(id);
+    if (!n) throw new Error(`Bookmark not found: ${id}`);
+    return n;
+  };
+  const view = n => {
+    const parent = n.parentId && nodes.get(n.parentId);
+    const out = { id: n.id, parentId: n.parentId, title: n.title, dateAdded: n.dateAdded, index: parent ? parent.children.indexOf(n.id) : 0,
+      type: n.url ? "bookmark" : "folder" };
+    if (n.url) out.url = n.url;
+    return out;
+  };
+  const tree = n => ({ ...view(n), ...(!n.url && { children: n.children.map(id => tree(nodes.get(id))) }) });
+  const detach = n => { const kids = nodes.get(n.parentId).children; kids.splice(kids.indexOf(n.id), 1); };
+  const drop = n => { if (!n.url) for (const id of [...n.children]) drop(nodes.get(id)); nodes.delete(n.id); };
+  const api = {
+    get: async id => [view(need(id))],
+    getChildren: async id => need(id).children.map(k => view(nodes.get(k))),
+    getSubTree: async id => [tree(need(id))],
+    create: async ({ parentId = "unfiled_____", title = "", url, index }) => {
+      const parent = need(parentId);
+      if (parent.url) throw new Error("parent is not a folder");
+      const node = { id: `bm${++seq}`, parentId, title, dateAdded: clock += 1000, ...(url ? { url } : { children: [] }) };
+      if (url) {
+        creates++;
+        if (fail === "silent") return view({ ...node, parentId: null });
+        if (fail === "throw" && creates === 5) throw new Error("database is locked");
+      }
+      add(node, parentId, index);
+      return view(node);
+    },
+    update: async (id, { title, url }) => {
+      const n = need(id);
+      if (title != null) n.title = title;
+      if (url != null) n.url = url;
+      return view(n);
+    },
+    move: async (id, { parentId, index }) => {
+      const n = need(id);
+      detach(n);
+      n.parentId = parentId ?? n.parentId;
+      const kids = need(n.parentId).children;
+      kids.splice(index == null ? kids.length : Math.min(index, kids.length), 0, id);
+      return view(n);
+    },
+    remove: async id => {
+      const n = need(id);
+      if (!n.url && n.children.length) throw new Error("Cannot remove a non-empty folder");
+      detach(n);
+      drop(n);
+    },
+    removeTree: async id => { const n = need(id); detach(n); drop(n); },
+  };
+  return { api, nodes };
+}
+
+function makeBrowser(tabs, { helper = "installed", bookmarks: bmOpts = {} } = {}) {
   const store = {};
   let nextId = 10_000;
   const listeners = () => ({ addListener() {}, removeListener() {} });
   const closed = [];
   const nativeCalls = [];
+  const bm = makeBookmarks(bmOpts);
+  const reindex = () => {
+    for (const w of new Set(tabs.map(t => t.windowId))) tabs.filter(t => t.windowId === w).forEach((t, i) => { t.index = i; });
+  };
+  reindex();
   const browser = {
     storage: {
       local: {
         get: async key => ({ [key]: structuredClone(store[key]) }),
-        set: async obj => {
-          if (failWrites && "sessions" in obj) return; // a write that silently does not land
-          Object.assign(store, structuredClone(obj));
-        },
+        set: async obj => { Object.assign(store, structuredClone(obj)); },
+        remove: async keys => { for (const k of [].concat(keys)) delete store[k]; },
       },
       onChanged: listeners(),
     },
+    bookmarks: bm.api,
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {}, setBadgeTextColor: async () => {} },
-    menus: { removeAll: async () => {}, create() {}, onClicked: listeners() },
+    menus: { removeAll: async () => {}, create() {}, onClicked: listeners(), onShown: listeners(), update: async () => {}, refresh: async () => {} },
     commands: { onCommand: listeners() },
     notifications: { create: async () => {} },
     downloads: { onCreated: listeners(), onChanged: listeners() },
@@ -58,23 +134,30 @@ function makeBrowser(tabs, { failWrites = false, helper = "installed" } = {}) {
     windows: {
       focused: null,
       getLastFocused: async () => ({ id: 1 }),
+      getAll: async () => [...new Set(tabs.map(t => t.windowId))].map(id => ({ id, tabs: tabs.filter(t => t.windowId === id).map(t => ({ ...t })) })),
       update: async (id, props) => { if (props.focused) browser.windows.focused = id; },
     },
     tabs: {
       onUpdated: listeners(),
-      query: async q => tabs.filter(t => q.windowId == null || t.windowId === q.windowId).map(t => ({ ...t })),
+      // The current window is window 1.
+      query: async q => {
+        const w = q.currentWindow ? 1 : q.windowId;
+        return tabs.filter(t => w == null || t.windowId === w).map(t => ({ ...t }));
+      },
       update: async (id, props) => {
-        for (const t of tabs) if (props.active) t.active = t.id === id;
+        const tab = tabs.find(t => t.id === id);
+        for (const t of tabs) if (props.active && t.windowId === tab?.windowId) t.active = t.id === id;
       },
       create: async props => {
         if (props.discarded && props.active) throw new Error("a discarded tab cannot be active");
         // What Firefox refuses an extension: local files, privileged pages, other extensions' pages.
-        if (/^(file|about|chrome|data):/.test(props.url) && props.url !== "about:blank") throw new Error(`Illegal URL: ${props.url}`);
-        if (props.url.startsWith("moz-extension://") && !props.url.startsWith("moz-extension://fake-uuid/")) throw new Error(`Illegal URL: ${props.url}`);
+        if (props.url && /^(file|about|chrome|data):/.test(props.url) && props.url !== "about:blank") throw new Error(`Illegal URL: ${props.url}`);
+        if (props.url?.startsWith("moz-extension://") && !props.url.startsWith("moz-extension://fake-uuid/")) throw new Error(`Illegal URL: ${props.url}`);
         if (props.cookieStoreId === "firefox-container-gone") throw new Error("no such container");
-        const tab = { id: nextId++, windowId: props.windowId ?? 1, url: props.url, title: props.title,
+        const tab = { id: nextId++, windowId: props.windowId ?? 1, url: props.url ?? "about:newtab", title: props.title,
           cookieStoreId: props.cookieStoreId || "firefox-default", discarded: !!props.discarded, pinned: false };
         tabs.push(tab);
+        reindex();
         return tab;
       },
       remove: async ids => {
@@ -83,15 +166,16 @@ function makeBrowser(tabs, { failWrites = false, helper = "installed" } = {}) {
           assert.ok(i >= 0, `removed a tab that does not exist: ${id}`);
           closed.push(...tabs.splice(i, 1));
         }
+        reindex();
       },
     },
   };
-  return { browser, store, closed, nativeCalls };
+  return { browser, store, closed, nativeCalls, bm };
 }
 
 /* One window shaped like a real heavy session: mostly web pages, some in a container, file: and
  * extension pages that cannot be reopened, pinned tabs, and a few duplicates. */
-function makeTabs(n) {
+function makeTabs(n, windowId = 1, idBase = 0) {
   const tabs = [];
   for (let i = 0; i < n; i++) {
     const kind = i % 7 === 0 ? "file" : i % 43 === 0 ? "ext" : i === 1 ? "about" : "web";
@@ -102,7 +186,7 @@ function makeTabs(n) {
       web: i % 50 === 3 ? "https://example.com/dup" : `https://site-${i % 30}.example/post/${i}`,
     }[kind];
     tabs.push({
-      id: i + 1, windowId: 1, url, title: kind === "web" ? `Title ${i}` : url,
+      id: idBase + i + 1, windowId, url, title: kind === "web" ? `Title ${i}` : url,
       pinned: i < 2, highlighted: i === 5, active: i === 5,
       cookieStoreId: i % 49 === 10 ? "firefox-container-7" : "firefox-default",
     });
@@ -116,7 +200,11 @@ async function load(browser) {
   return ctx;
 }
 
+// Results come from the VM's realm; compare by value.
+const plain = v => JSON.parse(JSON.stringify(v));
+const stashes = async bg => plain(await bg.getSessions());
 const urlsOf = list => new Set(list.map(t => t.url));
+const isPage = t => t.url.endsWith("sessions.html");
 
 let passed = 0;
 async function check(name, fn) {
@@ -125,48 +213,65 @@ async function check(name, fn) {
   console.log(`ok   ${name}`);
 }
 
-await check(`whole window of ${N}: every closed tab is recorded, the rest stay open`, async () => {
+await check(`whole window of ${N}: every closed tab is a bookmark, the rest stay open`, async () => {
   const tabs = makeTabs(N);
   const before = tabs.map(t => ({ ...t }));
-  const { browser, store, closed } = makeBrowser(tabs);
+  const { browser, closed, bm } = makeBrowser(tabs);
   const bg = await load(browser);
   const res = await bg.stashTabs();
   assert.equal(res.ok, true, res.error);
 
-  const recorded = urlsOf(store.sessions[0].tabs);
+  const [s] = await stashes(bg);
+  const recorded = urlsOf(s.tabs);
   for (const t of closed) assert.ok(recorded.has(t.url), `closed but not recorded: ${t.url}`);
   const open = urlsOf(tabs);
   for (const t of before) assert.ok(open.has(t.url) || recorded.has(t.url), `lost: ${t.url}`);
+  // The record is the bookmarks themselves, in tab order.
+  const folder = bm.nodes.get(s.id);
+  assert.equal(bm.nodes.get(folder.parentId).title, "Link Keeper stashes");
+  assert.equal(bm.nodes.get(folder.parentId).parentId, "unfiled_____");
+  assert.deepEqual(folder.children.map(id => bm.nodes.get(id).url), s.tabs.map(t => t.url));
+  assert.deepEqual(s.tabs.map(t => t.url), [...new Set(before.filter(t => !t.pinned).map(t => t.url))], "tab order kept");
 
-  for (const t of tabs.filter(t => !t.url.startsWith("moz-extension://fake-uuid/sessions.html"))) {
-    assert.ok(t.pinned, `left open but not pinned: ${t.url}`);
-  }
-  assert.equal(tabs.filter(t => t.url.endsWith("sessions.html")).length, 1, "exactly one sessions page");
+  for (const t of tabs.filter(t => !isPage(t))) assert.ok(t.pinned, `left open but not pinned: ${t.url}`);
+  assert.equal(tabs.filter(isPage).length, 1, "exactly one sessions page");
   assert.equal(res.closed, closed.length);
   assert.ok(res.stashed < res.closed, "duplicates recorded once");
-  const cont = store.sessions[0].tabs.filter(t => t.container);
+  const cont = s.tabs.filter(t => t.container);
   assert.equal(cont.length, before.filter(t => t.cookieStoreId !== "firefox-default" && !t.pinned).length);
   console.log(`     ${res.closed} closed, ${res.stashed} recorded, ${res.left} left open, ${cont.length} in a container`);
 });
 
-await check("a stash whose write does not land closes nothing", async () => {
+await check("bookmarks that silently do not land close nothing", async () => {
   const tabs = makeTabs(N);
-  const { browser, closed } = makeBrowser(tabs, { failWrites: true });
+  const { browser, closed } = makeBrowser(tabs, { bookmarks: { fail: "silent" } });
+  const bg = await load(browser);
+  const res = await bg.stashTabs();
+  assert.equal(res.ok, false);
+  assert.match(res.error, /no tab was closed/);
+  assert.equal(closed.length, 0);
+  assert.equal(tabs.length, N, "nothing opened, nothing closed");
+  assert.deepEqual(await stashes(bg), [], "the half-written stash is taken back out");
+});
+
+await check("a bookmark write that fails halfway closes nothing and leaves no half stash", async () => {
+  const tabs = makeTabs(40);
+  const { browser, closed } = makeBrowser(tabs, { bookmarks: { fail: "throw" } });
   const bg = await load(browser);
   const res = await bg.stashTabs();
   assert.equal(res.ok, false);
   assert.equal(closed.length, 0);
-  assert.equal(tabs.length, N, "nothing opened, nothing closed");
+  assert.deepEqual(await stashes(bg), []);
 });
 
 await check("a selection of only local files and extension pages is stashed too", async () => {
   const tabs = makeTabs(60).map(t => ({ ...t, url: t.id % 5 ? `file:///r/${t.id}.html` : `moz-extension://other/${t.id}.html`, highlighted: true, pinned: false }));
-  const { browser, closed, store } = makeBrowser(tabs);
+  const { browser, closed } = makeBrowser(tabs);
   const bg = await load(browser);
   const res = await bg.stashTabs();
   assert.equal(res.ok, true, res.error);
   assert.equal(closed.length, 60);
-  assert.equal(store.sessions[0].tabs.length, 60);
+  assert.equal((await stashes(bg))[0].tabs.length, 60);
 });
 
 await check("a window of only pinned and empty tabs says why nothing closed", async () => {
@@ -193,13 +298,65 @@ await check("selected tabs only, when several are selected", async () => {
   assert.deepEqual([...urlsOf(closed)].sort(), [...urlsOf(want)].sort());
 });
 
+await check("scopes: only this tab (pinned too), left, right, all except this one", async () => {
+  const run = async (scope, tabId) => {
+    const tabs = makeTabs(12);
+    const { browser, closed } = makeBrowser(tabs);
+    const bg = await load(browser);
+    const res = await bg.stashTabs({ windowId: 1, scope, tabId });
+    assert.equal(res.ok, true, `${scope}: ${res.error}`);
+    return closed.map(t => t.id);
+  };
+  assert.deepEqual(await run("tab", 8), [8]);
+  assert.deepEqual(await run("tab", 1), [1], "a pinned tab stashed by name goes");
+  assert.deepEqual(await run("left", 6), [3, 4, 5], "left of tab 6, without the pinned 1 and 2");
+  assert.deepEqual(await run("right", 9), [10, 11, 12]);
+  assert.deepEqual(await run("others", 4), [3, 5, 6, 7, 8, 9, 10, 11, 12]);
+  const tabs = makeTabs(12);
+  const { browser } = makeBrowser(tabs);
+  const bg = await load(browser);
+  const res = await bg.stashTabs({ windowId: 1, scope: "left", tabId: 3 });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /the tabs to the left holds only 2 pinned/);
+});
+
+await check("every window: one stash per window, one Stashed tabs page", async () => {
+  const tabs = [...makeTabs(20, 1), ...makeTabs(15, 2, 100), ...makeTabs(9, 3, 200)];
+  const before = tabs.map(t => ({ ...t }));
+  const { browser, closed } = makeBrowser(tabs);
+  const bg = await load(browser);
+  const res = await bg.stashTabs({ scope: "all-windows" });
+  assert.equal(res.ok, true, res.error);
+  assert.equal(res.stashes, 3);
+  const all = await stashes(bg);
+  assert.equal(all.length, 3);
+  const recorded = urlsOf(all.flatMap(s => s.tabs));
+  for (const t of closed) assert.ok(recorded.has(t.url));
+  for (const t of before) assert.ok(urlsOf(tabs).has(t.url) || recorded.has(t.url), `lost: ${t.url}`);
+  assert.equal(tabs.filter(isPage).length, 1);
+});
+
+await check("never-stash sites stay open, say so, and can be taken off the list", async () => {
+  const tabs = makeTabs(40);
+  const { browser, closed } = makeBrowser(tabs);
+  const bg = await load(browser);
+  assert.equal((await browser.handle({ type: "toggle-excluded", host: "www.site-4.example" })).excluded, true);
+  const res = await bg.stashTabs();
+  assert.equal(res.ok, true);
+  assert.ok(!closed.some(t => t.url.includes("site-4.example")), "an excluded site closed");
+  assert.ok(tabs.some(t => t.url.includes("site-4.example")));
+  assert.match(res.why, /\d+ never-stash sites?/);
+  assert.equal((await browser.handle({ type: "toggle-excluded", host: "site-4.example" })).excluded, false);
+  assert.deepEqual(plain((await browser.handle({ type: "stash-settings" })).settings.exclude), []);
+});
+
 await check("an open sessions page is reused, not duplicated", async () => {
   const tabs = makeTabs(20);
   tabs.push({ id: 999, windowId: 1, url: "moz-extension://fake-uuid/sessions.html", pinned: false, cookieStoreId: "firefox-default" });
   const { browser } = makeBrowser(tabs);
   const bg = await load(browser);
   await bg.stashTabs();
-  assert.equal(tabs.filter(t => t.url.endsWith("sessions.html")).length, 1);
+  assert.equal(tabs.filter(isPage).length, 1);
 });
 
 await check("a sessions page pinned in another window is the one shown, from every entry point", async () => {
@@ -207,10 +364,10 @@ await check("a sessions page pinned in another window is the one shown, from eve
   tabs.push({ id: 998, windowId: 2, url: "moz-extension://fake-uuid/sessions.html", pinned: true, cookieStoreId: "firefox-default" });
   const { browser } = makeBrowser(tabs);
   const bg = await load(browser);
-  const res = await bg.stashTabs(1);
+  const res = await bg.stashTabs({ windowId: 1 });
   assert.equal(res.ok, true);
   await browser.handle({ type: "open-sessions" });
-  const pages = tabs.filter(t => t.url.endsWith("sessions.html"));
+  const pages = tabs.filter(isPage);
   assert.deepEqual(pages.map(t => t.id), [998], "no second sessions page");
   assert.equal(pages[0].active, true);
   assert.equal(browser.windows.focused, 2);
@@ -219,24 +376,35 @@ await check("a sessions page pinned in another window is the one shown, from eve
 await check("with no sessions page open, the popup's Stashed button opens exactly one", async () => {
   const tabs = makeTabs(5);
   const { browser } = makeBrowser(tabs);
+  await load(browser);
+  await browser.handle({ type: "open-sessions" });
+  await browser.handle({ type: "open-sessions" });
+  assert.equal(tabs.filter(isPage).length, 1);
+});
+
+await check("after stashing, 'stay' opens a new tab where a window would close, and no Stashed tabs page", async () => {
+  const tabs = makeTabs(10).map(t => ({ ...t, pinned: false }));
+  const { browser, closed } = makeBrowser(tabs);
   const bg = await load(browser);
-  await browser.handle({ type: "open-sessions" });
-  await browser.handle({ type: "open-sessions" });
-  assert.equal(tabs.filter(t => t.url.endsWith("sessions.html")).length, 1);
+  await browser.handle({ type: "set-stash-settings", afterStash: "stay" });
+  const res = await bg.stashTabs();
+  assert.equal(res.ok, true);
+  assert.equal(closed.length, 10);
+  assert.equal(tabs.filter(isPage).length, 0);
+  assert.deepEqual(tabs.map(t => t.url), ["about:newtab"], "the window keeps one new tab");
 });
 
 await check("restore all brings every tab back — web unloaded in its container, files via the helper, the rest as stand-ins", async () => {
   const tabs = makeTabs(N);
-  const { browser, store } = makeBrowser(tabs);
+  const { browser } = makeBrowser(tabs);
   const bg = await load(browser);
   await bg.stashTabs();
-  const session = store.sessions[0];
+  const [session] = await stashes(bg);
   const openBefore = tabs.length;
   const res = await bg.restoreTabs(session.id);
   assert.equal(res.restored, session.tabs.length);
   const reopened = tabs.slice(openBefore);
   assert.equal(reopened.length, session.tabs.length, "one tab back per stashed tab");
-  // Web pages come back as themselves, local files through the helper, the rest as stand-ins.
   const standin = u => { const q = new URL(u).searchParams; return u.includes("/standin.html?") ? q.get("url") : null; };
   const back = new Set(reopened.map(t => standin(t.url) || t.url));
   for (const t of session.tabs) assert.ok(back.has(t.url), `not restored: ${t.url}`);
@@ -248,27 +416,46 @@ await check("restore all brings every tab back — web unloaded in its container
   for (const t of session.tabs.filter(t => t.container)) {
     assert.ok(reopened.some(r => r.url === t.url && r.cookieStoreId === t.container), `container lost: ${t.url}`);
   }
-  assert.equal(store.sessions[0].tabs.length, session.tabs.length, "stash kept");
-  assert.ok(store.sessions[0].tabs.every(t => t.seen_at), "marked seen");
+  const [after] = await stashes(bg);
+  assert.equal(after.tabs.length, session.tabs.length, "stash kept");
+  assert.ok(after.tabs.every(t => t.seen_at), "marked seen");
+});
+
+await check("with 'remove after restore', restored tabs leave the stash — unless it is locked", async () => {
+  const tabs = makeTabs(20);
+  const { browser } = makeBrowser(tabs);
+  const bg = await load(browser);
+  await bg.stashTabs();
+  await browser.handle({ type: "set-stash-settings", afterRestore: "remove" });
+  let [s] = await stashes(bg);
+  const res = await browser.handle({ type: "restore-stash", id: s.id, ids: [s.tabs[0].id] });
+  assert.equal(res.removed, true);
+  [s] = await stashes(bg);
+  const n = s.tabs.length;
+  await browser.handle({ type: "flag-stash", id: s.id, locked: true });
+  await browser.handle({ type: "restore-stash", id: s.id });
+  [s] = await stashes(bg);
+  assert.equal(s.tabs.length, n, "a locked stash keeps everything");
+  await browser.handle({ type: "flag-stash", id: s.id, locked: false });
+  await browser.handle({ type: "restore-stash", id: s.id });
+  assert.deepEqual(await stashes(bg), [], "restoring all empties and removes it");
 });
 
 await check("a deleted container falls back to a plain tab rather than failing", async () => {
   const { browser, store } = makeBrowser([]);
-  store.sessions = [{ id: "s", created_at: "2026-09-28T00:00:00Z",
-    tabs: [{ url: "https://a.example/", container: "firefox-container-gone" }] }];
-  const tabs = [];
-  browser.tabs.query = async () => tabs;
+  store.sessions = [{ id: "s", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://a.example/", container: "firefox-container-gone" }] }];
   const bg = await load(browser);
-  const res = await bg.restoreTabs("s");
+  const [s] = await stashes(bg);
+  const res = await bg.restoreTabs(s.id);
   assert.equal(res.restored, 1);
 });
 
 await check("without the helper, local files come back as stand-ins that say why", async () => {
   const tabs = makeTabs(60);
-  const { browser, store } = makeBrowser(tabs, { helper: "missing" });
+  const { browser } = makeBrowser(tabs, { helper: "missing" });
   const bg = await load(browser);
   await bg.stashTabs();
-  const session = store.sessions[0];
+  const [session] = await stashes(bg);
   const openBefore = tabs.length;
   const res = await bg.restoreTabs(session.id);
   assert.match(res.helperError, /not installed/);
@@ -281,10 +468,10 @@ await check("without the helper, local files come back as stand-ins that say why
 
 await check("a file that no longer exists comes back as a stand-in, the others through the helper", async () => {
   const { browser, store } = makeBrowser([]);
-  store.sessions = [{ id: "s", created_at: "2026-09-28T00:00:00Z",
-    tabs: [{ url: "file:///r/a.html", title: "A" }, { url: "file:///r/gone.html", title: "Gone" }] }];
+  store.sessions = [{ id: "s", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "file:///r/a.html", title: "A" }, { url: "file:///r/gone.html", title: "Gone" }] }];
   const bg = await load(browser);
-  const res = await bg.restoreTabs("s");
+  const [s] = await stashes(bg);
+  const res = await bg.restoreTabs(s.id);
   assert.equal(res.viaHelper, 1);
   assert.equal(res.standins, 1);
 });
@@ -294,19 +481,19 @@ await check("move to list carries title and stash date, and empties the stash", 
   const { browser, store } = makeBrowser(tabs);
   const bg = await load(browser);
   await bg.stashTabs();
-  const session = store.sessions[0];
-  const one = session.tabs[0];
-  const res = await bg.moveStashToList(session.id, [one.url]);
+  const [session] = await stashes(bg);
+  const one = session.tabs.find(t => t.url.startsWith("https:"));
+  const res = await bg.moveStashToList(session.id, [one.id]);
   assert.equal(res.moved, 1);
   const item = store.items.find(i => i.url === one.url);
   assert.equal(item.title, one.title);
   assert.equal(item.saved_at, session.created_at);
-  assert.equal(store.sessions[0].tabs.length, session.tabs.length - 1);
+  assert.equal((await stashes(bg))[0].tabs.length, session.tabs.length - 1);
   const rest = await bg.moveStashToList(session.id);
   const web = session.tabs.filter(t => /^https?:/.test(t.url));
   assert.equal(store.items.length, web.length, "only web pages go to the list");
-  assert.equal(rest.stayed, session.tabs.length - 1 - (web.length - 1));
-  assert.ok(store.sessions[0].tabs.every(t => !/^https?:/.test(t.url)), "local and browser pages stay in the stash");
+  assert.equal(rest.stayed, session.tabs.length - web.length);
+  assert.ok((await stashes(bg))[0].tabs.every(t => !/^https?:/.test(t.url)), "local and browser pages stay in the stash");
 });
 
 await check("a verdict is a flag: set, cleared by null, and only Clear dropped removes a tab", async () => {
@@ -315,24 +502,177 @@ await check("a verdict is a flag: set, cleared by null, and only Clear dropped r
     { id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/" }, { url: "file:///r/2.html" }] },
     { id: "b", created_at: "2026-09-27T00:00:00Z", tabs: [{ url: "https://3.example/" }] },
   ];
-  await load(browser);
-  assert.equal((await browser.handle({ type: "judge-stashed", id: "a", url: "https://1.example/", verdict: "drop" })).ok, true);
-  assert.equal((await browser.handle({ type: "judge-stashed", id: "a", url: "file:///r/2.html", verdict: "keep" })).ok, true);
-  assert.equal((await browser.handle({ type: "judge-stashed", id: "b", url: "https://3.example/", verdict: "drop" })).ok, true);
-  assert.equal(store.sessions[0].tabs[0].verdict, "drop");
-  assert.equal(store.sessions.flatMap(s => s.tabs).length, 3, "a drop deletes nothing");
+  const bg = await load(browser);
+  const [a, b] = await stashes(bg);
+  const judge = (s, i, verdict) => browser.handle({ type: "judge-stashed", id: s.id, tab: s.tabs[i].id, verdict });
+  assert.equal((await judge(a, 0, "drop")).ok, true);
+  assert.equal((await judge(a, 1, "keep")).ok, true);
+  assert.equal((await judge(b, 0, "drop")).ok, true);
+  let all = await stashes(bg);
+  assert.equal(all[0].tabs[0].verdict, "drop");
+  assert.equal(all.flatMap(s => s.tabs).length, 3, "a drop deletes nothing");
 
-  await browser.handle({ type: "judge-stashed", id: "b", url: "https://3.example/", verdict: null });
-  assert.equal(store.sessions[1].tabs[0].verdict, undefined, "null clears");
+  await judge(b, 0, null);
+  assert.equal((await stashes(bg))[1].tabs[0].verdict, undefined, "null clears");
 
   const res = await browser.handle({ type: "clear-dropped" });
   assert.equal(res.removed, 1);
-  assert.deepEqual(store.sessions.flatMap(s => s.tabs.map(t => t.url)), ["file:///r/2.html", "https://3.example/"]);
+  all = await stashes(bg);
+  assert.deepEqual(all.flatMap(s => s.tabs.map(t => t.url)), ["file:///r/2.html", "https://3.example/"]);
 
-  await browser.handle({ type: "judge-stashed", id: "a", url: "file:///r/2.html", verdict: "drop" });
-  await browser.handle({ type: "clear-dropped", id: "a" });
-  assert.deepEqual(store.sessions.map(s => s.id), ["b"], "a stash emptied by clearing goes");
-  assert.equal((await browser.handle({ type: "judge-stashed", id: "a", url: "nope", verdict: "keep" })).ok, false);
+  await browser.handle({ type: "judge-stashed", id: a.id, tab: all[0].tabs[0].id, verdict: "drop" });
+  await browser.handle({ type: "clear-dropped", id: a.id });
+  assert.deepEqual((await stashes(bg)).map(s => s.id), [b.id], "a stash emptied by clearing goes");
+  assert.equal((await browser.handle({ type: "judge-stashed", id: a.id, tab: "nope", verdict: "keep" })).ok, false);
+});
+
+await check("a locked stash gives up nothing: no delete, remove, move to list, clear or drag out", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [
+    { id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/", verdict: "drop" }, { url: "https://2.example/" }] },
+    { id: "b", created_at: "2026-09-27T00:00:00Z", tabs: [{ url: "https://3.example/" }] },
+  ];
+  const bg = await load(browser);
+  const [a, b] = await stashes(bg);
+  await browser.handle({ type: "flag-stash", id: a.id, locked: true });
+  assert.equal((await browser.handle({ type: "delete-stash", id: a.id })).ok, false);
+  assert.equal((await browser.handle({ type: "delete-stash", id: a.id, ids: [a.tabs[1].id] })).ok, false);
+  assert.equal((await browser.handle({ type: "move-stash", id: a.id })).ok, false);
+  assert.equal((await browser.handle({ type: "clear-dropped" })).removed, 0);
+  assert.equal((await browser.handle({ type: "move-stashed", ids: [a.tabs[0].id], to: b.id })).ok, false);
+  const [after] = await stashes(bg);
+  assert.equal(after.tabs.length, 2);
+  assert.equal(after.locked, true);
+  // Moving into a locked stash is fine.
+  assert.equal((await browser.handle({ type: "move-stashed", ids: [b.tabs[0].id], to: a.id })).ok, true);
+  assert.equal((await stashes(bg))[0].tabs.length, 3);
+});
+
+await check("starred stashes come first; rename to nothing brings back the date", async () => {
+  const { browser, store, bm } = makeBrowser([]);
+  store.sessions = ["a", "b", "c"].map((id, i) => ({ id, created_at: `2026-09-2${8 - i}T00:00:00Z`, tabs: [{ url: `https://${id}.example/` }] }));
+  const bg = await load(browser);
+  const [a, b, c] = await stashes(bg);
+  await browser.handle({ type: "flag-stash", id: c.id, starred: true });
+  assert.deepEqual((await stashes(bg)).map(s => s.id), [c.id, a.id, b.id]);
+  await browser.handle({ type: "rename-stash", id: a.id, name: "  Research  " });
+  assert.equal(bm.nodes.get(a.id).title, "Research", "the name is the folder's title");
+  await browser.handle({ type: "rename-stash", id: a.id, name: "" });
+  assert.equal(bm.nodes.get(a.id).title, a.name, "back to the stash time");
+});
+
+await check("drag and drop moves tabs within and across stashes, in order; an emptied stash goes", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [
+    { id: "a", created_at: "2026-09-28T00:00:00Z", tabs: ["1", "2", "3", "4"].map(n => ({ url: `https://${n}.example/` })) },
+    { id: "b", created_at: "2026-09-27T00:00:00Z", tabs: [{ url: "https://9.example/" }] },
+  ];
+  const bg = await load(browser);
+  let [a, b] = await stashes(bg);
+  const order = s => s.tabs.map(t => new URL(t.url).hostname[0]).join("");
+  await browser.handle({ type: "move-stashed", ids: [a.tabs[0].id], to: a.id, before: a.tabs[3].id });
+  [a] = await stashes(bg);
+  assert.equal(order(a), "2314", "down within a stash, ahead of the target");
+  await browser.handle({ type: "move-stashed", ids: [a.tabs[2].id], to: a.id, before: a.tabs[0].id });
+  [a] = await stashes(bg);
+  assert.equal(order(a), "1234", "up within a stash");
+  await browser.handle({ type: "move-stashed", ids: [a.tabs[1].id, a.tabs[2].id], to: b.id });
+  [a, b] = await stashes(bg);
+  assert.equal(order(a), "14");
+  assert.equal(order(b), "923", "several, in order, to the end of another stash");
+  await browser.handle({ type: "move-stashed", ids: a.tabs.map(t => t.id), to: b.id, before: b.tabs[0].id });
+  const all = await stashes(bg);
+  assert.equal(all.length, 1, "the emptied stash goes");
+  assert.equal(order(all[0]), "14923");
+});
+
+await check("import writes stashes in the order given, with dates, names and verdicts, and drops junk", async () => {
+  const tabs = makeTabs(5);
+  const { browser } = makeBrowser(tabs);
+  const bg = await load(browser);
+  await bg.stashTabs({ windowId: 1, scope: "tab", tabId: 3 });
+  const res = await browser.handle({ type: "import-stashes", stashes: [
+    { name: "From OneTab", created_at: "2020-01-02T03:04:05Z", tabs: [{ url: "https://a.example/", title: "A" }, { url: "https://a.example/" }, { url: "not a url" }, { url: 7 }] },
+    { tabs: [{ url: "file:///r/x.pdf", verdict: "keep" }] },
+    { name: "empty", tabs: [{ url: "junk" }] },
+  ] });
+  assert.equal(res.ok, true, res.error);
+  assert.equal(res.stashes, 2);
+  assert.equal(res.tabs, 2);
+  const all = await stashes(bg);
+  assert.deepEqual(all.map(s => s.tabs.length), [1, 1, 1]);
+  assert.equal(all[0].name, "From OneTab");
+  assert.equal(all[0].created_at, "2020-01-02T03:04:05.000Z");
+  assert.equal(all[0].tabs[0].title, "A");
+  assert.equal(all[1].tabs[0].verdict, "keep");
+  assert.equal((await browser.handle({ type: "import-stashes", stashes: [{ tabs: [] }] })).ok, false);
+});
+
+await check("stashes from storage.local move into bookmarks once, with every mark, and the old record is kept aside", async () => {
+  const { browser, store } = makeBrowser([]);
+  const old = [
+    { id: "new", created_at: "2026-09-28T10:00:00Z", name: "Named", tabs: [
+      { url: "https://1.example/", title: "One", container: "firefox-container-3", verdict: "keep", judged_at: "2026-09-28T11:00:00Z" },
+      { url: "file:///r/2.pdf", seen_at: "2026-09-28T12:00:00Z" }] },
+    { id: "old", created_at: "2026-09-20T10:00:00Z", tabs: [{ url: "about:preferences" }] },
+    { id: "empty", created_at: "2026-09-19T10:00:00Z", tabs: [] },
+  ];
+  store.sessions = structuredClone(old);
+  const bg = await load(browser);
+  const all = await stashes(bg);
+  assert.deepEqual(all.map(s => s.created_at), ["2026-09-28T10:00:00Z", "2026-09-20T10:00:00Z"], "dates kept as they were");
+  assert.equal(all[0].name, "Named");
+  assert.deepEqual(all[0].tabs.map(t => [t.url, t.title, t.container, t.verdict, t.seen_at]), [
+    ["https://1.example/", "One", "firefox-container-3", "keep", undefined],
+    ["file:///r/2.pdf", undefined, undefined, undefined, "2026-09-28T12:00:00Z"]]);
+  assert.equal(store.sessions, undefined, "the old key is gone");
+  assert.deepEqual(store.sessions_before_bookmarks, old, "and kept aside whole");
+  await stashes(bg);
+  assert.equal((await stashes(bg)).length, 2, "runs once");
+});
+
+await check("a migration cut short is cleaned up and redone; one that fails to read back leaves the old record", async () => {
+  const { browser, store, bm } = makeBrowser([]);
+  store.sessions = [{ id: "x", created_at: "2026-09-28T10:00:00Z", tabs: [{ url: "https://1.example/" }, { url: "https://2.example/" }] }];
+  // A previous run got as far as a folder with one bookmark.
+  const root = await browser.bookmarks.create({ parentId: "unfiled_____", title: "Link Keeper stashes" });
+  const partial = await browser.bookmarks.create({ parentId: root.id, title: "half" });
+  await browser.bookmarks.create({ parentId: partial.id, url: "https://1.example/" });
+  store.stashMigrating = [partial.id];
+  const bg = await load(browser);
+  const all = await stashes(bg);
+  assert.equal(all.length, 1);
+  assert.equal(all[0].tabs.length, 2);
+  assert.ok(!bm.nodes.has(partial.id), "the half folder is gone");
+
+  const tabs = makeTabs(8);
+  const failing = makeBrowser(tabs, { bookmarks: { fail: "silent" } });
+  failing.store.sessions = [{ id: "x", created_at: "2026-09-28T10:00:00Z", tabs: [{ url: "https://1.example/" }] }];
+  const bg2 = await load(failing.browser);
+  await assert.rejects(bg2.getSessions(), /did not read back/);
+  assert.equal(failing.store.sessions.length, 1, "old record untouched");
+  await assert.rejects(bg2.stashTabs({ windowId: 1 }), /did not read back/);
+  assert.equal(failing.closed.length, 0, "no stash, and so no closing, while the migration fails");
+});
+
+await check("after a reinstall the stashes are found by folder name; bookmarks edited in Firefox show as they are", async () => {
+  const tabs = makeTabs(12);
+  const { browser, store, bm } = makeBrowser(tabs);
+  let bg = await load(browser);
+  await bg.stashTabs();
+  const [s] = await stashes(bg);
+  // A reinstall: the extension's storage is gone, the bookmarks are not.
+  for (const k of Object.keys(store)) delete store[k];
+  bg = await load(browser);
+  const [again] = await stashes(bg);
+  assert.deepEqual(again.tabs.map(t => t.url), s.tabs.map(t => t.url));
+  assert.equal(again.tabs.filter(t => t.container).length, 0, "containers were in the lost storage");
+  await browser.bookmarks.remove(again.tabs[0].id);
+  await browser.bookmarks.update(again.id, { title: "Renamed in the library" });
+  const [edited] = await stashes(bg);
+  assert.equal(edited.tabs.length, s.tabs.length - 1);
+  assert.equal(edited.name, "Renamed in the library");
+  assert.equal([...bm.nodes.values()].filter(n => n.title === "Link Keeper stashes").length, 1, "no second root");
 });
 
 await check("frame headers are stripped only for frames inside the explore page", async () => {
@@ -345,8 +685,6 @@ await check("frame headers are stripped only for frames inside the explore page"
     { name: "Content-Security-Policy", value: "default-src 'self'; frame-ancestors 'none'; img-src *" },
     { name: "Content-Type", value: "text/html" },
   ];
-  // Results come from the VM's realm; compare by value.
-  const plain = v => JSON.parse(JSON.stringify(v));
   const ours = listener({ type: "sub_frame", documentUrl: "moz-extension://fake-uuid/stash-cards.html?stash=a", responseHeaders: headers() });
   assert.deepEqual(plain(ours.responseHeaders), [
     { name: "Content-Security-Policy", value: "default-src 'self'; img-src *" },
