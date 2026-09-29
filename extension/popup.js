@@ -205,11 +205,13 @@ $("open-sessions").onclick = async () => {
 };
 
 /* The stash opens its own page as the tabs close, so the popup has nothing left to show. */
-$("stash").onclick = async () => {
-  const res = await send({ type: "stash" });
+async function stash(scope) {
+  const res = await send({ type: "stash", scope });
   if (res.ok) window.close();
   else say(res.error, "bad");
-};
+}
+$("stash").onclick = () => stash("auto");
+for (const b of document.querySelectorAll(".scopes [data-scope]")) b.onclick = () => stash(b.dataset.scope);
 
 $("queue").onclick = async () => {
   const res = await send({ type: "queue-active", note: $("note").value.trim() });
