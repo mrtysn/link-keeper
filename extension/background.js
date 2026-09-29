@@ -596,6 +596,9 @@ const STASH_SETTINGS = { afterStash: "show", afterRestore: "keep", exclude: [] }
 const sessionsPage = () => browser.runtime.getURL("sessions.html");
 const isSessionsPage = url => !!url?.startsWith(sessionsPage());
 const hostOfUrl = url => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } };
+/* Firefox stores a bookmark's URL in its parsed form — host lowercased, spaces and non-ASCII
+ * percent-encoded, a bare host given its "/" — which is exactly what URL.href gives. */
+const asBookmarked = url => { try { return new URL(url).href; } catch { return url; } };
 const stashTitle = iso => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 /* One at a time, so two stashes at once cannot each create a root folder, and two edits of the
@@ -669,7 +672,8 @@ async function findStash(id) {
 }
 
 /* Writes one stash at the top: the folder, one bookmark per tab in order, then its metadata, then
- * reads it all back. ok is false unless every URL and container is there. onFolder hears the new
+ * reads it all back. ok is false unless every bookmark made is in the folder with its URL, and
+ * every container is recorded. onFolder hears the new
  * folder's id before anything else is written, so a caller can undo a write that fails halfway. */
 async function writeStash(tabs, { name, created_at, onFolder } = {}) {
   const at = created_at || new Date().toISOString();
@@ -685,9 +689,10 @@ async function writeStash(tabs, { name, created_at, onFolder } = {}) {
     });
   });
 
-  const have = new Set((await browser.bookmarks.getChildren(folder.id)).map(b => b.url));
+  const have = new Map((await browser.bookmarks.getChildren(folder.id)).map(b => [b.id, b.url]));
   const meta = await getMeta();
-  const ok = tabs.every(t => have.has(t.url)) &&
+  const ok = made.length === tabs.length &&
+    made.every((b, i) => have.get(b.id) === asBookmarked(tabs[i].url)) &&
     made.every((b, i) => !tabs[i].container || meta.tabs[b.id]?.container === tabs[i].container);
   return { id: folder.id, ok };
 }
@@ -987,13 +992,17 @@ async function moveStashed(ids, to, before) {
 }
 
 /* Stashes from a file: [{ name?, created_at?, tabs: [{ url, title?, container?, verdict?, seen_at? }] }],
- * already parsed by the page (stash-import.js). Written in the order given, above the others. */
+ * already parsed by the page (stash-import.js). Written in the order given, above the others, with
+ * URLs in the form Firefox bookmarks them. All or nothing: if one stash does not read back, the
+ * ones this import already wrote are taken out again. */
 async function importStashes(stashes) {
   await migrateStashes();
   const clean = (Array.isArray(stashes) ? stashes : []).map(s => {
     const urls = new Set();
     const tabs = (s.tabs || [])
-      .filter(t => typeof t?.url === "string" && /^[a-z][a-z0-9+.-]*:/i.test(t.url) && !urls.has(t.url) && urls.add(t.url))
+      .filter(t => typeof t?.url === "string" && /^[a-z][a-z0-9+.-]*:/i.test(t.url.trim()))
+      .map(t => ({ ...t, url: asBookmarked(t.url.trim()) }))
+      .filter(t => !urls.has(t.url) && urls.add(t.url))
       .map(t => ({
         url: t.url,
         title: typeof t.title === "string" && t.title.trim() ? t.title.trim().slice(0, 500) : undefined,
@@ -1010,10 +1019,16 @@ async function importStashes(stashes) {
   }).filter(s => s.tabs.length);
   if (!clean.length) return { ok: false, error: "nothing to import" };
   let tabs = 0;
-  for (const s of [...clean].reverse()) {
-    const res = await writeStash(s.tabs, s);
-    if (!res.ok) return { ok: false, error: "an imported stash did not read back; stopped there" };
-    tabs += s.tabs.length;
+  const written = [];
+  try {
+    for (const s of [...clean].reverse()) {
+      const res = await writeStash(s.tabs, { ...s, onFolder: id => { written.push(id); } });
+      if (!res.ok) throw new Error("an imported stash did not read back");
+      tabs += s.tabs.length;
+    }
+  } catch (e) {
+    for (const id of written) await removeStashFolder(id);
+    return { ok: false, error: `${e.message}; nothing was imported` };
   }
   return { ok: true, stashes: clean.length, tabs };
 }

@@ -58,6 +58,8 @@ function makeBookmarks({ fail = null } = {}) {
     create: async ({ parentId = "unfiled_____", title = "", url, index }) => {
       const parent = need(parentId);
       if (parent.url) throw new Error("parent is not a folder");
+      // Firefox keeps the parsed form of a URL, not the text it was given.
+      if (url) { try { url = new URL(url).href; } catch { /* kept as given */ } }
       const node = { id: `bm${++seq}`, parentId, title, dateAdded: clock += 1000, ...(url ? { url } : { children: [] }) };
       if (url) {
         creates++;
@@ -606,6 +608,29 @@ await check("import writes stashes in the order given, with dates, names and ver
   assert.equal(all[0].tabs[0].title, "A");
   assert.equal(all[1].tabs[0].verdict, "keep");
   assert.equal((await browser.handle({ type: "import-stashes", stashes: [{ tabs: [] }] })).ok, false);
+});
+
+await check("import takes URLs as OneTab writes them — raw unicode, spaces, uppercase hosts — as Firefox stores them", async () => {
+  const { browser } = makeBrowser([]);
+  const bg = await load(browser);
+  const res = await browser.handle({ type: "import-stashes", stashes: [{ tabs: [
+    { url: "https://jysk.com.tr/depolama/antre-ünitesi" }, { url: "https://Example.COM" }, { url: "https://example.com/" },
+    { url: "https://example.com/a b" }, { url: " https://bücher.de/x " }] }] });
+  assert.equal(res.ok, true, res.error);
+  const [s] = await stashes(bg);
+  assert.deepEqual(s.tabs.map(t => t.url), ["https://jysk.com.tr/depolama/antre-%C3%BCnitesi", "https://example.com/",
+    "https://example.com/a%20b", "https://xn--bcher-kva.de/x"], "stored as Firefox stores them, the same page once");
+});
+
+await check("an import that fails partway takes back every stash it wrote", async () => {
+  const { browser } = makeBrowser([], { bookmarks: { fail: "throw" } });
+  const bg = await load(browser);
+  const res = await browser.handle({ type: "import-stashes", stashes: [
+    { tabs: [{ url: "https://1.example/" }, { url: "https://2.example/" }] },
+    { tabs: [1, 2, 3, 4].map(n => ({ url: `https://${n}.other.example/` })) }] });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /nothing was imported/);
+  assert.deepEqual(await stashes(bg), []);
 });
 
 await check("stashes from storage.local move into bookmarks once, with every mark, and the old record is kept aside", async () => {

@@ -116,3 +116,20 @@ await check("every folder is in Firefox's own bookmarks, where the library and S
   eq(listed, total, "the page lists exactly what the bookmarks hold");
   report("     ", `${tree.children.length} stash folders, ${total} bookmarks`);
 });
+
+await check("import takes OneTab's raw URLs — unicode, spaces, uppercase hosts — and reads them back", async () => {
+  // What parseStashImport reads out of OneTab's text (tools/test-stash-import.mjs checks that part).
+  const parsed = { stashes: [
+    { tabs: [{ url: "https://jysk.com.tr/depolama/antre-ünitesi-egeby", title: "Antre ünitesi EGEBY" },
+      { url: "https://Example.COM", title: "Example" },
+      { url: "https://www.google.com/search?udm=2&q=EGEBY%20%20jysk#vhid=P1", title: "EGEBY jysk - Google Search" },
+      { url: "https://example.com/a b", title: "Spaced" }] },
+    { tabs: [{ url: "https://bücher.de/x", title: "Bücher" }] },
+  ] };
+  const res = await importStashes(parsed.stashes);
+  yes(res.ok, res.error);
+  eq(res.tabs, 5, "tabs");
+  const [a, b] = await getSessions();
+  eq([...a.tabs, ...b.tabs].map(t => t.url), ["https://jysk.com.tr/depolama/antre-%C3%BCnitesi-egeby", "https://example.com/",
+    "https://www.google.com/search?udm=2&q=EGEBY%20%20jysk#vhid=P1", "https://example.com/a%20b", "https://xn--bcher-kva.de/x"], "as Firefox stores them");
+});

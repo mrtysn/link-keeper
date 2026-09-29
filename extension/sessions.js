@@ -32,7 +32,7 @@ const el = (tag, props = {}, ...children) => {
   return node;
 };
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : /(s|sh|ch|x)$/.test(word) ? "es" : "s"}`;
 
 /* Mirrors reopenRoute in background.js: what a restore of this URL will actually open. */
 const isWeb = url => /^(https?|ftp):/.test(url);
@@ -405,7 +405,7 @@ function previewImport() {
   if (!parsed.format) note.textContent = "Paste OneTab's Export URLs, a TidyTab or Link Keeper export, CSV with a url column, or any text with links.";
   else if (!n) { note.textContent = `Read as ${FORMAT_NAMES[parsed.format]}, but found no links.`; note.className = "bad"; }
   else note.textContent = `Read as ${FORMAT_NAMES[parsed.format]}: ${plural(n, "tab")} in ${plural(parsed.stashes.filter(s => s.tabs.length).length, "stash")}` +
-    (parsed.skipped ? ` · ${parsed.skipped} lines without a link skipped` : "") + ".";
+    (parsed.skipped ? ` · ${plural(parsed.skipped, "line")} without a link skipped` : "") + ".";
   $("import-go").disabled = !n;
 }
 
