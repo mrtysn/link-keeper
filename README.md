@@ -22,7 +22,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `native/` | the helper that reopens stashed local-file tabs — `native/install.zsh` registers it with Firefox |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the Firefox profile<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, list and stashed-tabs pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, list and stashed-tabs pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -142,19 +142,39 @@ right-click menu, or right-click on the tab strip) folds tabs into a saved group
 the selected tabs if you have selected several, otherwise the whole window. *Stashed tabs* opens in
 their place.
 
+The **Stash** submenu — on a page, and on a tab in the tab strip — and the row under the popup's
+Stash button take other scopes too: **only this tab**, **tabs to the left**, **tabs to the right**,
+**all except this one**, and **every window** (one stash per window). On the tab strip, "this tab" is
+the one you right-clicked. **Never stash this site** in the same submenu puts a site on a list that
+stashing leaves open; **Settings** on the Stashed tabs page shows the list. Two commands without a
+default key, *Stash only this tab* and *Show stashed tabs*, can be bound in Firefox's
+*Manage Extension Shortcuts*.
+
+Stashes are **Firefox bookmarks**, as TidyTab's were: *Other Bookmarks / Link Keeper stashes*, one
+folder per stash named after its time (or what you rename it to), one bookmark per tab in tab order.
+So they outlive the extension, travel with Firefox Sync, and can be edited in Firefox's own library;
+the page shows what the bookmarks hold. What a bookmark cannot carry — a tab's container, its
+Keep/Drop mark, when it was restored, and a stash's lock and star — sits beside it in the add-on's
+storage; an uninstall loses those, never a tab. A reinstall finds the folder again by its name.
+Stashes made before 5.9 move into bookmarks once, when 5.9 first runs; the old record is kept aside
+(`sessions_before_bookmarks`) rather than deleted.
+
 There is one Stashed tabs page, like OneTab's tab: pin it, and stashing, the popup's **Stashed**
 button and the menu all switch to that tab, in whichever window it is, instead of opening another.
 A new one opens only when none is open. Stashing a whole window while the page is pinned in a
 different window closes the stashed window, as OneTab does.
 
-- Pinned and empty tabs stay open; everything else is stashed. Duplicate tabs all close and are
-  recorded once.
+- Pinned tabs, empty tabs and never-stash sites stay open; everything else is stashed. Stashing
+  only this tab takes it whatever it is. Duplicate tabs all close and are recorded once; a URL
+  already in another stash is recorded again and marked *Also in N other stashes*.
 - Only the URL, the tab title and the tab's container are recorded. Nothing runs inside the tabs.
 - A stash is the only record of the tabs it closes (Firefox remembers 25 closed tabs), so no tab
-  closes until the saved group has been read back from storage and found complete.
+  closes until every bookmark has been read back and found present. If writing fails partway, the
+  half-written folder is taken back out and nothing closes.
 - **Restore all** reopens every web page unloaded — each one loads when you switch to it — in its
-  original container. The stash stays, with each entry marked restored. A tab's back/forward
-  history does not come back; that lives in Firefox's session, not in a URL.
+  original container. By default the stash stays, with each entry marked restored; **Settings** can
+  make a restore take the tabs out instead, as OneTab can. A tab's back/forward history does not
+  come back; that lives in Firefox's session, not in a URL.
 - Firefox lets no extension open a `file:` URL, an `about:` page or another extension's page. Local
   files reopen through `native/open-local-files.py`, a native-messaging helper that accepts only
   `file:` URLs of files that exist and opens them in the Firefox that started it. Run
@@ -162,7 +182,17 @@ different window closes the stashed window, as OneTab does.
   or other extension's page — comes back as a stand-in tab carrying the original title, with the
   URL one click from the clipboard, as OneTab and Sidebery do.
 - **Move to list** hands a group's web pages, or one, to the reading list with its title and the
-  stash date, and takes them out of the stash; local files and browser pages stay. **Delete…** asks first. **Export** downloads every stash as JSON.
+  stash date, and takes them out of the stash; local files and browser pages stay. **Delete…** asks first.
+- **Star** keeps a stash at the top. **Lock** makes it unable to lose a tab: no delete, no remove,
+  no move to the list or dragging out, and restoring always keeps it.
+- Drag a row to reorder it or drop it into another stash (ahead of or after the row it lands on, or
+  last on a stash's heading); the row's **⋯** menu does the same from the keyboard. A stash emptied
+  this way goes.
+- **Group by** Stash, Day or Month; the date views put stashes under date headings.
+- **Export** downloads every stash as JSON. **Import…** reads it back, and also OneTab's *Export
+  URLs* text, a TidyTab export, CSV with a `url` column (optionally `title`, `group`, `date`), a
+  JSON list of URLs, or any text with links in it — pasted or from a file. It says which format it
+  took the input for before anything is written.
 
 **Explore** shows every stashed tab in a sidebar — one stash or all, in the order they were stashed,
 with a filter and Undecided / Kept / Dropped chips — and the chosen tab in full beside it. Click any
@@ -178,8 +208,12 @@ CSP `frame-ancestors` from the response (`webRequestBlocking`, plus all-sites ac
 first preview). The frame is sandboxed without top navigation, and it loads logged out — Firefox keeps
 a framed page's cookies apart. Local files and browser pages cannot be framed at all.
 
-`node tools/test-stash.mjs` runs the stash code against a fake browser with 349 tabs and checks
-that every tab is either still open or recorded, and that a restore brings each one back.
+`node tools/test-stash.mjs` runs the stash code against a fake browser and bookmark tree with 349
+tabs and checks that every tab is either still open or recorded, and that a restore brings each one
+back, through scopes, locks, drags, imports and the move into bookmarks.
+`tools/run-in-headless-firefox.zsh --extension extension tools/e2e-stash.js` runs the same paths in
+a throwaway headless Firefox — real tabs, real bookmarks, a temporary profile — and
+`node tools/test-stash-import.mjs` checks every import format.
 `tools/test-open-local-files.py` checks the helper's refusals without opening anything.
 
 ### Seeing the whole list
