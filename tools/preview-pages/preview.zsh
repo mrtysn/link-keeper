@@ -19,6 +19,8 @@
 #   onpage   a list item is open in the current tab
 #   light    drop the dark-scheme rules to show the light palette
 #   empty    sessions.html with nothing stashed
+#   settings, import   sessions.html with that panel open
+#   view=day|month     sessions.html grouped by date
 #
 # DATA_DIR comes from the environment, else from config.local.sh at the repo root, else this
 # repo's own data/. out/ holds captured text and is gitignored.
@@ -31,7 +33,7 @@ ext=$repo/extension
 out=$here/out
 
 if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-  sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
@@ -64,6 +66,7 @@ for page in popup list cards sessions standin stash-cards; do
   ln -sf "$ext/$page.js" "$out/$page.js"
 done
 ln -sf "$ext/icons.js" "$out/icons.js"
+ln -sf "$ext/stash-import.js" "$out/stash-import.js"
 ln -sf "$here/mock-browser.js" "$out/mock-browser.js"
 ln -sf "$here/frame.html" "$out/frame.html"
 python3 "$here/make-mock.py" "$captures" "$out/mock-data.js"

@@ -32,6 +32,12 @@
     });
   }
 
+  // Panels and views of the Stashed tabs page, opened as a click or a pick would.
+  if (params.has("view")) try { localStorage.setItem("stashView", params.get("view")); } catch (e) { /* no storage */ }
+  for (const panel of ["settings", "import"]) {
+    if (params.has(panel)) addEventListener("load", () => setTimeout(() => document.getElementById(panel)?.click(), 200));
+  }
+
   window.browser = {
     runtime: {
       getURL: p => `${location.origin}/${p}`,
@@ -49,26 +55,35 @@
           }
           case "sessions": {
             if (params.has("empty")) return { sessions: [] };
-            // Two stashes cut from the mock rows: a named one with a restored tab and a container
-            // tab, and a larger unnamed one where some tabs have no title.
+            // Three stashes cut from the mock rows: a named, starred one with a restored tab and a
+            // container tab; a locked one named after its time; and an older one from another
+            // month that shares a URL with the first, for the "also in" badge.
+            const whenOf = iso => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+            let n = 0;
             const tabs = M.dump.items.map((r, i) => ({
+              id: `bm${++n}`,
               url: r.url,
               title: i % 4 === 3 ? undefined : (r.cap?.title || r.cap?.text?.slice(0, 120) || undefined),
             }));
             tabs.splice(3, 0,
-              { url: "file:///Users/someone/dev/notes/out/2026-09-27-report.html", title: "Companion Link Report" },
-              { url: "moz-extension://4b1c/bookmarks.html", title: "Visual bookmarks" });
+              { id: `bm${++n}`, url: "file:///Users/someone/dev/notes/out/2026-09-27-report.html", title: "Companion Link Report" },
+              { id: `bm${++n}`, url: "moz-extension://4b1c/bookmarks.html", title: "Visual bookmarks" });
             const first = tabs.slice(0, 7).map((t, i) => ({
               ...t, ...(i === 1 && { seen_at: "2026-09-28T09:12:00Z", verdict: "keep" }), ...(i === 2 && { container: "firefox-container-7" }),
               ...(i === 5 && { verdict: "drop" }),
             }));
+            const second = tabs.slice(7, 13);
+            const third = [{ ...tabs[0], id: `bm${++n}` }, ...tabs.slice(13)];
             return {
               sessions: [
-                { id: "a", name: "Research for the jam", created_at: "2026-09-28T08:40:00Z", tabs: first },
-                { id: "b", created_at: "2026-09-21T19:05:00Z", tabs: tabs.slice(7) },
+                { id: "a", name: "Research for the jam", created_at: "2026-09-28T08:40:00Z", starred: true, locked: false, tabs: first },
+                { id: "b", name: whenOf("2026-09-21T19:05:00Z"), created_at: "2026-09-21T19:05:00Z", starred: false, locked: true, tabs: second },
+                { id: "c", name: whenOf("2026-08-30T11:20:00Z"), created_at: "2026-08-30T11:20:00Z", starred: false, locked: false, tabs: third },
               ],
             };
           }
+          case "stash-settings":
+            return { settings: { afterStash: "show", afterRestore: "keep", exclude: ["mail.google.com", "calendar.google.com"] } };
           case "stash-known": {
             // What the background joins from captures and the list, keyed by stashed URL.
             const known = {};
@@ -91,6 +106,7 @@
       local: { get: async key => ({ [key]: store[key] }), set: async () => {} },
       onChanged: { addListener() {} },
     },
+    bookmarks: Object.fromEntries(["onCreated", "onRemoved", "onChanged", "onMoved"].map(k => [k, { addListener() {} }])),
     permissions: { request: async () => true, contains: async () => true },
     tabs: { update: async () => {} },
   };

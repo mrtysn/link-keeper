@@ -221,6 +221,47 @@
   li.dropped .ttl { color: var(--dim); text-decoration: line-through; }
   .badge.keep { color: var(--ok); } .badge.drop { color: var(--bad); }
   @media (max-width: 40rem) { .group > h2 .gacts { width: 100%; margin-left: 0; } }
+
+  /* stars, locks, duplicates */
+  .star-mark { color: var(--seen); }
+  .lock-mark { padding: 0 8px; border-radius: 999px; background: var(--chip); color: var(--dim); font-size: .75rem; font-weight: 400; line-height: 1.6; }
+  .group > h2 .toggle[aria-pressed="true"] { color: var(--ink); background: var(--chip); }
+  .badge.dup { color: var(--dim); }
+
+  /* date views */
+  h2.bucket {
+    margin: 40px 0 0; font-size: .8125rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim);
+  }
+  h2.bucket + .group { margin-top: 12px; }
+
+  /* drag and drop */
+  ul.rows.stash > li[draggable="true"] { cursor: grab; }
+  ul.rows.stash > li.dragging { opacity: .5; }
+  ul.rows.stash > li.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+  ul.rows.stash > li.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+  ul.rows.stash.drop-end { box-shadow: 0 2px 0 var(--accent); }
+  ul.rows.stash { min-height: 12px; }
+  .group > h2.drop-end { border-bottom-color: var(--accent); }
+
+  /* the filter bar's view choice */
+  .view { display: inline-flex; align-items: center; gap: 8px; color: var(--dim); font-size: .875rem; }
+
+  /* settings */
+  .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 16px 24px; margin-top: 12px; }
+  fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+  legend { padding: 0; margin-bottom: 6px; font-size: .875rem; font-weight: 600; }
+  fieldset > label { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; font-size: .875rem; }
+  .hint { color: var(--dim); }
+  ul.exclude { list-style: none; margin: 0; padding: 0; font-size: .875rem; }
+  ul.exclude li { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+  ul.exclude li .src { margin-top: 0; }
+  ul.exclude li.none { color: var(--dim); }
+  ul.exclude li button { margin-left: auto; width: 28px; padding: 0; justify-content: center; }
+  #exclude-form input {
+    flex: 1 1 10rem; min-width: 0; min-height: 30px; padding: 4px 10px; font: inherit; font-size: .875rem;
+    color: var(--ink); background: var(--bg); border: 1px solid var(--field); border-radius: 8px;
+  }
+  .panel code, .panel em { font-size: .8125rem; }
 </style>
 </head>
 <body>
@@ -234,7 +275,9 @@
       <a class="btn" href="list.html">← List</a>
       <a class="btn" href="stash-cards.html" title="Browse every stashed tab with a sidebar, details and a live preview">Explore</a>
       <button class="danger" id="clear-dropped" hidden title="Remove every tab you dropped from the cards">Clear dropped…</button>
-      <button id="export" title="Download every stash as JSON, a backup of tabs that are no longer open">Export</button>
+      <button id="import" aria-expanded="false" aria-controls="import-panel" title="Bring in stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links">Import…</button>
+      <button id="export" title="Download every stash as JSON; Import reads it back">Export</button>
+      <button id="settings" aria-expanded="false" aria-controls="settings-panel" title="What happens after stashing and restoring, and sites never to stash">Settings</button>
       <button class="primary" id="stash" title="Stash the selected tabs, or every other tab in this window, and close them">Stash this window</button>
     </div>
   </header>
@@ -242,12 +285,59 @@
   <div class="bar">
     <label class="sr-only" for="q">Filter</label>
     <input id="q" type="search" placeholder="Filter by title or URL…" autocomplete="off" spellcheck="false">
+    <label class="view">Group by
+      <select id="view">
+        <option value="stash">Stash</option>
+        <option value="day">Day</option>
+        <option value="month">Month</option>
+      </select>
+    </label>
   </div>
+
+  <section class="panel" id="import-panel" hidden aria-labelledby="import-h">
+    <h2 id="import-h">Import stashes</h2>
+    <p>Paste or choose a file: OneTab's <em>Export URLs</em> text, a TidyTab or Link Keeper export, CSV with a <code>url</code> column
+      (and optionally <code>title</code>, <code>group</code>, <code>date</code>), or any text with links in it. Each group becomes a stash.</p>
+    <textarea id="import-text" spellcheck="false" aria-label="Text to import" placeholder="https://example.com/ | Example"></textarea>
+    <div class="row">
+      <input type="file" id="import-file" accept=".json,.csv,.txt,text/*,application/json" aria-label="Import from a file">
+      <span id="import-msg" role="status"></span>
+    </div>
+    <div class="row">
+      <button class="primary" id="import-go" disabled>Import</button>
+      <button class="ghost" id="import-cancel">Cancel</button>
+    </div>
+  </section>
+
+  <section class="panel" id="settings-panel" hidden aria-labelledby="settings-h">
+    <h2 id="settings-h">Settings</h2>
+    <div class="settings">
+      <fieldset>
+        <legend>After stashing</legend>
+        <label><input type="radio" name="after-stash" value="show"> <span>Show this page</span></label>
+        <label><input type="radio" name="after-stash" value="stay"> <span>Stay where I am <span class="hint">(a new tab if the window would close)</span></span></label>
+      </fieldset>
+      <fieldset>
+        <legend>After restoring</legend>
+        <label><input type="radio" name="after-restore" value="keep"> <span>Keep the tabs here, marked restored</span></label>
+        <label><input type="radio" name="after-restore" value="remove"> <span>Take them out of the stash <span class="hint">(locked stashes keep theirs)</span></span></label>
+      </fieldset>
+      <fieldset>
+        <legend>Never stash these sites</legend>
+        <ul id="exclude-list" class="exclude"></ul>
+        <form id="exclude-form" class="row">
+          <input id="exclude-host" type="text" placeholder="example.com" autocomplete="off" spellcheck="false" aria-label="Site never to stash">
+          <button type="submit" class="small">Add</button>
+        </form>
+      </fieldset>
+    </div>
+  </section>
 
   <p id="msg" role="status"></p>
   <div id="out"></div>
 </div>
 <script src="icons.js"></script>
+<script src="stash-import.js"></script>
 <script src="sessions.js"></script>
 </body>
 </html>
