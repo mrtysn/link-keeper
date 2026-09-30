@@ -221,6 +221,9 @@ a throwaway headless Firefox — real tabs, real bookmarks, a temporary profile 
 *Open list* in the popup opens a full page — the readable view when there are
 hundreds of entries, rather than a 22rem popup.
 
+Every full page — List, Cards, Stashed, Explore — carries the same bar across the top, with a link
+to each of the others and the current one marked.
+
 - Grouped **by domain** by default, or by status, or flat newest- or oldest-first.
 - Filter box searches URLs, captured titles, tweet text, notes and embedded links.
 - Status chips narrow to what is left, seen, skipped, or kept.

@@ -1,0 +1,22 @@
+/* The bar nav.js puts across the top of every page. It runs edge to edge: a page sets --gutter to
+   its body's side padding, and the bar reaches back over it. Colours come from the page's tokens. */
+.app-nav {
+  display: flex; align-items: stretch; gap: 4px; overflow-x: auto;
+  margin: 0 calc(-1 * var(--gutter, 0px)) var(--nav-gap, 0px); padding: 0 var(--gutter, 0px);
+  border-bottom: 1px solid var(--line); background: var(--bg);
+  font: 14px/1.2 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
+  scrollbar-width: none;
+}
+.app-brand {
+  display: flex; align-items: center; gap: 8px; margin-right: 12px;
+  font-weight: 650; letter-spacing: -.01em; color: var(--ink); white-space: nowrap;
+}
+.app-brand img { width: 20px; height: 20px; }
+.app-nav a {
+  display: flex; align-items: center; min-height: 44px; padding: 0 10px;
+  color: var(--dim); text-decoration: none; white-space: nowrap;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+@media (hover: hover) { .app-nav a:hover { color: var(--ink); } }
+.app-nav a[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+@media (max-width: 30rem) { .app-brand { font-size: 0; gap: 0; margin-right: 4px; } }

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="nav.css">
 <title>Link Keeper — cards</title>
 <style>
   :root {
@@ -24,15 +25,13 @@
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 2rem 1.25rem 4rem; background: var(--bg); color: var(--ink);
+    margin: 0; padding: 0 1.25rem 4rem; --gutter: 1.25rem; --nav-gap: 2rem; background: var(--bg); color: var(--ink);
     font: 15px/1.5 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   .wrap { max-width: 34rem; margin: 0 auto; }
   header { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .6rem; }
   h1 { font-size: 1.2rem; margin: 0; letter-spacing: -.02em; }
-  header a { margin-left: auto; color: var(--accent); font-size: .85rem; text-decoration: none; }
-  header a:hover { text-decoration: underline; }
 
   .meter { height: 5px; background: var(--chip); border-radius: 3px; overflow: hidden; }
   .meter i { display: block; height: 100%; width: 0; background: var(--accent); }
@@ -130,10 +129,10 @@
 </style>
 </head>
 <body>
+<script src="nav.js"></script>
 <div class="wrap">
   <header>
     <h1>Judge what you have read</h1>
-    <a href="list.html">the whole list →</a>
   </header>
 
   <div class="meter"><i id="bar"></i></div>

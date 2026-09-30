@@ -67,6 +67,9 @@ for page in popup list cards sessions standin stash-cards; do
   ln -sf "$ext/$page.js" "$out/$page.js"
 done
 ln -sf "$ext/icons.js" "$out/icons.js"
+ln -sf "$ext/nav.js" "$out/nav.js"
+ln -sf "$ext/nav.css" "$out/nav.css"
+ln -sf "$ext/icon.svg" "$out/icon.svg"
 ln -sf "$ext/stash-import.js" "$out/stash-import.js"
 ln -sf "$here/mock-browser.js" "$out/mock-browser.js"
 ln -sf "$here/frame.html" "$out/frame.html"

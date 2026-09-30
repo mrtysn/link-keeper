@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="nav.css">
 <title>Link Keeper — list</title>
 <style>
   :root {
@@ -23,7 +24,7 @@
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   body {
-    margin: 0; padding: 32px 20px 80px; background: var(--bg); color: var(--ink);
+    margin: 0; padding: 0 20px 80px; --gutter: 20px; --nav-gap: 32px; background: var(--bg); color: var(--ink);
     font: 15px/1.55 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
@@ -211,6 +212,7 @@
 </style>
 </head>
 <body>
+<script src="nav.js"></script>
 <div class="wrap">
   <header class="top">
     <div class="heading">
@@ -218,7 +220,6 @@
       <p class="sub" id="sub">Loading…</p>
     </div>
     <div class="page-actions">
-      <a class="btn" href="cards.html" title="Judge what you have read as a shuffled card deck">Cards →</a>
       <button id="show-import" aria-expanded="false" aria-controls="import-panel"
         title="Import capture JSONL produced outside the browser">Import…</button>
       <button id="export">Export captures</button>

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="nav.css">
 <title>Link Keeper — explore stashed tabs</title>
 <style>
   :root {
@@ -26,7 +27,7 @@
   [hidden] { display: none !important; }
   html, body { height: 100%; }
   body {
-    margin: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--bg); color: var(--ink);
+    margin: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); background: var(--bg); color: var(--ink);
     font: 15px/1.5 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
@@ -62,7 +63,6 @@
   .chip .n { color: var(--dim); }
   .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .chip[aria-pressed="true"] .n { color: inherit; }
-  .top a.back { color: var(--accent); font-size: .875rem; text-decoration: none; margin-left: auto; }
 
   /* --- two panes --- */
   .panes { display: grid; grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr); min-height: 0; }
@@ -148,11 +148,11 @@
     .panes { display: block; }
     #side { max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--line); }
     #detail { overflow: visible; padding: 16px; }
-    .top a.back { margin-left: 0; }
   }
 </style>
 </head>
 <body>
+<script src="nav.js"></script>
 <header class="top">
   <h1>Stashed tabs</h1>
   <select id="scope" aria-label="Which stash"></select>
@@ -164,7 +164,6 @@
     <button class="chip" data-f="keep" aria-pressed="false">Kept</button>
     <button class="chip" data-f="drop" aria-pressed="false">Dropped</button>
   </div>
-  <a class="back" href="sessions.html">as a list →</a>
 </header>
 <div class="panes">
   <nav id="side" aria-label="Stashed tabs"></nav>

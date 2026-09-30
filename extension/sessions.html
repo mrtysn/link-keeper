@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="nav.css">
 <title>Link Keeper — stashed tabs</title>
 <style>
   :root {
@@ -23,7 +24,7 @@
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   body {
-    margin: 0; padding: 32px 20px 80px; background: var(--bg); color: var(--ink);
+    margin: 0; padding: 0 20px 80px; --gutter: 20px; --nav-gap: 32px; background: var(--bg); color: var(--ink);
     font: 15px/1.55 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
@@ -267,6 +268,7 @@
 </style>
 </head>
 <body>
+<script src="nav.js"></script>
 <div class="wrap">
   <header class="top">
     <div class="heading">
@@ -274,8 +276,6 @@
       <p class="sub" id="sub">Loading…</p>
     </div>
     <div class="page-actions">
-      <a class="btn" href="list.html">← List</a>
-      <a class="btn" href="stash-cards.html" title="Browse every stashed tab with a sidebar, details and a live preview">Explore</a>
       <button class="danger" id="clear-dropped" hidden title="Remove every tab you dropped from the cards">Clear dropped…</button>
       <button id="import" aria-expanded="false" aria-controls="import-panel" title="Bring in stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links">Import…</button>
       <button id="export" title="Download every stash as JSON; Import reads it back">Export</button>
