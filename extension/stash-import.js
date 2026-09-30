@@ -1,7 +1,7 @@
 /* Reads stashes out of whatever was pasted or dropped on the Stashed tabs page, and says which
  * format it took it for. Pure: text in, { format, stashes, skipped } out (plus records, for capture
  * JSONL, which goes to the reading list rather than into stashes), where a stash is
- * { name?, created_at?, tabs: [{ url, title?, container?, verdict?, seen_at? }] }. The background
+ * { name?, created_at?, tabs: [{ url, title?, container?, verdict?, seen_at?, tags? }] }. The background
  * checks every URL again before writing anything.
  *
  * Formats, tried in this order:
@@ -52,7 +52,8 @@ function fromLinkKeeper(json) {
       if (!ok) skipped++;
       return ok;
     }).map(t => ({ ...tabOf(t.url, t.title), ...(t.container && { container: t.container }),
-      ...(t.verdict && { verdict: t.verdict }), ...(t.seen_at && { seen_at: t.seen_at }) }));
+      ...(t.verdict && { verdict: t.verdict }), ...(t.seen_at && { seen_at: t.seen_at }),
+      ...(Array.isArray(t.tags) && t.tags.length && { tags: t.tags }) }));
     return { name: s.name, created_at: dateOf(s.created_at), tabs };
   });
   return { format: "link-keeper", stashes, skipped };

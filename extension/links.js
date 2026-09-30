@@ -5,13 +5,16 @@
  * and by the page previews and tests, which call it with made-up data.
  *
  * A link is one URL, however many places hold it:
- *   { key, url, title, sources: ["tabs" | "import" | "list"], list, cap, copies, verdict, seen, date }
+ *   { key, url, title, sources: ["tabs" | "import" | "list"], list, cap, copies, verdict, seen, date,
+ *     tags, guessed }
  *   list    — its reading-list entry { status, added_at, saved_at, note, current, loose }, or null
  *   cap     — what was read off the page, or null
  *   copies  — one per stash that holds it: { stash, tab, seen_at, verdict, judged_at, container }
  *   verdict — "keep", "drop" or null, the same across every copy (see judgeLink in background.js)
  *   seen    — opened, restored or read at some point
  *   date    — when it was set aside: saved, added to the list, or stashed, whichever is known
+ *   tags    — the tags set by hand, or [] (stored in linkTags, keyed like the link)
+ *   guessed — tags guessed from the kind of site; never stored, shown only while tags is empty
  */
 
 const LINK_SOURCES = ["tabs", "import", "list"];
@@ -43,6 +46,30 @@ function isoDate(value) {
   return Number.isNaN(t) ? null : new Date(t).toISOString();
 }
 
+/* A tag as stored: lowercase, single spaces, at most 40 characters. */
+const cleanTag = t => String(t || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 40);
+
+/* What kind of thing a link is, read off its site or its capture — dimmed in the pages, never
+ * saved. A tag set by hand replaces these. */
+const SITE_KINDS = [
+  [/(^|\.)(github\.com|gitlab\.com|codeberg\.org|bitbucket\.org|sourcehut\.org)$/, "code"],
+  [/(^|\.)(youtube\.com|youtu\.be|vimeo\.com|twitch\.tv)$/, "video"],
+  [/(^|\.)(x\.com|twitter\.com|bsky\.app|threads\.net|mastodon\.social|instagram\.com)$/, "post"],
+  [/(^|\.)(reddit\.com|news\.ycombinator\.com|lobste\.rs)$/, "discussion"],
+  [/(^|\.)(store\.steampowered\.com|itch\.io|gog\.com)$/, "game"],
+  [/(^|\.)(arxiv\.org|doi\.org|semanticscholar\.org)$/, "paper"],
+  [/(^|\.)(docs\.google\.com|notion\.so)$/, "doc"],
+];
+function guessTags(url, cap) {
+  if (/^file:/.test(url)) return ["local file"];
+  let host = "";
+  try { host = new URL(url).hostname.toLowerCase().replace(/^www\./, ""); } catch (e) { return []; }
+  const site = SITE_KINDS.find(([re]) => re.test(host));
+  if (site) return [site[1]];
+  if (cap?.kind === "article" || cap?.kind === "x-article") return ["article"];
+  return [];
+}
+
 const hrefOf = l => (typeof l === "string" ? l : l?.resolved || l?.href) || null;
 
 /* What the pages show of a capture. */
@@ -71,7 +98,7 @@ const LIST_VERDICT = { kept: "keep", skipped: "drop" };
 
 /* items and captures as stored, sessions as getSessions gives them, currentKey the reading list's
  * current entry. Returns { links, stashes }, stashes in their own order with each tab's link key. */
-function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null }) {
+function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {} }) {
   const capBy = new Map();
   for (const c of captures) {
     if (c.source_url) capBy.set(keyOf(c.source_url), c);
@@ -130,6 +157,8 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     link.seen = !!(link.cap || (link.list && link.list.status !== "pending") || link.copies.some(c => c.seen_at));
     const stashed = link.copies.map(c => stashAt.get(c.stash)).filter(Boolean).sort()[0] || null;
     link.date = link.list?.saved_at || link.list?.added_at || stashed;
+    link.tags = (tags[link.key] || []).slice();
+    link.guessed = link.tags.length ? [] : guessTags(link.url, link.cap);
   }
   return { links: [...byKey.values()], stashes };
 }

@@ -805,4 +805,58 @@ await check("imports are marked as imports with their format; a stash's source c
   assert.equal((await browser.handle({ type: "set-stash-source", id: "gone", source: "import" })).ok, false);
 });
 
+await check("tags: set by hand per URL, guesses from the site until then, one tag on a whole stash", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [
+    { url: "https://github.com/me/repo" }, { url: "https://x.com/i/status/5" }, { url: "https://plain.example/" }] }];
+  store.items = [{ url: "https://x.com/someone/status/5", status: "pending" }];
+  await load(browser);
+  const links = async () => plain(await browser.handle({ type: "links" })).links;
+  let l = await links();
+  const by = u => l.find(x => x.url.startsWith(u));
+  assert.deepEqual([by("https://github.com").guessed, by("https://x.com").guessed, by("https://plain").guessed], [["code"], ["post"], []]);
+
+  await browser.handle({ type: "set-tags", url: "https://x.com/i/status/5", tags: ["Game Jam", " game  jam ", "ideas"] });
+  l = await links();
+  assert.deepEqual(by("https://x.com").tags, ["game jam", "ideas"], "cleaned, and one per URL across the stash and the list");
+  assert.deepEqual(by("https://x.com").guessed, [], "a hand tag replaces the guess");
+
+  const { sessions: [st] } = plain(await browser.handle({ type: "sessions" }));
+  const res = await browser.handle({ type: "tag-stash", id: st.id, tags: ["jam research"] });
+  assert.equal(res.tagged, 3);
+  l = await links();
+  assert.deepEqual(by("https://github.com").tags, ["code", "jam research"], "a guess becomes its own tag when the stash is tagged");
+  assert.deepEqual(by("https://x.com").tags, ["game jam", "ideas", "jam research"]);
+  assert.deepEqual(by("https://plain").tags, ["jam research"]);
+
+  await browser.handle({ type: "rename-tag", from: "game jam", to: "ideas" });
+  l = await links();
+  assert.deepEqual(by("https://x.com").tags, ["ideas", "jam research"], "renaming onto an existing tag merges");
+  await browser.handle({ type: "delete-tag", tag: "jam research" });
+  l = await links();
+  assert.deepEqual([by("https://plain").tags, by("https://plain").guessed], [[], []], "deleted everywhere");
+  await browser.handle({ type: "set-tags", url: "https://github.com/me/repo", tags: [] });
+  l = await links();
+  assert.deepEqual(by("https://github.com").guessed, ["code"], "clearing brings the guess back");
+});
+
+await check("tags travel in exports and come back with imports", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://t.example/1" }] }];
+  store.captures = [{ url: "https://c.example/", text: "x" }];
+  await load(browser);
+  await browser.handle({ type: "set-tags", url: "https://t.example/1", tags: ["keep me"] });
+  await browser.handle({ type: "set-tags", url: "https://c.example/", tags: ["read"] });
+  const { sessions } = plain(await browser.handle({ type: "sessions" }));
+  assert.deepEqual(sessions[0].tabs[0].tags, ["keep me"]);
+  const { captures } = plain(await browser.handle({ type: "export" }));
+  assert.deepEqual(captures[0].tags, ["read"]);
+
+  const fresh = makeBrowser([]);
+  await load(fresh.browser);
+  await fresh.browser.handle({ type: "import-stashes", stashes: [{ tabs: [{ url: "https://t.example/1", tags: ["keep me"] }] }], format: "link-keeper" });
+  await fresh.browser.handle({ type: "import-captures", records: captures });
+  assert.deepEqual(plain(fresh.store.linkTags), { "t.example/1": ["keep me"], "c.example": ["read"] });
+});
+
 console.log(`\n${passed} checks passed`);

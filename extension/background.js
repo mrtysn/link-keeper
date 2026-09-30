@@ -990,6 +990,7 @@ async function importStashes(stashes, format) {
         container: typeof t.container === "string" ? t.container : undefined,
         verdict: t.verdict === "keep" || t.verdict === "drop" ? t.verdict : undefined,
         seen_at: typeof t.seen_at === "string" ? t.seen_at : undefined,
+        tags: Array.isArray(t.tags) ? t.tags : undefined,
       }));
     const when = new Date(s.created_at);
     return {
@@ -1011,6 +1012,7 @@ async function importStashes(stashes, format) {
     for (const id of written) await removeStashFolder(id);
     return { ok: false, error: `${e.message}; nothing was imported` };
   }
+  await mergeTags(clean.flatMap(st => st.tabs));
   return { ok: true, stashes: clean.length, tabs };
 }
 
@@ -1044,10 +1046,81 @@ browser.webRequest?.onHeadersReceived.addListener(unframeHeaders,
 
 /* Every source joined into one dataset for the pages; joinLinks in links.js does the joining. */
 async function getLinks() {
-  const [items, captures, sessions, thumbs, current] =
-    [await getItems(), await getCaptures(), await getSessions(), await read("thumbs", {}), await getCurrent()];
-  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null });
+  const [items, captures, sessions, thumbs, current, tags] =
+    [await getItems(), await getCaptures(), await getSessions(), await read("thumbs", {}), await getCurrent(), await read("linkTags", {})];
+  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags });
 }
+
+/* --- tags ------------------------------------------------------------------------
+ * linkTags: { [link key]: ["tag", ...] } — the tags set by hand, one list per URL wherever it is
+ * held. Firefox gives extensions no access to bookmark tags, so they live here, and travel in the
+ * stash and capture exports. One queue, so two edits cannot each overwrite the other. */
+const tagQueue = serial();
+const editTags = fn => tagQueue(async () => {
+  const all = await read("linkTags", {});
+  const res = await fn(all);
+  for (const k of Object.keys(all)) if (!all[k]?.length) delete all[k];
+  await browser.storage.local.set({ linkTags: all });
+  return res;
+});
+const tagList = list => [...new Set((Array.isArray(list) ? list : []).map(cleanTag).filter(Boolean))];
+
+/* Replace a link's tags; an empty list clears them, and its guesses show again. */
+const setTags = (url, tags) => editTags(all => { all[keyOf(url)] = tagList(tags); return { ok: true, tags: all[keyOf(url)] }; });
+
+/* Add tags to every tab of a stash. A link showing only guesses keeps them, now as its own. */
+async function tagStash(id, add) {
+  const stash = await findStash(id);
+  if (!stash) return { ok: false, error: "that stash is gone" };
+  const extra = tagList(add);
+  if (!extra.length) return { ok: false, error: "no tag given" };
+  const caps = new Map((await getCaptures()).map(c => [keyOf(c.url), c]));
+  return editTags(all => {
+    for (const t of stash.tabs) {
+      const k = keyOf(t.url);
+      const had = all[k]?.length ? all[k] : guessTags(t.url, caps.get(k));
+      all[k] = tagList([...had, ...extra]);
+    }
+    return { ok: true, tagged: stash.tabs.length };
+  });
+}
+
+/* Rename a tag everywhere; renaming onto an existing tag merges the two. */
+const renameTag = (from, to) => editTags(all => {
+  const a = cleanTag(from), b = cleanTag(to);
+  if (!a || !b) return { ok: false, error: "a tag needs a name" };
+  let n = 0;
+  for (const k of Object.keys(all)) {
+    if (!all[k].includes(a)) continue;
+    all[k] = tagList(all[k].map(t => (t === a ? b : t)));
+    n++;
+  }
+  return { ok: true, links: n };
+});
+
+const deleteTag = tag => editTags(all => {
+  const a = cleanTag(tag);
+  let n = 0;
+  for (const k of Object.keys(all)) {
+    if (!all[k].includes(a)) continue;
+    all[k] = all[k].filter(t => t !== a);
+    n++;
+  }
+  return { ok: true, links: n };
+});
+
+/* Tags carried by imported records ({ url, tags }), merged into what is already set. */
+const mergeTags = records => editTags(all => {
+  let n = 0;
+  for (const r of records) {
+    const extra = tagList(r?.tags);
+    if (!r?.url || !extra.length) continue;
+    const k = keyOf(r.url);
+    all[k] = tagList([...(all[k] || []), ...extra]);
+    n++;
+  }
+  return n;
+});
 
 /* One verdict for a URL wherever it is held: its capture, its reading-list entry (kept or skipped)
  * and every stash copy. null clears it, and a list entry goes back to seen. Nothing is removed. */
@@ -1317,8 +1390,13 @@ browser.runtime.onMessage.addListener(async msg => {
     case "stash":
       return stashTabs({ scope: msg.scope || "auto" });
 
-    case "sessions":
-      return { sessions: await getSessions() };
+    case "sessions": {
+      // Each tab carries its link's tags, so an export holds them and an import brings them back.
+      const tags = await read("linkTags", {});
+      const sessions = await getSessions();
+      for (const s of sessions) for (const t of s.tabs) if (tags[keyOf(t.url)]?.length) t.tags = tags[keyOf(t.url)];
+      return { sessions };
+    }
 
     case "restore-stash":
       return restoreTabs(msg.id, msg.ids);
@@ -1398,6 +1476,18 @@ browser.runtime.onMessage.addListener(async msg => {
     case "judge-link":
       return judgeLink(String(msg.url || ""), msg.verdict ?? null);
 
+    case "set-tags":
+      return setTags(String(msg.url || ""), msg.tags);
+
+    case "tag-stash":
+      return tagStash(msg.id, msg.tags);
+
+    case "rename-tag":
+      return renameTag(msg.from, msg.to);
+
+    case "delete-tag":
+      return deleteTag(msg.tag);
+
     case "open-stash-cards":
       await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html") + (msg.id ? `?stash=${encodeURIComponent(msg.id)}` : "") });
       return { ok: true };
@@ -1425,8 +1515,10 @@ browser.runtime.onMessage.addListener(async msg => {
     case "capture-url":
       return captureUrl(msg.url, msg.note);
 
-    case "export":
-      return { captures: await getCaptures() };
+    case "export": {
+      const tags = await read("linkTags", {});
+      return { captures: (await getCaptures()).map(c => (tags[keyOf(c.url)]?.length ? { ...c, tags: tags[keyOf(c.url)] } : c)) };
+    }
 
     /* Captures produced outside the browser — importers/enrich-x.py resolves x.com links via a
      * public API with no login, so half a pile can arrive already read. Merged on the same
@@ -1481,6 +1573,7 @@ browser.runtime.onMessage.addListener(async msg => {
       }
       if (marked) await setItems(items);
 
+      await mergeTags(msg.records || []);
       return { ok: true, added, enriched, skipped, marked, total: captures.length };
     }
 
