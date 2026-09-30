@@ -211,9 +211,9 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 **Explore** shows every link in the chosen sources in a sidebar — everything, one stash, or the
 reading list; stashes in the order they were stashed, then the reading list — with a filter and
 Undecided / Kept / Dropped chips, and the chosen link in full beside it. Click any row to jump to it,
-or walk with `↑` `↓`. The detail pane shows, for a stashed tab, the tabs that sat beside it in the tab
-strip; for any link, its capture if the page was ever read, whether it is on the reading list or in
-other stashes, and how many links share its site. **Open**, **Keep**, **Drop**, **To list** and
+or walk with `↑` `↓`; the sidebar keeps each stash in tab-strip order. The detail pane shows the
+link's capture if the page was ever read, whether it is on the reading list or in other stashes, and
+how many links share its site. **Open**, **Keep**, **Drop**, **To list** and
 **Read** act on it (`o` `k` `d` `l` `r`); pressing Keep or Drop again clears it. A drop is a flag,
 struck through in the list; **Clear dropped…** on the List page removes dropped stashed tabs, after a
 confirm.

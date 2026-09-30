@@ -2,8 +2,8 @@
  *
  * The sidebar lists one stash, the reading list, or everything — stashes in the order they were
  * stashed, then the reading list's links; click any row to jump to it, or walk with ↑ ↓. The detail
- * pane shows what is known without touching the network — for a stashed tab the tabs that sat
- * beside it in the tab strip, its capture if the page was ever read, where else it is held — and
+ * pane shows what is known without touching the network — its capture if the page was ever read,
+ * where else it is held — and
  * two things that do: Read (loads it in a background tab and extracts it) and the live preview.
  *
  * Keep and Drop are one verdict per URL, written to every copy; pressing one again clears it.
@@ -191,9 +191,7 @@ function renderDetail() {
   if (badges.childElementCount) pane.append(badges);
   pane.append(el("p", { id: "msg", role: "status" }));
 
-  pane.append(knownBox(card));
-  if (stash) pane.append(neighboursBox(card));
-  pane.append(previewBox(card));
+  pane.append(knownBox(card), previewBox(card));
   pane.append(el("p", { className: "keys" }, el("kbd", { textContent: "↑" }), " ", el("kbd", { textContent: "↓" }),
     " move · ", el("kbd", { textContent: "o" }), " open · ", el("kbd", { textContent: "k" }), " keep · ",
     el("kbd", { textContent: "d" }), " drop · ", el("kbd", { textContent: "l" }), " to list · ",
@@ -256,27 +254,7 @@ function knownBox(card) {
   return box;
 }
 
-/* The tabs on either side of it when it was stashed — often the best clue to why it was open. */
-function neighboursBox({ stash, pos }) {
-  const box = el("section", { className: "box" }, el("h3", { textContent: "Next to it in the tab strip" }));
-  const ol = el("ol", { className: "neigh" });
-  for (let off = -4; off <= 4; off++) {
-    const t = stash.tabs[pos + off];
-    if (!t) continue;
-    const l = data.byKey.get(t.key);
-    const b = el("button", { title: t.url },
-      el("span", { className: "off", textContent: off === 0 ? "" : off > 0 ? `+${off}` : String(off) }),
-      srcIcon(t.url),
-      el("span", { className: "t", textContent: (l && labelOf(l)) || t.title || shortUrl(t.url) }));
-    if (off) b.onclick = () => { ensureVisible(); select(`${stash.id} ${t.id}`); };
-    else b.setAttribute("aria-current", "true");
-    ol.append(el("li", { className: off ? "" : "self" }, b));
-  }
-  box.append(ol);
-  return box;
-}
-
-/* A neighbour may be hidden by the filter; jumping to it clears the filter first. */
+/* A row the detail pane links to may be hidden by the filter; jumping to it clears the filter first. */
 function ensureVisible() {
   if ($("q").value || filter !== "all") {
     $("q").value = "";
