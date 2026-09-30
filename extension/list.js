@@ -563,6 +563,7 @@ function clearFilters() {
 function render() {
   renderDomainChips();
   renderSettings();
+  renderDuplicates();
   const term = $("q").value.trim().toLowerCase();
   const counts = { left: 0, seen: 0, kept: 0, dropped: 0 };
   for (const l of data.links) counts[stateOf(l)]++;
@@ -643,12 +644,100 @@ $("exclude-form").onsubmit = e => {
 };
 
 function openPanel(which) {
-  for (const id of ["settings-panel", "import-panel"]) $(id).hidden = id !== which || !$(id).hidden;
+  for (const id of ["settings-panel", "import-panel", "dups-panel"]) $(id).hidden = id !== which || !$(id).hidden;
   $("settings").setAttribute("aria-expanded", String(!$("settings-panel").hidden));
   $("import").setAttribute("aria-expanded", String(!$("import-panel").hidden));
+  $("dups").setAttribute("aria-expanded", String(!$("dups-panel").hidden));
   if (!$("import-panel").hidden) $("import-text").focus();
+  if (!$("dups-panel").hidden) renderDuplicates();
 }
 $("settings").onclick = () => openPanel("settings-panel");
+$("dups").onclick = () => openPanel("dups-panel");
+
+/* --- duplicates -----------------------------------------------------------------------------
+ * Every link held in more than one place among the sources on show — two stashes, or a stash and
+ * the reading list — as a card with a checkbox per copy. Nothing starts ticked, a locked stash's
+ * copy cannot be, and only what is ticked is removed, after one confirm. */
+
+const picked = new Set();   // copy ids: "tab:<bookmark id>" or "list:<link key>"
+
+function duplicateSets() {
+  const out = [];
+  for (const link of data.links) {
+    const copies = link.copies.filter(c => visibleStash(c.stash)).map(c => {
+      const stash = stashById(c.stash);
+      const at = stash.tabs.findIndex(t => t.id === c.tab);
+      return { id: `tab:${c.tab}`, stash, tab: c.tab, locked: stash.locked,
+        label: stashName(stash), detail: `${stash.source === "import" ? "imported" : "stashed"} ${whenOf(stash.created_at)} · tab ${at + 1} of ${stash.tabs.length}` };
+    });
+    if (link.list && !link.list.loose && data.sources.has("list")) {
+      const LIST = { pending: "not opened yet", seen: "opened", kept: "kept", skipped: "skipped" };
+      copies.push({ id: `list:${link.key}`, list: true, locked: false, label: "Reading list",
+        detail: `${LIST[link.list.status] || link.list.status}${link.list.added_at ? ` · added ${link.list.added_at.slice(0, 10)}` : ""}` });
+    }
+    if (copies.length > 1) out.push({ link, copies });
+  }
+  return out.sort((a, b) => b.copies.length - a.copies.length || (labelOf(a.link) || a.link.url).localeCompare(labelOf(b.link) || b.link.url));
+}
+
+function renderDuplicates() {
+  const sets = duplicateSets();
+  $("dups").hidden = !sets.length && $("dups-panel").hidden;
+  $("dups").textContent = `Duplicates (${sets.length})…`;
+  if ($("dups-panel").hidden) return;
+  // What was ticked stays ticked across a reload, as long as the copy is still there.
+  const ids = new Set(sets.flatMap(s => s.copies.map(c => c.id)));
+  for (const id of [...picked]) if (!ids.has(id)) picked.delete(id);
+
+  const box = $("dups-list");
+  box.textContent = "";
+  if (!sets.length) box.append(el("p", { className: "none", textContent: "No link is held twice among the sources on show." }));
+  for (const { link, copies } of sets) {
+    const title = labelOf(link);
+    const card = el("div", { className: "dup-card" },
+      el("div", { className: "dup-head" }, srcIcon(link.url),
+        el("div", {}, el("div", { className: `dup-title${title ? "" : " plain"}`, textContent: title || shortUrl(link.url), title: link.url }),
+          title && el("div", { className: "dup-url", textContent: shortUrl(link.url) }))));
+    for (const c of copies) {
+      const box2 = el("input", { type: "checkbox", checked: picked.has(c.id), disabled: c.locked });
+      box2.onchange = () => { box2.checked ? picked.add(c.id) : picked.delete(c.id); paintDupCount(); };
+      card.append(el("label", { className: `dup-row${c.locked ? " locked" : ""}` }, box2,
+        el("span", { className: "dup-where", textContent: c.label }),
+        el("span", { className: "dup-detail", textContent: c.locked ? `${c.detail} · locked` : c.detail })));
+    }
+    box.append(card);
+  }
+  paintDupCount();
+}
+
+function paintDupCount() {
+  $("dups-remove").disabled = !picked.size;
+  $("dups-remove").textContent = picked.size ? `Remove ${copiesWord(picked.size)}` : "Remove selected";
+}
+// plural() would say "copys".
+const copiesWord = n => (n === 1 ? "1 copy" : `${n} copies`);
+
+$("dups-remove").onclick = async () => {
+  const sets = duplicateSets();
+  const chosen = sets.flatMap(s => s.copies.filter(c => picked.has(c.id) && !c.locked).map(c => ({ ...c, link: s.link })));
+  if (!chosen.length) return;
+  const gone = sets.filter(s => s.copies.every(c => picked.has(c.id))).length;
+  const warn = gone ? ` ${gone === 1 ? "1 link loses" : `${gone} links lose`} every copy and will be gone entirely.` : "";
+  if (!confirm(`Remove ${copiesWord(chosen.length)}? A stashed tab is closed, so its copy may be its only record.${warn}`)) return;
+  const byStash = new Map();
+  for (const c of chosen.filter(c => c.stash)) {
+    if (!byStash.has(c.stash.id)) byStash.set(c.stash.id, []);
+    byStash.get(c.stash.id).push(c.tab);
+  }
+  let removed = 0;
+  for (const [id, ids] of byStash) removed += (await send({ type: "delete-stash", id, ids }))?.removed || 0;
+  const listUrls = chosen.filter(c => c.list).map(c => c.link.url);
+  if (listUrls.length) removed += (await send({ type: "remove", urls: listUrls }))?.removed || 0;
+  picked.clear();
+  say(`Removed ${copiesWord(removed)}`);
+  await load();
+};
+$("dups-close").onclick = () => openPanel("dups-panel");
 
 /* --- import ---------------------------------------------------------------------------------
  * One panel for everything: stashes (OneTab, TidyTab, a Link Keeper export, CSV, text with links)

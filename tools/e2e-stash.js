@@ -197,3 +197,35 @@ await check("List, Cards and Explore load in Firefox with the bar, the sources a
   eq(errors, [], "no script errors");
   await browser.tabs.remove([list.tab.id, explore.tab.id, cards.tab.id, sessions.id]);
 });
+
+await check("Duplicates: every copy of a link gets a checkbox, nothing is ticked, and only the ticked copy goes", async () => {
+  const res = await importStashes([
+    { name: "Dup one", tabs: [{ url: "https://dup.example/x", title: "X" }, { url: "https://dup.example/only-here" }] },
+    { name: "Dup two", tabs: [{ url: "https://dup.example/x", title: "X again" }] },
+  ], "text");
+  yes(res.ok, res.error);
+  await addItems([{ url: "https://dup.example/x" }]);
+  await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("list.html?group=stash"), active: true });
+  await wait(1500);
+  const view = browser.extension.getViews({ type: "tab" }).find(v => v.location.pathname === "/list.html");
+  const d = view.document;
+  yes(!d.getElementById("dups").hidden, "the Duplicates button shows");
+  d.getElementById("dups").click();
+  await wait(300);
+  const card = [...d.querySelectorAll(".dup-card")].find(c => c.textContent.includes("dup.example/x"));
+  yes(card, "a card for the duplicated link");
+  const rows = [...card.querySelectorAll(".dup-row")];
+  eq(rows.map(r => r.querySelector(".dup-where").textContent), ["Dup one", "Dup two", "Reading list"], "one row per copy");
+  eq(rows.map(r => r.querySelector("input").checked), [false, false, false], "nothing ticked");
+  yes(d.getElementById("dups-remove").disabled, "nothing to remove yet");
+  rows[1].querySelector("input").click();
+  view.confirm = () => true;
+  d.getElementById("dups-remove").click();
+  await wait(1500);
+  const all = await getSessions();
+  eq(all.find(s => s.name === "Dup one")?.tabs.length, 2, "the unticked stash keeps its copy");
+  eq(all.some(s => s.name === "Dup two"), false, "the ticked copy went, and its emptied stash with it");
+  yes((await getItems()).some(i => i.url === "https://dup.example/x"), "the reading-list copy stays");
+  await browser.tabs.remove(tab.id);
+});

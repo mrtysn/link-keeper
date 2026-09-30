@@ -19,7 +19,7 @@
 #   onpage   a list item is open in the current tab
 #   light    drop the dark-scheme rules to show the light palette
 #   empty    nothing stashed
-#   settings, import   list.html with that panel open
+#   settings, import, dups   list.html with that panel open
 #   import-run         list.html importing 300 tabs, slowly enough to see the progress
 #   group=stash|domain|status|day|month|newest|oldest   list.html grouped that way
 #   sources=tabs,import,list                           the sources chosen in the top bar

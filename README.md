@@ -253,6 +253,12 @@ a 22rem popup.
   tab**, **Keep** and **Drop**, **Add to** or **Move to reading list**, the stash moves when grouped
   by stash, and a **Remove from …** for each place it is held.
 
+**Duplicates (N)…**, shown when any link is held in more than one place among the sources on show
+(two stashes, or a stash and the reading list), lists each such link with a checkbox per copy:
+which stash, when, and its place in it, or its reading-list status. Nothing starts ticked, a locked
+stash's copy cannot be, and **Remove N copies** asks once, then removes only what was ticked — saying
+so when a link would lose every copy.
+
 Clicking a reading-list title opens it in a new tab and marks that entry current, so a
 `Ctrl+Shift+K` there attaches the capture to the right list entry; clicking a stashed tab's title
 reopens it through its stash, in its container.

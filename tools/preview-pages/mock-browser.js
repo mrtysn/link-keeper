@@ -48,7 +48,7 @@
     }, 200));
   }
   if (params.has("group")) try { localStorage.setItem("listGroup", params.get("group")); } catch (e) { /* no storage */ }
-  for (const panel of ["settings", "import"]) {
+  for (const panel of ["settings", "import", "dups"]) {
     if (params.has(panel)) addEventListener("load", () => setTimeout(() => document.getElementById(panel)?.click(), 200));
   }
 

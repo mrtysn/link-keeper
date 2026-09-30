@@ -259,6 +259,23 @@
     color: var(--ink); background: var(--bg); border: 1px solid var(--field); border-radius: 8px;
   }
   .panel code, .panel em { font-size: .8125rem; }
+
+  /* duplicates */
+  #dups-list { display: grid; gap: 10px; margin-top: 12px; }
+  #dups-list .none { color: var(--dim); }
+  .dup-card { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+  .dup-head { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; align-items: start; margin-bottom: 6px; }
+  .dup-title { font-weight: 600; font-size: .9375rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dup-title.plain { font: .8125rem/1.6 ui-monospace, Menlo, monospace; font-weight: 400; }
+  .dup-url { color: var(--dim); font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dup-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 5px 0 5px 26px; font-size: .875rem; cursor: pointer; }
+  .dup-row input { margin: 0 0 0 -26px; accent-color: var(--bad); }
+  .dup-row .dup-where { font-weight: 600; }
+  .dup-row .dup-detail { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .dup-row.locked { cursor: default; opacity: .7; }
+  .dup-row:has(input:checked) .dup-where { color: var(--bad); text-decoration: line-through; }
+  /* The remove button stays in reach at the foot of the screen however long the list is. */
+  .dups-actions { position: sticky; bottom: 0; z-index: 2; margin: 12px -16px -16px; padding: 12px 16px; background: var(--panel); border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; }
 </style>
 </head>
 <body>
@@ -271,6 +288,7 @@
     </div>
     <div class="page-actions">
       <button class="danger" id="clear-dropped" hidden title="Remove every stashed tab you dropped; locked stashes keep theirs">Clear dropped…</button>
+      <button id="dups" hidden aria-expanded="false" aria-controls="dups-panel" title="Links held in more than one place; tick the copies to remove">Duplicates…</button>
       <button id="import" aria-expanded="false" aria-controls="import-panel" title="Bring in stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links, or capture JSONL for the reading list">Import…</button>
       <span id="export-slot"></span>
       <button id="settings" aria-expanded="false" aria-controls="settings-panel" title="What happens after stashing and restoring, and sites never to stash">Settings</button>
@@ -317,6 +335,17 @@
     <div class="row">
       <button class="primary" id="import-go" disabled>Import</button>
       <button class="ghost" id="import-cancel">Cancel</button>
+    </div>
+  </section>
+
+  <section class="panel" id="dups-panel" hidden aria-labelledby="dups-h">
+    <h2 id="dups-h">Duplicates</h2>
+    <p>Each link held in more than one place among the sources on show — two stashes, or a stash and the reading list.
+      Tick the copies to remove; nothing is ticked for you, and a locked stash's copy cannot be.</p>
+    <div id="dups-list"></div>
+    <div class="row dups-actions">
+      <button class="danger" id="dups-remove" disabled>Remove selected</button>
+      <button class="ghost" id="dups-close">Close</button>
     </div>
   </section>
 
