@@ -261,6 +261,15 @@
   }
   .panel code, .panel em { font-size: .8125rem; }
 
+  .dest { gap: 16px; font-size: .875rem; }
+  .dest label { display: inline-flex; align-items: baseline; gap: 6px; cursor: pointer; }
+  fieldset > label.field { display: grid; gap: 4px; }
+  fieldset > label.field input {
+    min-height: 30px; padding: 4px 10px; font: inherit; font-size: .875rem;
+    color: var(--ink); background: var(--bg); border: 1px solid var(--field); border-radius: 8px;
+  }
+  fieldset p.hint { margin: 6px 0 0; font-size: .8125rem; text-wrap: pretty; }
+
   /* tags */
   .domains .rowlabel { align-self: center; margin-right: 2px; color: var(--dim); font-size: .8125rem; }
   .domains#tagchips { margin-top: 8px; }
@@ -340,8 +349,12 @@
   <section class="panel" id="import-panel" hidden aria-labelledby="import-h">
     <h2 id="import-h">Import</h2>
     <p>Paste or choose a file: OneTab's <em>Export URLs</em> text, a TidyTab or Link Keeper export, CSV with a <code>url</code> column
-      (and optionally <code>title</code>, <code>group</code>, <code>date</code>), or any text with links in it — each group becomes a stash under Imports.
-      Capture JSONL (from <code>importers/enrich-x.py</code> or Export) merges into the reading list instead.</p>
+      (and optionally <code>title</code>, <code>group</code>, <code>date</code>), or any text with links in it — a URL per line may carry the date it was saved.
+      Capture JSONL (from <code>importers/enrich-x.py</code> or Export) merges into the reading list.</p>
+    <div class="row dest" id="import-dest" role="radiogroup" aria-label="Import as" hidden>
+      <label><input type="radio" name="import-dest" value="stashes" checked> <span>Stashes, under Imports</span></label>
+      <label><input type="radio" name="import-dest" value="list"> <span>Links on the reading list</span></label>
+    </div>
     <textarea id="import-text" spellcheck="false" aria-label="Text to import" placeholder="https://example.com/ | Example"></textarea>
     <div class="row">
       <input type="file" id="import-file" accept=".json,.jsonl,.ndjson,.csv,.txt,text/*,application/json" aria-label="Import from a file">
@@ -377,6 +390,12 @@
         <legend>After restoring</legend>
         <label><input type="radio" name="after-restore" value="keep"> <span>Keep the tabs here, marked restored</span></label>
         <label><input type="radio" name="after-restore" value="remove"> <span>Take them out of the stash <span class="hint">(locked stashes keep theirs)</span></span></label>
+      </fieldset>
+      <fieldset>
+        <legend>Screenshots</legend>
+        <label class="field"><span>Folder inside Downloads</span>
+          <input id="folder" type="text" autocomplete="off" spellcheck="false"></label>
+        <p class="hint">Keep with a screenshot saves to <code>Downloads/<span id="folder-echo">link-keeper</span>/</code>; an extension can write nowhere else, so symlink it if you need to.</p>
       </fieldset>
       <fieldset>
         <legend>Tags</legend>

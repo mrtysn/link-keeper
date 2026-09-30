@@ -15,7 +15,7 @@
 # stash-cards.html open alone.
 # Query flags on either page:
 #   msg      restore a message, as if a keep just happened
-#   add      open "Add links"            house   open "Export and housekeeping"
+#   note     the popup's note field open, as after "Keep with a note…"
 #   onpage   a list item is open in the current tab
 #   light    drop the dark-scheme rules to show the light palette
 #   empty    nothing stashed

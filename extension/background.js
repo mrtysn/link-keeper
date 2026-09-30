@@ -727,6 +727,31 @@ async function showSessions(windowId) {
   return page;
 }
 
+/* A viewer opened from the popup or the menus: the tab already showing it, in this window if it
+ * has one, else in any window; a new tab only when none is open. `url` may carry a query or hash
+ * (a stash to explore, the import panel), which the tab is sent to. */
+async function showPage(page, windowId, suffix = "") {
+  const base = browser.runtime.getURL(page);
+  const open = (await browser.tabs.query({})).filter(t => t.url?.startsWith(base));
+  const tab = open.find(t => t.windowId === windowId) || open[0];
+  const url = base + suffix;
+  if (!tab) return browser.tabs.create({ url, ...(windowId != null && { windowId }), active: true });
+  await browser.tabs.update(tab.id, { active: true, ...(suffix && tab.url !== url && { url }) });
+  if (tab.windowId !== windowId) await browser.windows?.update(tab.windowId, { focused: true });
+  return tab;
+}
+
+/* What the popup shows on its view buttons, counted in the background so the popup never holds
+ * the whole dataset: links per source, and how many in the chosen sources are left to judge. */
+async function linkCounts() {
+  const { links, stashes } = await getLinks();
+  const chosen = new Set((await read("viewSources", null)) || LINK_SOURCES);
+  const shown = links.filter(l => l.sources.some(s => chosen.has(s)));
+  const sources = { tabs: 0, import: 0, list: 0 };
+  for (const l of links) for (const s of l.sources) sources[s]++;
+  return { total: shown.length, undecided: shown.filter(l => !l.verdict).length, sources, stashes: stashes.length, chosen: [...chosen] };
+}
+
 /* Pinned tabs, empty tabs, sites on the never-stash list and Link Keeper's own pages stay open.
  * Stashing one tab by name takes it whatever it is. How a tab comes back depends on what it is —
  * see restoreTabs. */
@@ -1290,8 +1315,8 @@ browser.menus.onClicked.addListener(async (info, tab) => {
       await notify(res.added ? "added to the list" : "already on the list");
       break;
     }
-    case "menu-list": await browser.tabs.create({ url: browser.runtime.getURL("list.html") }); break;
-    case "menu-cards": await browser.tabs.create({ url: browser.runtime.getURL("cards.html") }); break;
+    case "menu-list": await showPage("list.html", tab?.windowId); break;
+    case "menu-cards": await showPage("cards.html", tab?.windowId); break;
     case "menu-queue-link":
       if (info.linkUrl) {
         const res = await addItems([{ url: info.linkUrl.split("#")[0], saved_at: new Date().toISOString() }]);
@@ -1374,14 +1399,19 @@ browser.runtime.onMessage.addListener(async msg => {
     }
 
     case "open-list":
-      await browser.tabs.create({
-        url: browser.runtime.getURL("list.html") + (msg.importing ? "#import" : ""),
-      });
+      await showPage("list.html", (await browser.windows.getLastFocused()).id, msg.importing ? "#import" : "");
       return { ok: true };
 
     case "open-cards":
-      await browser.tabs.create({ url: browser.runtime.getURL("cards.html") });
+      await showPage("cards.html", (await browser.windows.getLastFocused()).id);
       return { ok: true };
+
+    case "open-explore":
+      await showPage("stash-cards.html", (await browser.windows.getLastFocused()).id);
+      return { ok: true };
+
+    case "link-counts":
+      return linkCounts();
 
     case "open-sessions":
       await showSessions((await browser.windows.getLastFocused()).id);
@@ -1579,25 +1609,6 @@ browser.runtime.onMessage.addListener(async msg => {
 
     case "export-list":
       return { items: await getItems() };
-
-    case "clear-captures":
-      await setCaptures([]);
-      await browser.storage.local.set({ thumbs: {} });
-      return { ok: true };
-
-    case "clear-list":
-      await setItems([]);
-      await browser.storage.local.set({ current: null });
-      return { ok: true };
-
-    case "reset-progress": {
-      const items = await getItems();
-      for (const i of items) {
-        if (i.status !== "kept") { i.status = "pending"; delete i.seen_at; }
-      }
-      await setItems(items);
-      return { ok: true };
-    }
 
     default:
       return { ok: false, error: `unknown message ${msg.type}` };

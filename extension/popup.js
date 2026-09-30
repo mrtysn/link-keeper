@@ -1,13 +1,15 @@
+/* The toolbar popup: a way into the three viewers, what to do with this tab, and the reading list's
+ * next link. Everything else — adding links in bulk, exports, settings — lives on the List page.
+ */
+
 const $ = id => document.getElementById(id);
 const send = msg => browser.runtime.sendMessage(msg);
 
-/* A popup is destroyed the moment it closes, so anything half-typed is lost and the result of the
- * last action vanishes with it. These few fields are mirrored into storage and restored on open:
- * a note in progress, a paste in progress, which sections were expanded, and the last message —
- * that last one matters most, because an action's outcome is otherwise unknowable after the fact.
- */
+/* A popup is destroyed the moment it closes, so a note half-typed and the result of the last
+ * action would vanish with it. Both are mirrored into storage and restored on open — the message
+ * matters most, because an action's outcome is otherwise unknowable after the fact. */
 const UI_KEY = "popupUi";
-let ui = { note: "", urls: "", open: [], msg: "", msgClass: "" };
+let ui = { note: "", noting: false, msg: "", msgClass: "" };
 let uiTimer = null;
 
 function saveUi() {
@@ -19,8 +21,7 @@ function say(text, cls = "") {
   $("msg").textContent = text;
   $("msg").className = cls;
   $("copy-msg").hidden = !text;
-  ui.msg = text;
-  ui.msgClass = cls;
+  Object.assign(ui, { msg: text, msgClass: cls });
   saveUi();
 }
 
@@ -34,9 +35,8 @@ $("copy-msg").onclick = async () => {
   setTimeout(() => ($("copy-msg").textContent = "Copy"), 1200);
 };
 
-function short(url) {
-  return String(url).replace(/^https?:\/\/(www\.)?/, "");
-}
+const short = url => String(url).replace(/^https?:\/\/(www\.)?/, "");
+const fmt = n => Number(n).toLocaleString();
 
 /* A plain tweet's title is only its handle, so its text is what identifies it. */
 function label(r) {
@@ -48,83 +48,53 @@ function label(r) {
   return r.title || r.handle || short(r.url);
 }
 
-/* JSON.stringify leaves U+2028/U+2029 raw and every line-splitter treats them as line breaks, which
- * would tear a JSONL record in half. Tweet text contains them. */
-const jsonl = records => records.map(r =>
-  JSON.stringify(r).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")).join("\n") + "\n";
+/* --- the viewers ------------------------------------------------------------------- */
 
-function download(name, body, type) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([body], { type }));
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
+const SOURCES = [["tabs", "Stashed tabs"], ["import", "Imports"], ["list", "Reading list"]];
+
+async function counts() {
+  const c = await send({ type: "link-counts" });
+  $("n-links").textContent = fmt(c.total);
+  $("n-undecided").textContent = fmt(c.undecided);
+  $("n-stashes").textContent = fmt(c.stashes);
+  $("n-stashes-word").textContent = c.stashes === 1 ? "stash" : "stashes";
+  // Each source toggles, as in the pages' top bar; the viewers follow.
+  const box = $("sources");
+  box.textContent = "";
+  for (const [id, name] of SOURCES) {
+    const on = c.chosen.includes(id);
+    const b = Object.assign(document.createElement("button"), {
+      className: on ? "" : "off", textContent: `${name} ${fmt(c.sources[id])}`,
+      title: on ? `Showing ${name.toLowerCase()} in the viewers; click to hide` : `Hidden from the viewers; click to show`,
+    });
+    b.setAttribute("aria-pressed", String(on));
+    b.onclick = async () => {
+      const next = on ? c.chosen.filter(s => s !== id) : [...c.chosen, id];
+      await browser.storage.local.set({ viewSources: SOURCES.map(([s]) => s).filter(s => next.includes(s)) });
+      counts();
+    };
+    box.append(b);
+  }
 }
 
-async function refresh() {
-  const s = await send({ type: "status" });
-  const { pending = 0, seen = 0, kept = 0, skipped = 0 } = s.counts;
+for (const [id, type] of [["open-list", "open-list"], ["open-cards", "open-cards"], ["open-explore", "open-explore"]]) {
+  $(id).onclick = async () => {
+    await send({ type });
+    window.close();
+  };
+}
 
-  const tally = $("tally");
-  tally.textContent = "";
-  if (s.total) {
-    const parts = [[kept, "kept"], ...(skipped ? [[skipped, "skipped"]] : []), [pending, `left of ${s.total}`]];
-    parts.forEach(([n, what], i) => {
-      if (i) tally.append(" · ");
-      tally.append(Object.assign(document.createElement("b"), { textContent: n }), ` ${what}`);
-    });
-  } else {
-    tally.textContent = "No links yet";
-  }
-  $("bar-kept").style.width = s.total ? `${kept / s.total * 100}%` : "0";
-  $("bar-seen").style.width = s.total ? `${seen / s.total * 100}%` : "0";
-  $("bar-skipped").style.width = s.total ? `${skipped / s.total * 100}%` : "0";
+/* --- this tab ---------------------------------------------------------------------- */
 
-  // Show what you are on if it came from the list, otherwise what is coming next.
-  const onPage = !!s.current?.isOpen;
-  if (onPage) {
-    $("now-lbl").textContent = "on now";
-    $("now-url").textContent = short(s.current.url);
-    $("now-url").title = s.current.url;
-  } else if (s.next) {
-    $("now-lbl").textContent = "next";
-    $("now-url").textContent = short(s.next);
-    $("now-url").title = s.next;
-  } else {
-    $("now-lbl").textContent = s.total ? "done" : "next";
-    $("now-url").textContent = s.total ? "Nothing pending" : "The list is empty";
-    $("now-url").title = "";
-  }
-
-  // One filled action: Keep while a list item is open in this tab, Next otherwise.
-  $("keep").classList.toggle("primary", onPage);
-  $("next").classList.toggle("primary", !onPage && !!s.next);
-  $("next").disabled = !s.next;
-
-  $("recent").textContent = "";
-  for (const r of s.recent) {
-    const text = r.label || short(r.url);
-    const li = document.createElement("li");
-    li.title = text;
-    const lbl = document.createElement("span");
-    lbl.className = "lbl";
-    // "@handle: text" and "@handle — title" read best with the handle set apart.
-    const m = /^(@\S+)(?::| —) (.*)$/s.exec(text);
-    if (m) {
-      lbl.append(Object.assign(document.createElement("span"), { className: "who", textContent: m[1] }), ` ${m[2]}`);
-    } else {
-      lbl.append(Object.assign(document.createElement("span"), { className: "who", textContent: text }));
-    }
-    li.append(lbl);
-    if (r.links) {
-      li.append(Object.assign(document.createElement("span"), {
-        className: "n", textContent: `+${r.links} link${r.links > 1 ? "s" : ""}`,
-      }));
-    }
-    $("recent").append(li);
-  }
-  $("recent-box").hidden = !s.recent.length;
-  $("export").disabled = !s.captures;
+/* The stash shows its stashes as the tabs close, so the popup has nothing left to show. */
+async function stash(scope) {
+  const res = await send({ type: "stash", scope });
+  if (res.ok) window.close();
+  else say(res.error, "bad");
+}
+$("stash").onclick = () => stash("auto");
+for (const b of document.querySelectorAll("#stash-menu [data-scope]")) {
+  b.onclick = () => { $("stash-menu").hidePopover(); stash(b.dataset.scope); };
 }
 
 async function keep(withShot = false) {
@@ -144,29 +114,18 @@ async function keep(withShot = false) {
     } else {
       say(head, "ok");
     }
-    $("note").value = "";
-    ui.note = "";
+    showNote(false);
   } else {
     say(res?.error || "could not keep that page", "bad");
   }
   refresh();
 }
-
-for (const [id, key] of [["note", "note"], ["urls", "urls"]]) {
-  $(id).addEventListener("input", () => { ui[key] = $(id).value; saveUi(); });
-}
-document.querySelectorAll("details").forEach((d, i) => {
-  d.addEventListener("toggle", () => {
-    ui.open = [...document.querySelectorAll("details")].map(x => x.open);
-    saveUi();
-  });
-});
-
 $("keep").onclick = () => keep(false);
 
 /* permissions.request needs a real user gesture, so the grant happens here rather than in the
  * background where the capture runs. Already-granted returns true immediately. */
 $("keep-shot").onclick = async () => {
+  $("keep-menu").hidePopover();
   let granted = false;
   try {
     granted = await browser.permissions.request({ origins: ["*://*/*"] });
@@ -177,11 +136,69 @@ $("keep-shot").onclick = async () => {
   keep(true);
 };
 
-$("skip").onclick = async () => {
-  const res = await send({ type: "skip" });
-  say(res.ok ? `skipped · ${res.remaining} left` : res.error, res.ok ? "" : "bad");
+/* The note field shows only when asked for; it goes with the next Keep, and Enter keeps. */
+function showNote(on) {
+  $("note-row").hidden = !on;
+  if (!on) $("note").value = "";
+  Object.assign(ui, { noting: on, note: on ? $("note").value : "" });
+  saveUi();
+  if (on) $("note").focus();
+}
+$("keep-note").onclick = () => { $("keep-menu").hidePopover(); showNote(true); };
+$("note").addEventListener("input", () => { ui.note = $("note").value; saveUi(); });
+$("note").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); keep(false); }
+  if (e.key === "Escape") { e.preventDefault(); showNote(false); }
+});
+
+$("queue").onclick = async () => {
+  const res = await send({ type: "queue-active", note: $("note").value.trim() });
+  say(res.ok ? (res.added ? "added to the reading list" : "already on the reading list") : (res.error || "could not add"), res.added ? "ok" : "");
   refresh();
 };
+
+/* Menus open beside their arrow, flipped up if they would run off the popup. */
+for (const [menu, arrow] of [["stash-menu", "stash-more"], ["keep-menu", "keep-more"]]) {
+  $(menu).addEventListener("toggle", e => {
+    if (e.newState !== "open") return;
+    const r = $(arrow).getBoundingClientRect(), m = $(menu);
+    const below = r.bottom + 4 + m.offsetHeight <= innerHeight;
+    m.style.top = `${below ? r.bottom + 4 : Math.max(4, r.top - 4 - m.offsetHeight)}px`;
+    m.style.left = `${Math.max(4, Math.min(r.right - m.offsetWidth, innerWidth - m.offsetWidth - 4))}px`;
+  });
+}
+
+/* --- the reading list ------------------------------------------------------------------ */
+
+async function refresh() {
+  const s = await send({ type: "status" });
+  const { pending = 0 } = s.counts;
+  $("left").textContent = s.total ? `${fmt(pending)} left of ${fmt(s.total)}` : "";
+
+  // What you are on if it came from the list, otherwise what is coming next.
+  const onPage = !!s.current?.isOpen;
+  const url = $("now-url");
+  url.classList.remove("done");
+  if (onPage) {
+    $("now-lbl").textContent = "on now";
+    url.textContent = short(s.current.url);
+    url.title = s.current.url;
+  } else if (s.next) {
+    $("now-lbl").textContent = "next";
+    url.textContent = short(s.next);
+    url.title = s.next;
+  } else {
+    $("now-lbl").textContent = "";
+    url.textContent = s.total ? "Nothing left to go through" : "Empty — + List adds this page";
+    url.classList.add("done");
+    url.title = "";
+  }
+  // One filled action: Keep while a list item is open in this tab, Next otherwise.
+  $("keep").classList.toggle("primary", onPage);
+  $("next").classList.toggle("primary", !onPage && !!s.next);
+  $("next").disabled = !s.next;
+  $("skip").disabled = !onPage && !s.next;
+}
 
 $("next").onclick = async () => {
   const res = await send({ type: "next" });
@@ -189,123 +206,19 @@ $("next").onclick = async () => {
   refresh();
 };
 
-$("open-list").onclick = async () => {
-  await send({ type: "open-list" });
-  window.close();
-};
-
-$("open-cards").onclick = async () => {
-  await send({ type: "open-cards" });
-  window.close();
-};
-
-$("open-sessions").onclick = async () => {
-  await send({ type: "open-sessions" });
-  window.close();
-};
-
-/* The stash opens its own page as the tabs close, so the popup has nothing left to show. */
-async function stash(scope) {
-  const res = await send({ type: "stash", scope });
-  if (res.ok) window.close();
-  else say(res.error, "bad");
-}
-$("stash").onclick = () => stash("auto");
-for (const b of document.querySelectorAll(".scopes [data-scope]")) b.onclick = () => stash(b.dataset.scope);
-
-$("queue").onclick = async () => {
-  const res = await send({ type: "queue-active", note: $("note").value.trim() });
-  say(res.ok
-    ? (res.added ? "added to the list" : "already on the list")
-    : (res.error || "could not add"), res.added ? "ok" : "");
-  refresh();
-};
-
-/* Each line is a URL, optionally followed by the date it was saved — tab or space separated, or a
- * whole JSON object for round-tripping an exported list. Re-pasting with dates backfills them. */
-function parseLine(line) {
-  const text = line.trim();
-  if (!text) return null;
-  if (text.startsWith("{")) {
-    try {
-      const o = JSON.parse(text);
-      return o.url ? { url: o.url, saved_at: o.saved_at || o.date || o.posted || undefined } : null;
-    } catch (e) { return null; }
-  }
-  const [url, ...rest] = text.split(/[\s\t]+/);
-  if (!/^https?:\/\//.test(url)) return null;
-  const stamp = rest.join(" ").trim();
-  const saved_at = stamp && !Number.isNaN(Date.parse(stamp))
-    ? new Date(stamp).toISOString()
-    : undefined;
-  return { url, saved_at };
-}
-
-$("add").onclick = async () => {
-  const entries = $("urls").value.split("\n").map(parseLine).filter(Boolean);
-  if (!entries.length) return say("no usable URLs in that box", "bad");
-  const dated = entries.filter(e => e.saved_at).length;
-  const res = await send({ type: "add", urls: entries });
-  const bits = [`added ${res.added}`];
-  if (res.updated) bits.push(`${res.updated} dated`);
-  if (res.skipped) bits.push(`${res.skipped} unchanged`);
-  say(`${bits.join(", ")} — ${res.total} on the list${dated ? "" : "\nno dates in that paste"}`, "ok");
-  $("urls").value = "";
-  ui.urls = "";
-  saveUi();
-  refresh();
-};
-
-$("export").onclick = async () => {
-  const { captures } = await send({ type: "export" });
-  if (!captures.length) return say("nothing captured yet", "");
-  download("link-captures.jsonl", jsonl(captures), "application/x-ndjson");
-  say(`exported ${captures.length} to Downloads`, "ok");
-};
-
-$("export-list").onclick = async () => {
-  const { items } = await send({ type: "export-list" });
-  if (!items.length) return say("the list is empty", "");
-  download("link-worklist.jsonl", jsonl(items), "application/x-ndjson");
-  say(`exported ${items.length} list entries`, "ok");
-};
-
-/* Import needs a real tab: an OS file dialog closes this popup and destroys its JS before the
- * change event can fire, so the file is silently never read. */
-$("go-import").onclick = async () => {
-  await send({ type: "open-list", importing: true });
-  window.close();
-};
-
-$("reset").onclick = async () => {
-  await send({ type: "reset-progress" });
-  say("progress reset — kept items untouched", "ok");
-  refresh();
-};
-
-$("clear-captures").onclick = async () => {
-  const { captures } = await send({ type: "export" });
-  if (!captures.length) return say("nothing to clear", "");
-  if (!confirm(`Delete all ${captures.length} captures? Export first if you have not.`)) return;
-  await send({ type: "clear-captures" });
-  say("captures cleared", "ok");
-  refresh();
-};
-
-$("clear-list").onclick = async () => {
-  if (!confirm("Empty the worklist? Captures are not affected.")) return;
-  await send({ type: "clear-list" });
-  say("list cleared", "ok");
+$("skip").onclick = async () => {
+  const res = await send({ type: "skip" });
+  say(res.ok ? `skipped · ${res.remaining} left` : res.error, res.ok ? "" : "bad");
   refresh();
 };
 
 /* Restore what the last popup session had in flight. */
 browser.storage.local.get(UI_KEY).then(got => {
   ui = { ...ui, ...(got[UI_KEY] || {}) };
-  $("note").value = ui.note || "";
-  $("urls").value = ui.urls || "";
-  const panels = [...document.querySelectorAll("details")];
-  (ui.open || []).forEach((isOpen, i) => { if (panels[i]) panels[i].open = isOpen; });
+  if (ui.noting) {
+    $("note-row").hidden = false;
+    $("note").value = ui.note || "";
+  }
   if (ui.msg) {
     $("msg").textContent = ui.msg;
     $("msg").className = ui.msgClass || "";
@@ -313,20 +226,6 @@ browser.storage.local.get(UI_KEY).then(got => {
   }
 }).catch(() => {});
 
-/* The subfolder is committed on blur or Enter, so every keystroke is not a write. */
-send({ type: "get-folder" }).then(({ folder, fallback }) => {
-  $("folder").value = folder;
-  $("folder-echo").textContent = folder || fallback;
-});
-
-async function saveFolder() {
-  const { folder } = await send({ type: "set-folder", folder: $("folder").value });
-  $("folder").value = folder;
-  $("folder-echo").textContent = folder || "";
-  say(folder ? `screenshots → Downloads/${folder}/` : "screenshots → Downloads/", "ok");
-}
-$("folder").onchange = saveFolder;
-$("folder").onkeydown = e => { if (e.key === "Enter") saveFolder(); };
-
+counts();
 refresh();
 setInterval(refresh, 1500);

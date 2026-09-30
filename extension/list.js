@@ -830,6 +830,22 @@ $("dups-remove").onclick = async () => {
 };
 $("dups-close").onclick = () => openPanel("dups-panel");
 
+/* Where Keep with a screenshot saves: a folder inside Downloads, the only place an extension may
+ * write. Committed on Enter or leaving the field, so every keystroke is not a write. */
+send({ type: "get-folder" }).then(({ folder, fallback }) => {
+  $("folder").value = folder;
+  $("folder").placeholder = fallback;
+  $("folder-echo").textContent = folder || fallback;
+});
+async function saveFolder() {
+  const { folder } = await send({ type: "set-folder", folder: $("folder").value });
+  $("folder").value = folder;
+  $("folder-echo").textContent = folder || "";
+  say(folder ? `Screenshots go to Downloads/${folder}/` : "Screenshots go to Downloads/");
+}
+$("folder").onchange = saveFolder;
+$("folder").onkeydown = e => { if (e.key === "Enter") saveFolder(); };
+
 /* --- import ---------------------------------------------------------------------------------
  * One panel for everything: stashes (OneTab, TidyTab, a Link Keeper export, CSV, text with links)
  * become stashes marked as imported; capture JSONL merges into the reading list. */
@@ -840,6 +856,35 @@ const FORMAT_NAMES = {
 };
 const FORMAT_SHORT = { "link-keeper": "Link Keeper", tidytab: "TidyTab", json: "JSON", csv: "CSV", onetab: "OneTab", text: "text" };
 let parsed = null;
+const importDest = () => document.querySelector('input[name="import-dest"]:checked')?.value || "stashes";
+
+/* Dates written after a URL on its own line — "https://… 2024-03-05", as a Telegram or notes export
+ * gives them — which the reading list keeps as the date the link was saved. */
+function datedLines(text) {
+  const dates = new Map();
+  for (const line of String(text).split("\n")) {
+    const [url, ...rest] = line.trim().split(/\s+/);
+    const stamp = rest.join(" ").replace(/^\|\s*/, "").trim();
+    if (!/^https?:\/\//.test(url || "") || !stamp || Number.isNaN(Date.parse(stamp))) continue;
+    dates.set(url, new Date(stamp).toISOString());
+  }
+  return dates;
+}
+
+/* What an import to the reading list adds: every link found, with its date if one was given. */
+function listEntries() {
+  const dates = datedLines($("import-text").value);
+  const seen = new Set();
+  const out = [];
+  for (const st of parsed.stashes) {
+    for (const t of st.tabs) {
+      if (!/^(https?|ftp):/.test(t.url) || seen.has(t.url)) continue;
+      seen.add(t.url);
+      out.push({ url: t.url, title: t.title, saved_at: dates.get(t.url) || st.created_at || undefined });
+    }
+  }
+  return out;
+}
 
 function previewImport() {
   $("import-cancel").textContent = "Cancel";
@@ -850,15 +895,26 @@ function previewImport() {
     note.textContent = `Read as capture JSONL: ${plural(parsed.records.length, "record")}; they merge into the reading list` +
       (parsed.skipped ? ` · ${plural(parsed.skipped, "line")} unreadable` : "") + ".";
     $("import-go").disabled = !parsed.records.length;
+    $("import-dest").hidden = true;
     return;
   }
+  $("import-dest").hidden = !parsed.format;
   const n = parsed.stashes.reduce((sum, s) => sum + s.tabs.length, 0);
   if (!parsed.format) note.textContent = "Paste OneTab's Export URLs, a TidyTab or Link Keeper export, CSV with a url column, capture JSONL, or any text with links.";
   else if (!n) { note.textContent = `Read as ${FORMAT_NAMES[parsed.format]}, but found no links.`; note.className = "bad"; }
+  else if (importDest() === "list") {
+    const entries = listEntries();
+    const dated = entries.filter(e => e.saved_at).length;
+    note.textContent = `Read as ${FORMAT_NAMES[parsed.format]}: ${plural(entries.length, "web link")} for the reading list` +
+      (dated ? `, ${dated} with a date` : "") + (n > entries.length ? ` · ${n - entries.length} local or repeated skipped` : "") + ".";
+    $("import-go").disabled = !entries.length;
+    return;
+  }
   else note.textContent = `Read as ${FORMAT_NAMES[parsed.format]}: ${plural(n, "tab")} in ${plural(parsed.stashes.filter(s => s.tabs.length).length, "stash")}, under Imports` +
     (parsed.skipped ? ` · ${plural(parsed.skipped, "line")} without a link skipped` : "") + ".";
   $("import-go").disabled = !n;
 }
+for (const r of document.querySelectorAll('input[name="import-dest"]')) r.onchange = previewImport;
 
 $("import").onclick = () => { openPanel("import-panel"); previewImport(); };
 $("import-text").addEventListener("input", previewImport);
@@ -895,6 +951,13 @@ $("import-go").onclick = async () => {
     return load();
   }
   if (!parsed?.stashes.length) return;
+  if (importDest() === "list") {
+    // Re-adding a link with a date fills the date in; one already dated is left as it is.
+    const res = await send({ type: "add", urls: listEntries() });
+    importDone(`Added ${plural(res.added, "link")} to the reading list` + (res.updated ? `, ${res.updated} dated` : "") +
+      (res.skipped ? `, ${res.skipped} already on it` : "") + ` — ${res.total} on the list`);
+    return load();
+  }
   const total = parsed.stashes.reduce((sum, s) => sum + s.tabs.length, 0);
   const note = $("import-msg"), bar = $("import-progress");
   const controls = ["import-go", "import-cancel", "import-text", "import-file"].map($);
@@ -997,6 +1060,13 @@ function download(name, type, body) {
       download(`link-keeper-stashes-${new Date().toISOString().slice(0, 10)}.json`, "application/json",
         JSON.stringify({ exported_at: new Date().toISOString(), sessions }, null, 2));
       say(`Exported ${plural(sessions.length, "stash")} to Downloads`);
+    } },
+    { text: "Reading list (JSONL)", title: "Every reading-list entry with its status and dates", run: async () => {
+      const { items } = await send({ type: "export-list" });
+      if (!items.length) return say("The reading list is empty");
+      download("link-worklist.jsonl", "application/x-ndjson",
+        items.map(r => JSON.stringify(r).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")).join("\n") + "\n");
+      say(`Exported ${items.length === 1 ? "1 entry" : `${items.length} entries`} to Downloads`);
     } },
     { text: "Captures (JSONL)", title: "Every page read, one JSON object per line", run: async () => {
       const { captures } = await send({ type: "export" });

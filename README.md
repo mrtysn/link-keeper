@@ -22,7 +22,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `native/` | the helper that reopens stashed local-file tabs — `native/install.zsh` registers it with Firefox |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, list and stashed-tabs pages in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, List, Cards and Explore in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -110,9 +110,14 @@ in `about:addons` → gear → *Manage Extension Shortcuts*.
 Loading a link marks it **seen**. Keeping it marks it **kept**. **Skip** marks it `skipped`, which
 is a deliberate rejection rather than "opened it, moved on" — the list filters the two separately.
 
-The popup shows the same actions as buttons, a progress bar, what is coming next, and a box
-for attaching a note to the next thing you keep. One action is filled at a time: **Keep** while a
-list item is open in the tab, **Next** otherwise.
+The **popup** is a way in, not a workspace. On top, the three viewers — **List**, **Cards** and
+**Explore** — each with a live count (links on show, left to judge, stashes); under them, a toggle per
+source, the same as the pages' top bar, with how many links each holds. Then **This tab**: **Stash**
+(its ▾ holds the scopes), **Keep** (its ▾ keeps with a full-page screenshot, or with a note) and
+**+ List**. Last, the reading list's next link with **Next** and **Skip**. One action is filled at a
+time: **Keep** while a list item is open in the tab, **Next** otherwise. The viewer buttons switch to
+the viewer's tab if one is open, rather than opening another. Adding links in bulk, exports and
+settings live on the List page.
 
 ### Viewers and sources
 
@@ -174,7 +179,7 @@ right-click menu, or right-click on the tab strip) folds tabs into a saved group
 the selected tabs if you have selected several, otherwise the whole window. The List page, grouped
 by stash, opens in their place.
 
-The **Stash** submenu — on a page, and on a tab in the tab strip — and the row under the popup's
+The **Stash** submenu — on a page, and on a tab in the tab strip — and the ▾ beside the popup's
 Stash button take other scopes too: **only this tab**, **tabs to the left**, **tabs to the right**,
 **all except this one**, and **every window** (one stash per window). On the tab strip, "this tab" is
 the one you right-clicked. **Never stash this site** in the same submenu puts a site on a list that
@@ -288,10 +293,10 @@ reopens it through its stash, in its container.
 
 ### Filling the list
 
-- **`Ctrl+Shift+U`** or *This page* — queue something for later while browsing.
-- **Paste URLs** into *Add links*, one per line. Each line may carry the date the link was
-  originally saved, tab or space separated — which is exactly what the scripts in `importers/`
-  produce:
+- **`Ctrl+Shift+U`** or the popup's **+ List** — queue something for later while browsing.
+- **Paste URLs** into List's **Import…** and choose *Links on the reading list*, one per line. Each
+  line may carry the date the link was originally saved, tab or space separated — which is exactly
+  what the scripts in `importers/` produce:
 
   ```
   https://x.com/i/status/2086188444317819246	2026-08-09
@@ -307,12 +312,11 @@ already exist.
 
 ### Screenshots
 
-**Keep + shot** — one action. It reads the page, then scrolls it a screenful at a time, shoots each
+**Keep with a full-page screenshot** (the ▾ beside the popup's Keep) — one action. It reads the page, then scrolls it a screenful at a time, shoots each
 viewport, and stitches the tiles into a single PNG named after the post. Leave the tab alone for a
 second while it walks the page.
 
-Files land in `~/Downloads/link-keeper/`, and the subfolder is configurable under *Export &
-housekeeping*. It cannot be moved out of Downloads: the `downloads` API resolves filenames against
+Files land in `~/Downloads/link-keeper/`, and the subfolder is configurable in List's **Settings**. It cannot be moved out of Downloads: the `downloads` API resolves filenames against
 the browser's download directory and rejects `..`, so no extension can write elsewhere. If the
 files need to live somewhere else, make that subfolder a symlink — Firefox writes through it.
 
@@ -401,7 +405,7 @@ chat does not re-litigate links already decided. Output and the sidecar both def
 `DATA_DIR` rather than the current directory. `tools/refresh.zsh` runs this on every export
 alongside the message view, into fixed filenames in `DATA_DIR` so the queue is right there after
 every refresh; `--urls` prints the same `URL<TAB>date` lines as `importers/telegram.py` if you
-just want to paste into *Add links* instead.
+just want to paste into List's Import instead.
 
 The link extraction underneath — walking `result.json`'s messages and text entities, the
 `.sh`/`.py`/`.so`/`.io`-as-TLD wrinkle, schemeless links held out rather than guessed at — lives
@@ -444,10 +448,9 @@ using on anything flagged `needs_replies`.
 
 ### Getting the data out
 
-*Export captures* writes `link-captures.jsonl` to Downloads. *Export list* writes the worklist
-with each entry's status, if you want to see what you skipped.
-
-Captures stay in the extension until you clear them, so exporting twice is fine.
+List's **Export** menu writes `link-captures.jsonl` (captures), `link-worklist.jsonl` (the reading
+list, with each entry's status, if you want to see what you skipped) or every stash as JSON, to
+Downloads. Nothing clears the store in bulk, so exporting twice is fine.
 
 ## What gets extracted
 
@@ -521,8 +524,8 @@ than a watcher.
 - The background script is an MV3 event page and is suspended when idle. The list, the
   captures and your position all live in `storage.local` for that reason, so nothing is lost
   when Firefox puts it to sleep.
-- *Reset progress* returns everything you only looked at to unvisited. Kept items stay kept.
-- Clearing is irreversible and asks first. Export before you clear.
+- There is no bulk clear or reset: links, captures and stashes go one at a time (or the copies
+  ticked in Duplicates), each after a confirm where it cannot be undone.
 - Article bodies are read with `innerText`, not `textContent`, so paragraph breaks and code
   blocks survive. Plain tweets collapse whitespace, which is fine at that length.
 - Images are not captured — text only. A chart in an article is lost; its surrounding prose is not.

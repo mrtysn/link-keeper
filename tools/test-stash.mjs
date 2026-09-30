@@ -859,4 +859,20 @@ await check("tags travel in exports and come back with imports", async () => {
   assert.deepEqual(plain(fresh.store.linkTags), { "t.example/1": ["keep me"], "c.example": ["read"] });
 });
 
+await check("the popup's view buttons switch to an open viewer instead of opening another, and count per source", async () => {
+  const tabs = makeTabs(3);
+  const { browser, store } = makeBrowser(tabs);
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://s.example/1", verdict: "keep" }, { url: "https://s.example/2" }] }];
+  store.items = [{ url: "https://s.example/2", status: "pending" }, { url: "https://l.example/", status: "pending" }];
+  await load(browser);
+  for (const type of ["open-cards", "open-cards", "open-explore", "open-list", "open-list"]) await browser.handle({ type });
+  const pages = p => tabs.filter(t => t.url.startsWith(`moz-extension://fake-uuid/${p}`)).length;
+  assert.deepEqual([pages("cards.html"), pages("stash-cards.html"), pages("list.html")], [1, 1, 1], "one tab per viewer");
+  let c = plain(await browser.handle({ type: "link-counts" }));
+  assert.deepEqual([c.total, c.undecided, c.sources, c.stashes], [3, 2, { tabs: 2, import: 0, list: 2 }, 1]);
+  store.viewSources = ["list"];
+  c = plain(await browser.handle({ type: "link-counts" }));
+  assert.deepEqual([c.total, c.undecided], [2, 2], "counts follow the chosen sources");
+});
+
 console.log(`\n${passed} checks passed`);

@@ -14,8 +14,7 @@
     popupUi: params.has("msg")
       ? {
         note: "",
-        urls: params.has("add") ? "https://example.com/a\nhttps://example.com/b" : "",
-        open: [params.has("add"), params.has("house")],
+        noting: params.has("note"),
         msg: M.msg,
         msgClass: "ok",
       }
@@ -96,6 +95,14 @@
           }
           case "sessions":
             return { sessions: mockSessions() };
+          case "link-counts": {
+            const { links, stashes } = await window.browser.runtime.sendMessage({ type: "links" });
+            const chosen = store.viewSources || ["tabs", "import", "list"];
+            const shown = links.filter(l => l.sources.some(x => chosen.includes(x)));
+            const sources = { tabs: 0, import: 0, list: 0 };
+            for (const l of links) for (const x of l.sources) sources[x]++;
+            return { total: shown.length, undecided: shown.filter(l => !l.verdict).length, sources, stashes: stashes.length, chosen };
+          }
           case "links": {
             // The stored shapes joinLinks reads, rebuilt from the mock's pre-joined rows.
             const rows = [...M.dump.items, ...M.dump.loose];

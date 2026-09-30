@@ -82,7 +82,7 @@ check("CSV with semicolons and only a url column is one stash", () => {
 check("OneTab's Export URLs: 'url | title', a blank line between groups, bare URLs too", () => {
   const r = parse([
     "https://a.example/x | A | with a bar",
-    "https://b.example/",
+    "https://b.example/ 2024-03-05",
     "",
     "",
     "file:///Users/me/doc.pdf | Doc",

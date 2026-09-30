@@ -161,7 +161,8 @@ function fromOneTab(lines) {
     const l = line.trim();
     if (!l) { cur = null; continue; }
     const cut = l.indexOf(" | ");
-    const url = cut < 0 ? l : l.slice(0, cut);
+    // Without a title, a URL ends at the first space; what follows is a date or a note, not the URL.
+    const url = cut < 0 ? l.split(/\s+/)[0] : l.slice(0, cut);
     if (!URL_START.test(url)) { skipped++; continue; }
     if (!cur) stashes.push(cur = { tabs: [] });
     cur.tabs.push(tabOf(url, cut < 0 ? "" : l.slice(cut + 3)));

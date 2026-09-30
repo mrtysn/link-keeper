@@ -268,3 +268,41 @@ await check("Tags: the ✎ editor on a List row saves a tag for the URL, every p
   d.getElementById("groupby").dispatchEvent(new view.Event("change"));
   await browser.tabs.remove(tab.id);
 });
+
+await check("the popup: three viewers with live counts, This tab's split buttons, and the reading list's next link", async () => {
+  await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("popup.html"), active: true });
+  await wait(1200);
+  const view = browser.extension.getViews({ type: "tab" }).find(v => v.location.pathname === "/popup.html");
+  const d = view.document;
+  const c = await linkCounts();
+  eq(d.getElementById("n-links").textContent, c.total.toLocaleString(), "List shows the links on show");
+  eq(d.getElementById("n-undecided").textContent, c.undecided.toLocaleString(), "Cards shows what is left to judge");
+  eq([...d.querySelectorAll("#sources button")].length, 3, "one toggle per source");
+  eq([...d.querySelectorAll("#stash-menu [data-scope]")].map(b => b.dataset.scope), ["tab", "left", "right", "others", "all-windows"], "the five scopes sit behind the arrow");
+  yes(d.getElementById("keep-shot") && d.getElementById("keep-note"), "Keep's arrow offers a screenshot and a note");
+  eq(d.querySelector("details"), null, "no drawers left");
+  d.getElementById("keep-note").click();
+  await wait(100);
+  eq(d.getElementById("note-row").hidden, false, "the note field shows when asked for");
+  await browser.tabs.remove(tab.id);
+});
+
+await check("List's Import adds pasted links to the reading list with their dates", async () => {
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("list.html#import"), active: true });
+  await wait(1500);
+  const view = browser.extension.getViews({ type: "tab" }).find(v => v.location.pathname === "/list.html");
+  const d = view.document;
+  d.getElementById("import-text").value = "https://dated.example/a 2024-03-05\nhttps://dated.example/b";
+  d.getElementById("import-text").dispatchEvent(new view.Event("input"));
+  yes(!d.getElementById("import-dest").hidden, "the destination choice shows");
+  d.querySelector('input[name="import-dest"][value="list"]').click();
+  d.querySelector('input[name="import-dest"][value="list"]').dispatchEvent(new view.Event("change"));
+  yes(/2 web links for the reading list, 1 with a date/.test(d.getElementById("import-msg").textContent), `preview: ${d.getElementById("import-msg").textContent}`);
+  d.getElementById("import-go").click();
+  await wait(800);
+  const items = await getItems();
+  eq(items.find(i => i.url === "https://dated.example/a")?.saved_at, "2024-03-05T00:00:00.000Z", "the date is kept");
+  yes(items.some(i => i.url === "https://dated.example/b"), "the undated one is added too");
+  await browser.tabs.remove(tab.id);
+});
