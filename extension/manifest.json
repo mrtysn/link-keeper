@@ -36,6 +36,7 @@
   ],
   "background": {
     "scripts": [
+      "links.js",
       "background.js"
     ]
   },

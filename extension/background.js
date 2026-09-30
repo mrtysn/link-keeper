@@ -43,20 +43,6 @@ async function paintBadge(items) {
 
 /* --- worklist ------------------------------------------------------------------- */
 
-/* Same normalisation on both sides of a comparison: x.com/i/status/<id> and
- * x.com/<handle>/status/<id> are the same post, and a trailing slash is never meaningful. */
-function keyOf(url) {
-  try {
-    const u = new URL(url);
-    const host = u.hostname.toLowerCase().replace(/^www\./, "");
-    const status = u.pathname.match(/\/status\/(\d+)/);
-    if (/^(x|twitter)\.com$/.test(host) && status) return `status:${status[1]}`;
-    return host + u.pathname.replace(/\/$/, "") + u.search;
-  } catch (e) {
-    return String(url);
-  }
-}
-
 /* When the link was originally saved, wherever it came from — not when it was pasted here. That
  * distinction is the whole point: a Telegram export spans years, and "added_at" would flatten it
  * all to the minute of the paste. */
@@ -65,19 +51,6 @@ function dateOf(item) {
 }
 
 const byNewest = (a, b) => String(dateOf(b)).localeCompare(String(dateOf(a)));
-
-/* X's API dates ("Wed Sep 09 14:06:01 +0000 2026") neither sort nor slice like ISO strings, and
- * Date.parse is not required to read them, so that shape is converted by hand. */
-const MONTHS = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
-function isoDate(value) {
-  if (!value) return null;
-  const m = /^\w{3} (\w{3}) (\d{2}) (\d{2}:\d{2}:\d{2}) ([+-]\d{2})(\d{2}) (\d{4})$/.exec(value);
-  const text = m && MONTHS[m[1]]
-    ? `${m[6]}-${String(MONTHS[m[1]]).padStart(2, "0")}-${m[2]}T${m[3]}${m[4]}:${m[5]}`
-    : value;
-  const t = Date.parse(text);
-  return Number.isNaN(t) ? null : new Date(t).toISOString();
-}
 
 async function addItems(entries, note = "") {
   const items = await getItems();
@@ -593,8 +566,13 @@ async function queueActiveTab() {
 const ROOT_TITLE = "Link Keeper stashes";
 const TAB_META = ["container", "seen_at", "verdict", "judged_at"];
 const STASH_SETTINGS = { afterStash: "show", afterRestore: "keep", exclude: [] };
-const sessionsPage = () => browser.runtime.getURL("sessions.html");
-const isSessionsPage = url => !!url?.startsWith(sessionsPage());
+/* The List page grouped by stash is where stashes are shown; sessions.html, the Stashed tabs page
+ * before 5.14, only forwards there. The viewer pages themselves are never stashed: they are views,
+ * reopened from the toolbar at any time. */
+const listPage = () => browser.runtime.getURL("list.html");
+const stashView = () => `${listPage()}?group=stash`;
+const VIEWER_PAGES = ["list.html", "sessions.html", "cards.html", "stash-cards.html"];
+const isViewerPage = url => VIEWER_PAGES.some(p => !!url?.startsWith(browser.runtime.getURL(p)));
 const hostOfUrl = url => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } };
 /* Firefox stores a bookmark's URL in its parsed form — host lowercased, spaces and non-ASCII
  * percent-encoded, a bare host given its "/" — which is exactly what URL.href gives. */
@@ -641,7 +619,7 @@ const editMeta = fn => metaQueue(async () => {
 
 const getStashSettings = async () => ({ ...STASH_SETTINGS, ...await read("stashSettings", {}) });
 
-/* Newest first, starred ones on top: { id, name, created_at, locked, starred,
+/* Newest first, starred ones on top: { id, name, created_at, locked, starred, source, format,
  * tabs: [{ id, url, title?, container?, seen_at?, verdict?, judged_at? }] }. Bookmarks moved or
  * edited in Firefox's own library show up here as they are. */
 async function getSessions() {
@@ -656,6 +634,9 @@ async function getSessions() {
       created_at: m.created_at || new Date(folder.dateAdded).toISOString(),
       locked: !!m.locked,
       starred: !!m.starred,
+      // "import" when an import wrote it, "tabs" when it was stashed from open tabs.
+      source: m.source === "import" ? "import" : "tabs",
+      ...(m.format && { format: m.format }),
       tabs: (folder.children || []).filter(n => n.url).map(b => ({
         id: b.id,
         url: b.url,
@@ -675,14 +656,14 @@ async function findStash(id) {
  * reads it all back. ok is false unless every bookmark made is in the folder with its URL, and
  * every container is recorded. onFolder hears the new
  * folder's id before anything else is written, so a caller can undo a write that fails halfway. */
-async function writeStash(tabs, { name, created_at, onFolder } = {}) {
+async function writeStash(tabs, { name, created_at, onFolder, source, format } = {}) {
   const at = created_at || new Date().toISOString();
   const folder = await browser.bookmarks.create({ parentId: await stashRoot(), index: 0, title: name || stashTitle(at) });
   await onFolder?.(folder.id);
   const made = [];
   for (const t of tabs) made.push(await browser.bookmarks.create({ parentId: folder.id, title: t.title || t.url, url: t.url }));
   await editMeta(m => {
-    m.stashes[folder.id] = { created_at: at };
+    m.stashes[folder.id] = { created_at: at, ...(source === "import" && { source, ...(format && { format }) }) };
     made.forEach((b, i) => {
       const extra = Object.fromEntries(TAB_META.filter(k => tabs[i][k] != null).map(k => [k, tabs[i][k]]));
       if (Object.keys(extra).length) m.tabs[b.id] = extra;
@@ -734,23 +715,23 @@ function migrateStashes() {
 browser.runtime.onInstalled.addListener(() => migrateStashes().catch(() => {}));
 browser.runtime.onStartup.addListener(() => migrateStashes().catch(() => {}));
 
-/* There is one Stashed tabs page, like OneTab's tab: every way in switches to the open one — in
- * this window if it has one, else in any window, pinned or not — and a new tab opens only when
- * none is open. Pinning it is left to the user. */
+/* There is one List tab to show stashes in, like OneTab's tab: every way in switches to the open
+ * one — in this window if it has one, else in any window, pinned or not — grouped by stash, and a
+ * new tab opens only when none is open. Pinning it is left to the user. */
 async function showSessions(windowId) {
-  const open = (await browser.tabs.query({})).filter(t => isSessionsPage(t.url));
+  const open = (await browser.tabs.query({})).filter(t => t.url?.startsWith(listPage()) || t.url?.startsWith(browser.runtime.getURL("sessions.html")));
   const page = open.find(t => t.windowId === windowId) || open[0];
-  if (!page) return browser.tabs.create({ url: sessionsPage(), ...(windowId != null && { windowId }), active: true });
-  await browser.tabs.update(page.id, { active: true });
+  if (!page) return browser.tabs.create({ url: stashView(), ...(windowId != null && { windowId }), active: true });
+  await browser.tabs.update(page.id, { active: true, ...(page.url !== stashView() && { url: stashView() }) });
   if (page.windowId !== windowId) await browser.windows?.update(page.windowId, { focused: true });
   return page;
 }
 
-/* Pinned tabs, empty tabs, sites on the never-stash list and the Stashed tabs page stay open.
+/* Pinned tabs, empty tabs, sites on the never-stash list and Link Keeper's own pages stay open.
  * Stashing one tab by name takes it whatever it is. How a tab comes back depends on what it is —
  * see restoreTabs. */
 const EMPTY_TAB = /^about:(blank|newtab|home|privatebrowsing)$/;
-const recordable = tab => !!tab.url && !EMPTY_TAB.test(tab.url) && !isSessionsPage(tab.url);
+const recordable = tab => !!tab.url && !EMPTY_TAB.test(tab.url) && !isViewerPage(tab.url);
 
 /* Firefox lets an extension open web pages and its own pages. A file: URL goes to the native helper
  * (native/open-local-files.py); about: pages and other extensions' pages get a stand-in tab that
@@ -816,7 +797,7 @@ async function stashTabs({ windowId, scope = "auto", tabId } = {}) {
     if (scope === "auto" && pool.length < all.length) selectionWord = `the ${pool.length} selected tabs`;
     const take = scope === "tab" ? recordable : t => recordable(t) && !t.pinned && !excluded(t);
     const closing = pool.filter(take);
-    stayed.push(...pool.filter(t => !take(t) && !isSessionsPage(t.url)));
+    stayed.push(...pool.filter(t => !take(t) && !isViewerPage(t.url)));
     // Duplicate tabs all close, and are recorded once.
     const urls = new Set();
     const tabs = closing
@@ -850,7 +831,7 @@ async function stashTabs({ windowId, scope = "auto", tabId } = {}) {
   }
 
   // Closing a window's last tab closes the window, so whatever stays on screen opens first: the
-  // Stashed tabs page (here, unless it is open elsewhere, in which case this window may close as
+  // List page grouped by stash (here, unless it is open elsewhere, in which case this window may close as
   // OneTab's does), or with "stay", a new tab in each window that would otherwise close.
   const focused = scope === "all-windows" ? (await browser.windows.getLastFocused()).id : plans[0].windowId;
   if (settings.afterStash === "stay") {
@@ -995,7 +976,7 @@ async function moveStashed(ids, to, before) {
  * already parsed by the page (stash-import.js). Written in the order given, above the others, with
  * URLs in the form Firefox bookmarks them. All or nothing: if one stash does not read back, the
  * ones this import already wrote are taken out again. */
-async function importStashes(stashes) {
+async function importStashes(stashes, format) {
   await migrateStashes();
   const clean = (Array.isArray(stashes) ? stashes : []).map(s => {
     const urls = new Set();
@@ -1022,7 +1003,7 @@ async function importStashes(stashes) {
   const written = [];
   try {
     for (const s of [...clean].reverse()) {
-      const res = await writeStash(s.tabs, { ...s, onFolder: id => { written.push(id); } });
+      const res = await writeStash(s.tabs, { ...s, source: "import", format: typeof format === "string" ? format.slice(0, 40) : undefined, onFolder: id => { written.push(id); } });
       if (!res.ok) throw new Error("an imported stash did not read back");
       tabs += s.tabs.length;
     }
@@ -1061,35 +1042,50 @@ function unframeHeaders(details) {
 browser.webRequest?.onHeadersReceived.addListener(unframeHeaders,
   { urls: ["<all_urls>"], types: ["sub_frame"] }, ["blocking", "responseHeaders"]);
 
-/* Everything already stored about each stashed URL: its capture if the page was ever read (matched
- * on the visited URL too, since a capture is filed under its canonical one) and its reading-list
- * status. */
-async function stashKnown() {
-  const [captures, items, sessions] = [await getCaptures(), await getItems(), await getSessions()];
-  const capBy = new Map();
-  for (const c of captures) {
-    capBy.set(keyOf(c.url), c);
-    if (c.source_url) capBy.set(keyOf(c.source_url), c);
+/* Every source joined into one dataset for the pages; joinLinks in links.js does the joining. */
+async function getLinks() {
+  const [items, captures, sessions, thumbs, current] =
+    [await getItems(), await getCaptures(), await getSessions(), await read("thumbs", {}), await getCurrent()];
+  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null });
+}
+
+/* One verdict for a URL wherever it is held: its capture, its reading-list entry (kept or skipped)
+ * and every stash copy. null clears it, and a list entry goes back to seen. Nothing is removed. */
+async function judgeLink(url, verdict) {
+  if (verdict !== null && verdict !== "keep" && verdict !== "drop") return { ok: false, error: "a verdict is keep, drop or null" };
+  const key = keyOf(url);
+  const at = new Date().toISOString();
+
+  const captures = await getCaptures();
+  const caps = captures.filter(c => keyOf(c.url) === key || (c.source_url && keyOf(c.source_url) === key));
+  for (const c of caps) {
+    if (verdict) Object.assign(c, { verdict, judged_at: at });
+    else { delete c.verdict; delete c.judged_at; }
   }
-  const listBy = new Map(items.map(i => [keyOf(i.url), i.status]));
-  const known = {};
-  for (const t of sessions.flatMap(s => s.tabs)) {
-    const k = keyOf(t.url);
-    const c = capBy.get(k);
-    known[t.url] = {
-      key: k,
-      list: listBy.get(k) || null,
-      cap: c && {
-        title: c.title || null,
-        handle: c.author?.handle || null,
-        text: c.text || null,
-        images: (c.images || []).slice(0, 8),
-        links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean).slice(0, 8),
-        captured_at: c.captured_at || null,
-      },
-    };
+  if (caps.length) await setCaptures(captures);
+
+  const items = await getItems();
+  const listed = items.filter(i => keyOf(i.url) === key);
+  for (const i of listed) {
+    if (verdict === "keep") Object.assign(i, { status: "kept", kept_at: at });
+    else if (verdict === "drop") Object.assign(i, { status: "skipped", seen_at: at });
+    else if (i.status === "kept" || i.status === "skipped") i.status = "seen";
   }
-  return { known };
+  if (listed.length) await setItems(items);
+
+  const copies = (await getSessions()).flatMap(s => s.tabs).filter(t => keyOf(t.url) === key);
+  if (copies.length) {
+    await editMeta(m => {
+      for (const { id } of copies) {
+        const t = { ...m.tabs[id] };
+        if (verdict) Object.assign(t, { verdict, judged_at: at });
+        else { delete t.verdict; delete t.judged_at; }
+        m.tabs[id] = t;
+      }
+    });
+  }
+  const held = caps.length + listed.length + copies.length;
+  return held ? { ok: true, captures: caps.length, list: listed.length, stashed: copies.length } : { ok: false, error: "that link is not held anywhere" };
 }
 
 async function notifyStash(res) {
@@ -1257,116 +1253,6 @@ browser.runtime.onMessage.addListener(async msg => {
       };
     }
 
-    /* Everything the list page needs, joined here where keyOf lives. */
-    /* Captures that have been read but not yet judged — the card deck. A card needs the page's
-     * content to be judgeable at all, so the deck runs over captures rather than bare URLs. */
-    case "deck": {
-      const captures = await getCaptures();
-      const thumbs = await read("thumbs", {});
-      const items = await getItems();
-      const savedBy = new Map(items.map(i => [keyOf(i.url), i.saved_at || i.added_at]));
-      return {
-        cards: captures
-          .filter(c => !c.verdict)
-          .map(c => ({
-            url: c.url,
-            kind: c.kind,
-            title: c.title || null,
-            handle: c.author?.handle || null,
-            name: c.author?.name || null,
-            text: c.text || null,
-            note: c.note || null,
-            posted: c.posted || null,
-            saved_at: savedBy.get(keyOf(c.url)) || c.captured_at || null,
-            images: c.images || [],
-            links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean),
-            reply_links: (c.reply_links || []).map(l => ({
-              href: l.resolved || l.href, from: l.from || null, self: !!l.self,
-            })).filter(l => l.href),
-            shotThumb: thumbs[c.screenshot?.filename] || null,
-            code_blocks: (c.code_blocks || []).length,
-          })),
-        judged: captures.filter(c => c.verdict).length,
-        keep: captures.filter(c => c.verdict === "keep").length,
-        drop: captures.filter(c => c.verdict === "drop").length,
-      };
-    }
-
-    /* A verdict is reversible and never deletes the capture: passing null clears it. */
-    case "judge": {
-      const captures = await getCaptures();
-      const target = captures.find(c => keyOf(c.url) === keyOf(msg.url));
-      if (!target) return { ok: false, error: "no capture for that link" };
-      if (msg.verdict) target.verdict = msg.verdict;
-      else delete target.verdict;
-      target.judged_at = msg.verdict ? new Date().toISOString() : undefined;
-      await setCaptures(captures);
-      return { ok: true };
-    }
-
-    case "dump": {
-      const items = await getItems();
-      const captures = await getCaptures();
-      const byKey = new Map(captures.map(c => [keyOf(c.url), c]));
-      const thumbs = await read("thumbs", {});
-      const current = await getCurrent();
-      return {
-        items: items.map(i => {
-          const cap = byKey.get(keyOf(i.url)) || null;
-          return {
-            url: i.url,
-            status: i.status,
-            added_at: i.added_at,
-            saved_at: i.saved_at || null,
-            title: i.title || null,
-            note: i.note || cap?.note || null,
-            current: current?.key === keyOf(i.url),
-            cap: cap && {
-              title: cap.title,
-              handle: cap.author?.handle || null,
-              text: cap.text || null,
-              kind: cap.kind,
-              links: (cap.links || []).map(l => l.resolved || l.href).filter(Boolean),
-              reply_links: (cap.reply_links || []).map(l => ({
-                href: l.resolved || l.href, from: l.from || null, self: !!l.self,
-              })).filter(l => l.href),
-              images: cap.images || [],
-              screenshot: cap.screenshot?.filename || null,
-              shotThumb: thumbs[cap.screenshot?.filename] || null,
-              shotId: cap.screenshot?.downloadId ?? null,
-              verdict: cap.verdict || null,
-            },
-          };
-        }),
-        // Captures with no matching list entry — kept from a page you just happened to be on.
-        loose: captures
-          .filter(c => !items.some(i => keyOf(i.url) === keyOf(c.url)))
-          .map(c => ({
-            url: c.url,
-            status: "kept",
-            added_at: c.captured_at,
-            saved_at: isoDate(c.posted),
-            note: c.note || null,
-            current: false,
-            cap: {
-              title: c.title,
-              handle: c.author?.handle || null,
-              text: c.text || null,
-              kind: c.kind,
-              links: (c.links || []).map(l => l.resolved || l.href).filter(Boolean),
-              reply_links: (c.reply_links || []).map(l => ({
-                href: l.resolved || l.href, from: l.from || null, self: !!l.self,
-              })).filter(l => l.href),
-              images: c.images || [],
-              screenshot: c.screenshot?.filename || null,
-              shotThumb: thumbs[c.screenshot?.filename] || null,
-              shotId: c.screenshot?.downloadId ?? null,
-              verdict: c.verdict || null,
-            },
-          })),
-      };
-    }
-
     case "set-current": {
       await browser.storage.local.set({
         current: { key: keyOf(msg.url), url: msg.url, at: new Date().toISOString() },
@@ -1384,15 +1270,6 @@ browser.runtime.onMessage.addListener(async msg => {
         await setCaptures(captures.filter(c => !drop.has(keyOf(c.url))));
       }
       return { ok: true, removed: drop.size };
-    }
-
-    case "mark": {
-      const items = await getItems();
-      const item = items.find(i => keyOf(i.url) === keyOf(msg.url));
-      if (!item) return { ok: false, error: "not on the list" };
-      item.status = msg.status;
-      await setItems(items);
-      return { ok: true };
     }
 
     case "open-shot": {
@@ -1477,18 +1354,6 @@ browser.runtime.onMessage.addListener(async msg => {
       return { ok: true };
     }
 
-    case "judge-stashed": {
-      const tab = (await findStash(msg.id))?.tabs.find(t => t.id === msg.tab);
-      if (!tab) return { ok: false, error: "that tab is no longer stashed" };
-      await editMeta(m => {
-        const t = { ...m.tabs[tab.id] };
-        if (msg.verdict) Object.assign(t, { verdict: msg.verdict, judged_at: new Date().toISOString() });
-        else { delete t.verdict; delete t.judged_at; }
-        m.tabs[tab.id] = t;
-      });
-      return { ok: true };
-    }
-
     case "clear-dropped": {
       let removed = 0;
       for (const s of await getSessions()) {
@@ -1515,13 +1380,26 @@ browser.runtime.onMessage.addListener(async msg => {
       return toggleExcluded(String(msg.host || "").trim().toLowerCase().replace(/^www\./, ""));
 
     case "import-stashes":
-      return importStashes(msg.stashes);
+      return importStashes(msg.stashes, msg.format);
 
-    case "stash-known":
-      return stashKnown();
+    case "set-stash-source": {
+      if (!await findStash(msg.id)) return { ok: false, error: "that stash is gone" };
+      await editMeta(m => {
+        const st = m.stashes[msg.id] || (m.stashes[msg.id] = {});
+        if (msg.source === "import") st.source = "import";
+        else { delete st.source; delete st.format; }
+      });
+      return { ok: true };
+    }
+
+    case "links":
+      return getLinks();
+
+    case "judge-link":
+      return judgeLink(String(msg.url || ""), msg.verdict ?? null);
 
     case "open-stash-cards":
-      await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html") + (msg.id ? `?stash=${msg.id}` : "") });
+      await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html") + (msg.id ? `?stash=${encodeURIComponent(msg.id)}` : "") });
       return { ok: true };
 
     case "add":
