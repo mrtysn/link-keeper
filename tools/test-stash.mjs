@@ -875,4 +875,60 @@ await check("the popup's view buttons switch to an open viewer instead of openin
   assert.deepEqual([c.total, c.undecided], [2, 2], "counts follow the chosen sources");
 });
 
+/* Stash folders as the 29 Sep import left them: written within ten seconds, in these sizes, plus
+ * a stash of open tabs from the day before and one from the day after. */
+async function sep29(browser, bm, bg, sizes = [80, 87, 40, 23, 296, 7, 2, 12]) {
+  await bg.getSessions();
+  const root = (await browser.bookmarks.getChildren("unfiled_____")).find(n => n.title === "Link Keeper stashes").id;
+  const folder = async (at, n, title) => {
+    const f = await browser.bookmarks.create({ parentId: root, index: 0, title });
+    bm.nodes.get(f.id).dateAdded = Date.parse(at);
+    for (let i = 0; i < n; i++) await browser.bookmarks.create({ parentId: f.id, url: `https://${title.replace(/\W/g, "")}.example/${i}` });
+    return f.id;
+  };
+  const before = await folder("2026-09-29T10:13:43Z", 3, "Sep 28 tabs");
+  const ids = [];
+  for (const [i, n] of sizes.entries()) ids.push(await folder(new Date(Date.parse("2026-09-29T11:01:51Z") + i * 1200).toISOString(), n, `import ${i}`));
+  const after = await folder("2026-09-30T09:30:58Z", 2, "Sep 30 tabs");
+  return { ids, others: [before, after] };
+}
+
+await check("data patch: the 29 Sep OneTab import is marked once on launch, and only those 8 stashes", async () => {
+  const { browser, store, bm } = makeBrowser([]);
+  const bg = await load(browser);
+  const { ids, others } = await sep29(browser, bm, bg);
+  await bg.applyDataPatches();
+  const all = await stashes(bg);
+  const src = id => all.find(x => x.id === id);
+  assert.deepEqual(ids.map(id => [src(id).source, src(id).format]), ids.map(() => ["import", "onetab"]));
+  assert.deepEqual(others.map(id => src(id).source), ["tabs", "tabs"], "stashes of open tabs are left alone");
+  assert.equal(store.dataPatches["2026-09-29-mark-onetab-import"].marked, 8);
+
+  // Once recorded it never runs again: a stash marked back by hand stays as you set it, across launches.
+  await browser.handle({ type: "set-stash-source", id: ids[0], source: "tabs" });
+  const again = await load(browser);
+  await again.applyDataPatches();
+  assert.equal((await stashes(again)).find(x => x.id === ids[0]).source, "tabs");
+});
+
+await check("data patch: a fingerprint that does not match changes nothing and says why; a failure is retried", async () => {
+  const { browser, store, bm } = makeBrowser([]);
+  const bg = await load(browser);
+  const { ids } = await sep29(browser, bm, bg, [80, 87, 40, 23, 296, 7, 2]);   // one of the eight deleted
+  await bg.applyDataPatches();
+  assert.ok((await stashes(bg)).every(x => x.source === "tabs"), "nothing marked");
+  assert.match(store.dataPatches["2026-09-29-mark-onetab-import"].skipped, /7 folders in the window/);
+
+  const fresh = makeBrowser([]);
+  const bg2 = await load(fresh.browser);
+  await sep29(fresh.browser, fresh.bm, bg2);
+  const real = fresh.browser.bookmarks.getSubTree;
+  fresh.browser.bookmarks.getSubTree = async () => { throw new Error("places is busy"); };
+  await assert.rejects(bg2.applyDataPatches(), /places is busy/);
+  assert.equal(fresh.store.dataPatches, undefined, "a patch that failed is not recorded");
+  fresh.browser.bookmarks.getSubTree = real;
+  await bg2.applyDataPatches();
+  assert.equal(fresh.store.dataPatches["2026-09-29-mark-onetab-import"].marked, 8, "and the next launch applies it");
+});
+
 console.log(`\n${passed} checks passed`);

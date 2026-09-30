@@ -710,10 +710,58 @@ function migrateStashes() {
   return migration;
 }
 
+/* --- one-time data patches -------------------------------------------------------
+ * Fixes to data already stored, applied on the first launch of the version that brings them and
+ * recorded in dataPatches ({ [id]: { at, ...result } }), so each runs once and never again — even
+ * if the data it touched changes afterwards. A patch acts only when its fingerprint matches what
+ * is stored; otherwise it records why it skipped and changes nothing. One that throws is not
+ * recorded, so the next launch tries it again. */
+const DATA_PATCHES = [
+  {
+    // The OneTab import of 29 Sep 2026 ran on 5.10, before imports were marked (5.14), so its
+    // stashes sat under Stashed tabs. Its 8 folders were written within ten seconds; that window
+    // and their tab counts identify them exactly, and nothing else is touched.
+    id: "2026-09-29-mark-onetab-import",
+    async run() {
+      const from = Date.parse("2026-09-29T11:01:50Z"), to = Date.parse("2026-09-29T11:02:01Z");
+      const want = [2, 7, 12, 23, 40, 80, 87, 296];
+      const [tree] = await browser.bookmarks.getSubTree(await stashRoot());
+      const hits = (tree.children || []).filter(n => !n.url && n.dateAdded >= from && n.dateAdded <= to);
+      const counts = hits.map(f => (f.children || []).filter(b => b.url).length).sort((a, b) => a - b);
+      if (JSON.stringify(counts) !== JSON.stringify(want)) {
+        return { skipped: `${hits.length} folders in the window, holding ${counts.join(", ") || "nothing"}; not the import` };
+      }
+      await editMeta(m => {
+        for (const folder of hits) {
+          const st = m.stashes[folder.id] || (m.stashes[folder.id] = {});
+          st.source = "import";
+          st.format ||= "onetab";
+        }
+      });
+      return { marked: hits.length };
+    },
+  },
+];
+
+let patching = null;
+function applyDataPatches() {
+  patching ??= (async () => {
+    await migrateStashes();
+    const done = await read("dataPatches", {});
+    for (const patch of DATA_PATCHES) {
+      if (done[patch.id]) continue;
+      done[patch.id] = { at: new Date().toISOString(), ...await patch.run() };
+      await browser.storage.local.set({ dataPatches: done });
+    }
+    return done;
+  })().catch(e => { patching = null; throw e; });
+  return patching;
+}
+
 // Moved as soon as the new version runs, not only when a stash page first opens. A failure
 // leaves the old record in place and is retried by the next page or stash.
-browser.runtime.onInstalled.addListener(() => migrateStashes().catch(() => {}));
-browser.runtime.onStartup.addListener(() => migrateStashes().catch(() => {}));
+browser.runtime.onInstalled.addListener(() => applyDataPatches().catch(() => {}));
+browser.runtime.onStartup.addListener(() => applyDataPatches().catch(() => {}));
 
 /* There is one List tab to show stashes in, like OneTab's tab: every way in switches to the open
  * one — in this window if it has one, else in any window, pinned or not — grouped by stash, and a
@@ -1285,7 +1333,8 @@ browser.runtime.onInstalled.addListener(buildMenus);
 browser.runtime.onStartup.addListener(buildMenus);
 buildMenus();
 
-browser.menus.onClicked.addListener(async (info, tab) => {
+/* What a menu item does — the page and tab-strip menus alike. Named, so a test can press one. */
+async function onMenuClicked(info, tab) {
   const stash = /^stash:(page|tab):(.+)$/.exec(info.menuItemId);
   if (stash) {
     const scope = stash[2];
@@ -1324,7 +1373,8 @@ browser.menus.onClicked.addListener(async (info, tab) => {
       }
       break;
   }
-});
+}
+browser.menus.onClicked.addListener(onMenuClicked);
 
 /* --- messaging ------------------------------------------------------------------ */
 
