@@ -6,7 +6,7 @@
  *
  * A link is one URL, however many places hold it:
  *   { key, url, title, sources: ["tabs" | "import" | "list"], list, cap, copies, verdict, seen, date,
- *     tags, guessed }
+ *     tags, kinds, guessed }
  *   list    — its reading-list entry { status, added_at, saved_at, note, current, loose }, or null
  *   cap     — what was read off the page, or null
  *   copies  — one per stash that holds it: { stash, tab, seen_at, verdict, judged_at, container }
@@ -14,7 +14,8 @@
  *   seen    — opened, restored or read at some point
  *   date    — when it was set aside: saved, added to the list, or stashed, whichever is known
  *   tags    — the tags set by hand, or [] (stored in linkTags, keyed like the link)
- *   guessed — tags guessed from the kind of site; never stored, shown only while tags is empty
+ *   kinds   — what kind of thing it is, read off its site or capture ("code", "video", …); never stored
+ *   guessed — kinds while tags is empty, else []: what the pages show dimmed in place of tags
  */
 
 const LINK_SOURCES = ["tabs", "import", "list"];
@@ -158,7 +159,8 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     const stashed = link.copies.map(c => stashAt.get(c.stash)).filter(Boolean).sort()[0] || null;
     link.date = link.list?.saved_at || link.list?.added_at || stashed;
     link.tags = (tags[link.key] || []).slice();
-    link.guessed = link.tags.length ? [] : guessTags(link.url, link.cap);
+    link.kinds = guessTags(link.url, link.cap);
+    link.guessed = link.tags.length ? [] : link.kinds;
   }
   return { links: [...byKey.values()], stashes };
 }

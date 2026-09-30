@@ -11,7 +11,7 @@
  * prevents both, and Delete asks first.
  */
 
-const GROUPS = ["stash", "domain", "status", "day", "month", "newest", "oldest"];
+const GROUPS = ["stash", "domain", "tag", "status", "day", "month", "newest", "oldest"];
 const GROUP_KEY = "listGroup";
 const FILTERS = ["all", "left", "seen", "kept", "dropped"];
 
@@ -19,6 +19,8 @@ let data = { links: [], stashes: [], all: { links: [], stashes: [] }, sources: n
 let settings = { afterStash: "show", afterRestore: "keep", exclude: [] };
 let filter = "all";
 const domainSel = new Set();   // empty = every domain
+const tagSel = new Set();      // empty = every tag; UNTAGGED = links with no tag set by hand
+const UNTAGGED = "\u0000untagged";
 let domainsExpanded = false;
 let renaming = null;
 let dragging = null;
@@ -65,9 +67,10 @@ const siteOf = url => ({ web: () => hostOf(url), file: () => "Local files", othe
 function matches(link, term) {
   if (filter !== "all" && stateOf(link) !== filter) return false;
   if (domainSel.size && !domainSel.has(siteOf(link.url))) return false;
+  if (tagSel.size && ![...tagSel].some(t => (t === UNTAGGED ? !link.tags.length : shownTags(link).tags.includes(t)))) return false;
   if (!term) return true;
   const cap = link.cap;
-  const hay = [link.url, link.title, labelOf(link), cap?.text, link.list?.note, cap?.screenshot, link.date,
+  const hay = [link.url, link.title, labelOf(link), cap?.text, link.list?.note, cap?.screenshot, link.date, ...shownTags(link).tags,
     ...(cap?.links || []), ...(cap?.reply_links || []).map(l => l.href)].filter(Boolean).join(" ").toLowerCase();
   return hay.includes(term);
 }
@@ -238,6 +241,9 @@ function rowEl(link, ctx) {
   if (container) meta.append(el("span", { className: "badge", textContent: "Container", title: container }));
   if (ctx?.tab.seen_at) meta.append(el("time", { dateTime: ctx.tab.seen_at, textContent: `restored ${whenOf(ctx.tab.seen_at)}` }));
   if (link.list?.note) meta.append(el("span", { className: "note", textContent: link.list.note }));
+  const chips = tagChips(link);
+  if (chips) meta.append(chips);
+  meta.append(tagButton(link, () => render()));
   main.append(meta);
 
   if (cap?.links?.length) {
@@ -437,6 +443,9 @@ function stashHeading(stash, shown) {
       () => act({ type: "flag-stash", id: stash.id, locked: !locked })),
     ...popoverMenu("⋯", `More actions for the stash ${stashName(stash)}`, [
       { text: "Rename", run: () => { renaming = stash.id; render(); } },
+      { text: "Tag all tabs…", title: "Add one tag to every tab in this stash",
+        run: () => tagAdder(h2, `Tag all ${plural(n, "tab")} of ${stashName(stash)}`,
+          t => act({ type: "tag-stash", id: stash.id, tags: [t] }, r => `Tagged ${plural(r.tagged, "tab")} ${t}`)) },
       { text: imported ? "Mark as stashed from open tabs" : "Mark as imported",
         title: "Which source this stash belongs to in the top bar",
         run: () => act({ type: "set-stash-source", id: stash.id, source: imported ? "tabs" : "import" },
@@ -463,7 +472,7 @@ function section(title, count, rows, extraClass = "") {
 }
 
 function renderByStash(out, visible, term) {
-  const filtering = !!(term || filter !== "all" || domainSel.size);
+  const filtering = !!(term || filter !== "all" || domainSel.size || tagSel.size);
   const show = new Set(visible.map(l => l.key));
   let any = false;
   for (const stash of data.stashes) {
@@ -486,6 +495,17 @@ function renderByStash(out, visible, term) {
 function bucketsOf(visible) {
   if (group === "newest") return [["", [...visible].sort(byNewest)]];
   if (group === "oldest") return [["", [...visible].sort(byNewest).reverse()]];
+  if (group === "tag") {
+    // A link shows under each of its tags; one with none set by hand goes under Untagged.
+    const buckets = new Map();
+    for (const l of [...visible].sort(byNewest)) {
+      for (const t of l.tags.length ? l.tags : ["Untagged"]) {
+        if (!buckets.has(t)) buckets.set(t, []);
+        buckets.get(t).push(l);
+      }
+    }
+    return [...buckets.entries()].sort((a, b) => (a[0] === "Untagged") - (b[0] === "Untagged") || b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  }
   if (group === "status") {
     return ["left", "seen", "kept", "dropped"]
       .map(s => [STATE_NAMES[s], visible.filter(l => stateOf(l) === s).sort(byNewest)])
@@ -546,6 +566,37 @@ function renderDomainChips() {
   }
 }
 
+/* Tag toggles, as the domain ones: nothing selected means no narrowing, several mean any of them.
+ * Untagged picks the links with no tag set by hand — the ones still to tag. */
+function renderTagChips() {
+  const box = $("tagchips");
+  box.textContent = "";
+  const counts = new Map();
+  let untagged = 0;
+  for (const l of data.links) {
+    if (!l.tags.length) untagged++;
+    for (const t of shownTags(l).tags) counts.set(t, (counts.get(t) || 0) + 1);
+  }
+  if (!counts.size && !untagged) return;
+  const chip = (id, label, n, node) => {
+    const b = el("button", { className: "chip tagchip" }, node || label, el("span", { className: "n", textContent: n }));
+    b.setAttribute("aria-pressed", String(tagSel.has(id)));
+    b.onclick = () => { tagSel.has(id) ? tagSel.delete(id) : tagSel.add(id); render(); };
+    return b;
+  };
+  box.append(el("span", { className: "rowlabel", textContent: "Tags" }));
+  if (untagged) box.append(chip(UNTAGGED, "Untagged", untagged));
+  const hand = new Set(data.links.flatMap(l => l.tags));
+  for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+    box.append(chip(t, t, n, tagChip(t, !hand.has(t))));
+  }
+  if (tagSel.size) {
+    const clear = el("button", { className: "chip ghost", textContent: "Clear tags" });
+    clear.onclick = () => { tagSel.clear(); render(); };
+    box.append(clear);
+  }
+}
+
 function setFilter(which) {
   filter = which;
   for (const f of FILTERS) $(`f-${f}`).setAttribute("aria-pressed", String(f === which));
@@ -554,6 +605,7 @@ function setFilter(which) {
 function clearFilters() {
   $("q").value = "";
   domainSel.clear();
+  tagSel.clear();
   setFilter("all");
   render();
 }
@@ -562,6 +614,7 @@ function clearFilters() {
 
 function render() {
   renderDomainChips();
+  renderTagChips();
   renderSettings();
   renderDuplicates();
   const term = $("q").value.trim().toLowerCase();
@@ -617,7 +670,45 @@ function render() {
 
 /* --- settings ------------------------------------------------------------------------------ */
 
+/* Every tag set by hand, with how many links carry it. Renaming onto a tag that exists merges the
+ * two; deleting takes it off every link. */
+function renderTagManager() {
+  const list = $("tag-list");
+  list.textContent = "";
+  const counts = new Map();
+  for (const l of data.all.links) for (const t of l.tags) counts.set(t, (counts.get(t) || 0) + 1);
+  if (!counts.size) list.append(el("li", { className: "none", textContent: "None yet. ✎ on any row adds one." }));
+  for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+    const name = el("button", { className: "link", title: "Rename; a name already in use merges the two" }, tagChip(t));
+    name.onclick = () => {
+      const input = el("input", { type: "text", value: t, className: "rename-tag" });
+      input.setAttribute("aria-label", `Rename ${t}`);
+      const done = async save => {
+        if (!input.isConnected) return;
+        const to = input.value.toLowerCase().replace(/\s+/g, " ").trim();
+        if (save && to && to !== t) {
+          const merging = counts.has(to);
+          await act({ type: "rename-tag", from: t, to }, r => `${merging ? "Merged" : "Renamed"} ${t} → ${to} on ${plural(r.links, "link")}`);
+        } else render();
+      };
+      input.addEventListener("keydown", e => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); });
+      input.addEventListener("blur", () => done(true));
+      name.replaceWith(input);
+      input.focus();
+      input.select();
+    };
+    const del = el("button", { className: "small ghost", textContent: "×", title: `Delete ${t} from every link` });
+    del.setAttribute("aria-label", `Delete the tag ${t}`);
+    del.onclick = () => {
+      if (!confirm(`Delete the tag “${t}” from ${plural(n, "link")}? The links stay.`)) return;
+      act({ type: "delete-tag", tag: t }, r => `Deleted ${t} from ${plural(r.links, "link")}`);
+    };
+    list.append(el("li", {}, name, el("span", { className: "n", textContent: n }), del));
+  }
+}
+
 function renderSettings() {
+  renderTagManager();
   for (const r of document.querySelectorAll('input[name="after-stash"]')) r.checked = r.value === settings.afterStash;
   for (const r of document.querySelectorAll('input[name="after-restore"]')) r.checked = r.value === settings.afterRestore;
   const list = $("exclude-list");

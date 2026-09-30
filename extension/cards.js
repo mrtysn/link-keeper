@@ -64,7 +64,32 @@ function toCard(link) {
     reply_links: cap.reply_links || [],
     shotThumb: cap.shotThumb || null,
     code_blocks: cap.code_blocks || 0,
+    link,
   };
+}
+
+/* Deal one tag at a time, as swipe-sort deals one source: similar links are quicker to judge
+ * together. "" is every tag; UNTAGGED the links with none set by hand. */
+const TAG_KEY = "cardsTag";
+const UNTAGGED = "\u0000untagged";
+let dealTag = "";
+try { dealTag = localStorage.getItem(TAG_KEY) || ""; } catch (e) { /* storage blocked: every tag */ }
+const inDeal = l => !dealTag || (dealTag === UNTAGGED ? !l.tags.length : shownTags(l).tags.includes(dealTag));
+
+function renderTagPick(links) {
+  const sel = $("deal-tag");
+  const undecided = links.filter(l => !l.verdict);
+  const counts = new Map();
+  for (const l of undecided) for (const t of shownTags(l).tags) counts.set(t, (counts.get(t) || 0) + 1);
+  sel.textContent = "";
+  sel.append(el("option", { value: "", textContent: `Every tag (${undecided.length})` }));
+  const untagged = undecided.filter(l => !l.tags.length).length;
+  if (untagged) sel.append(el("option", { value: UNTAGGED, textContent: `Untagged (${untagged})` }));
+  for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+    sel.append(el("option", { value: t, textContent: `${t} (${n})` }));
+  }
+  if (dealTag && ![...sel.options].some(o => o.value === dealTag)) sel.append(el("option", { value: dealTag, textContent: `${dealTag === UNTAGGED ? "Untagged" : dealTag} (0)` }));
+  sel.value = dealTag;
 }
 
 let known = 0;
@@ -72,7 +97,8 @@ async function load() {
   const { links } = await loadLinks();
   known = links.length;
   tally = { keep: links.filter(l => l.verdict === "keep").length, drop: links.filter(l => l.verdict === "drop").length };
-  deck = shuffle(links.filter(l => !l.verdict).map(toCard));
+  renderTagPick(links);
+  deck = shuffle(links.filter(l => !l.verdict && inDeal(l)).map(toCard));
   index = 0;
   undo.length = 0;
   render();
@@ -102,6 +128,8 @@ function cardEl(card, top) {
     className: "when", textContent: bits.join(" · "),
   }));
   head.append(mono, names);
+  const chips = tagChips(card.link);
+  if (chips) head.append(chips);
   el.append(head);
 
   el.append(Object.assign(document.createElement("div"), {
@@ -303,17 +331,36 @@ $("later").onclick = () => decide(null);
 $("undo").onclick = undoLast;
 
 document.addEventListener("keydown", e => {
-  if (e.target.matches("input, textarea")) return;
+  if (e.target.matches("input, textarea, select")) return;
   const k = e.key.toLowerCase();
   if (e.key === "ArrowRight" || k === "k") { e.preventDefault(); decide("keep"); }
   else if (e.key === "ArrowLeft" || k === "d") { e.preventDefault(); decide("drop"); }
   else if (e.key === "ArrowUp" || k === "s") { e.preventDefault(); decide(null); }
   else if (k === "u" || (k === "z" && (e.metaKey || e.ctrlKey))) { e.preventDefault(); undoLast(); }
+  else if (k === "t") {
+    const top = $("stage").querySelector(".card.top");
+    if (!deck[index] || !top) return;
+    e.preventDefault();
+    const pop = anchoredPopover(top.querySelector(".head"), tagEditor(deck[index].link, () => {
+      // Redraw the card under the popover with its new tags; the popover stays.
+      const card = $("stage").querySelector(".card.top .head");
+      card?.querySelector(".tags")?.remove();
+      const chips = tagChips(deck[index].link);
+      if (chips && card) card.append(chips);
+    }));
+    pop.classList.add("cards-tagpop");
+  }
   else if (k === "o") {
     const card = deck[index];
     if (card) window.open(card.url, "_blank", "noopener");
   }
 });
+
+$("deal-tag").onchange = () => {
+  dealTag = $("deal-tag").value;
+  try { localStorage.setItem(TAG_KEY, dealTag); } catch (e) { /* not remembered */ }
+  load();
+};
 
 // A change of sources deals a new deck; other changes leave the one in hand alone.
 window.LinkSources.onChange(load);

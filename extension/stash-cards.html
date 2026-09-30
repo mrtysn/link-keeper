@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="nav.css">
+<link rel="stylesheet" href="tags.css">
 <title>Link Keeper — explore</title>
 <style>
   :root {
@@ -129,6 +130,9 @@
   .facts li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .muted { color: var(--dim); font-size: .875rem; margin: 0; }
 
+  .tagrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 0 0; }
+  .tagrow-label { font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
+  .tagrow .tagger { flex: 1 1 20rem; }
   .pvbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
   .pvbar label { display: inline-flex; align-items: center; gap: 6px; font-size: .875rem; cursor: pointer; }
   #pv-frame { display: block; width: 100%; height: 70vh; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }

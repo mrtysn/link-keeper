@@ -229,3 +229,42 @@ await check("Duplicates: every copy of a link gets a checkbox, nothing is ticked
   yes((await getItems()).some(i => i.url === "https://dup.example/x"), "the reading-list copy stays");
   await browser.tabs.remove(tab.id);
 });
+
+await check("Tags: the ✎ editor on a List row saves a tag for the URL, every page shows it, and Group by Tag files it", async () => {
+  const res = await importStashes([{ name: "Tag me", tabs: [{ url: "https://github.com/tagged/repo", title: "A repo" }, { url: "https://tag.example/two" }] }], "text");
+  yes(res.ok, res.error);
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("list.html?group=stash"), active: true });
+  await wait(1500);
+  const view = browser.extension.getViews({ type: "tab" }).find(v => v.location.pathname === "/list.html");
+  const d = view.document;
+  const row = [...d.querySelectorAll("ul.rows.stash > li")].find(li => li.textContent.includes("A repo"));
+  yes(row, "the row is listed");
+  eq(row.querySelector(".tag.guess")?.textContent, "code", "github is guessed as code, dimmed");
+  row.querySelector(".tagedit").click();
+  await wait(200);
+  const input = d.querySelector(".tagpop .tagger input");
+  yes(input, "the editor opens");
+  input.value = "Jam Tools";
+  input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await wait(600);
+  const stored = (await browser.storage.local.get("linkTags")).linkTags || {};
+  eq(stored["github.com/tagged/repo"], ["code", "jam tools"], "the kept guess and the new tag are saved for the URL");
+  input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await wait(800);
+  eq(d.querySelector(".tagpop"), null, "Escape closes the editor");
+
+  d.getElementById("groupby").value = "tag";
+  d.getElementById("groupby").dispatchEvent(new view.Event("change"));
+  await wait(300);
+  const heads = [...d.querySelectorAll(".group > h2 span:first-child")].map(s => s.textContent);
+  yes(heads.includes("jam tools") && heads.includes("code"), "Group by Tag has a section per tag");
+  eq(heads[heads.length - 1], "Untagged", "untagged links come last");
+
+  const t = await tagStash((await getSessions()).find(s => s.name === "Tag me").id, ["from stash"]);
+  eq(t.tagged, 2, "Tag all tabs reaches both tabs");
+  const links = (await getLinks()).links;
+  eq(links.find(l => l.url === "https://tag.example/two").tags, ["from stash"], "an untagged tab gets the stash's tag");
+  d.getElementById("groupby").value = "stash";
+  d.getElementById("groupby").dispatchEvent(new view.Event("change"));
+  await browser.tabs.remove(tab.id);
+});

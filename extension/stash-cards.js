@@ -60,7 +60,7 @@ function applyFilter() {
     const v = c.link.verdict;
     if (filter === "open" && v) return false;
     if ((filter === "keep" || filter === "drop") && v !== filter) return false;
-    return !term || `${titleOf(c) || ""} ${c.link.url} ${c.link.cap?.text || ""}`.toLowerCase().includes(term);
+    return !term || `${titleOf(c) || ""} ${c.link.url} ${c.link.cap?.text || ""} ${shownTags(c.link).tags.join(" ")}`.toLowerCase().includes(term);
   });
 }
 
@@ -104,7 +104,8 @@ function renderSide() {
       side.append(list);
     }
     const title = titleOf(card);
-    const b = el("button", { title: title ? `${title}\n${card.link.url}` : card.link.url },
+    const tagLine = card.link.tags.length ? `\n${card.link.tags.join(", ")}` : "";
+    const b = el("button", { title: (title ? `${title}\n${card.link.url}` : card.link.url) + tagLine },
       srcIcon(card.link.url),
       el("span", { className: `t${title ? "" : " plain"}`, textContent: title || shortUrl(card.link.url) }),
       el("span", { className: "m" }));
@@ -189,13 +190,18 @@ function renderDetail() {
   if (stash?.source === "import") badges.append(el("span", { className: "badge", textContent: "Imported" }));
   if (kind === "other") badges.append(el("span", { className: "badge", textContent: "Opens as a stand-in" }));
   if (badges.childElementCount) pane.append(badges);
+  // Tags edit in place here; t jumps into the field.
+  const tagrow = el("div", { className: "tagrow" }, el("span", { className: "tagrow-label", textContent: "Tags" }), tagEditor(link, () => renderSide()));
+  // Done with the field (Escape, or Enter on it empty): the arrow keys walk the sidebar again.
+  tagrow.addEventListener("tagdone", () => document.activeElement?.blur());
+  pane.append(tagrow);
   pane.append(el("p", { id: "msg", role: "status" }));
 
   pane.append(knownBox(card), previewBox(card));
   pane.append(el("p", { className: "keys" }, el("kbd", { textContent: "↑" }), " ", el("kbd", { textContent: "↓" }),
     " move · ", el("kbd", { textContent: "o" }), " open · ", el("kbd", { textContent: "k" }), " keep · ",
     el("kbd", { textContent: "d" }), " drop · ", el("kbd", { textContent: "l" }), " to list · ",
-    el("kbd", { textContent: "r" }), " read · ", el("kbd", { textContent: "p" }), " preview on/off · ",
+    el("kbd", { textContent: "r" }), " read · ", el("kbd", { textContent: "t" }), " tags · ", el("kbd", { textContent: "p" }), " preview on/off · ",
     el("kbd", { textContent: "/" }), " filter"));
 }
 
@@ -367,6 +373,7 @@ addEventListener("keydown", e => {
     ArrowDown: () => step(1), ArrowUp: () => step(-1), k: () => card && judge(card, "keep"),
     d: () => card && judge(card, "drop"), o: () => card && openNow(card), l: () => card && toList(card),
     r: () => card && readNow(card, null), p: () => setPreview(!previewOn), "/": () => $("q").focus(),
+    t: () => document.querySelector("#detail .tagger input")?.focus(),
   };
   const run = acts[e.key];
   if (run) { e.preventDefault(); run(); }

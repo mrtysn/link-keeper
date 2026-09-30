@@ -56,6 +56,7 @@ async function loadLinks() {
   const on = new Set(sources);
   const links = data.links.filter(l => l.sources.some(s => on.has(s)));
   const stashes = data.stashes.filter(s => on.has(s.source));
+  setTagVocab(data.links);
   return { links, stashes, all: data, sources: on, byKey: new Map(data.links.map(l => [l.key, l])) };
 }
 
@@ -64,12 +65,14 @@ async function loadLinks() {
  * a rename would lose its input to a re-render, and a drag its row. */
 function reloadOnChanges(load, busy = () => false) {
   let timer = null;
+  // Typing tags saves as it goes; a reload then would take the field away mid-word.
+  const editing = () => !!document.activeElement?.closest?.(".tagger, .tagpop");
   const soon = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => (busy() ? soon() : load()), 150);
+    timer = setTimeout(() => (busy() || editing() ? soon() : load()), 150);
   };
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs"].some(k => changes[k])) soon();
+    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags"].some(k => changes[k])) soon();
   });
   for (const ev of ["onCreated", "onRemoved", "onChanged", "onMoved"]) browser.bookmarks?.[ev].addListener(soon);
   window.LinkSources.onChange(load);
@@ -128,4 +131,218 @@ async function readLink(url) {
   const granted = await browser.permissions.request({ origins: [origin] }).catch(() => false);
   if (!granted) return { ok: false, error: `Reading it needs access to ${hostOf(url)}` };
   return send({ type: "capture-url", url });
+}
+
+/* --- tags ------------------------------------------------------------------------------
+ * A link's tags are set by hand and shared by every copy of it. Until it has any, what kind of
+ * site it is ("code", "video", …) shows in their place, dimmed. The editor is swipe-sort's: chips,
+ * suggestions from the tags in use, and every change saved at once. */
+
+/* What a link shows: its own tags, or the guesses, flagged as such. */
+const shownTags = link => (link.tags?.length ? { tags: link.tags, guessed: false } : { tags: link.kinds || [], guessed: true });
+
+/* The tags in use, most used first, then the kinds of site — the pool suggestions come from. */
+const TAG_VOCAB = { names: [], counts: new Map() };
+function setTagVocab(links) {
+  const counts = new Map();
+  for (const l of links) for (const t of l.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
+  TAG_VOCAB.counts = counts;
+  const kinds = [...new Set(links.flatMap(l => l.kinds || []))].filter(k => !counts.has(k));
+  TAG_VOCAB.names = [...[...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([t]) => t), ...kinds];
+}
+
+/* One stable colour per tag, so the same tag always looks the same. */
+function tagHue(tag) {
+  let h = 0;
+  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) % 360;
+  return h;
+}
+function tagChip(tag, guessed = false) {
+  const chip = el("span", { className: `tag${guessed ? " guess" : ""}`, textContent: tag,
+    title: guessed ? `Guessed from the kind of site; set a tag to replace it` : tag });
+  if (!guessed) chip.style.setProperty("--h", tagHue(tag));
+  return chip;
+}
+function tagChips(link) {
+  const { tags, guessed } = shownTags(link);
+  return tags.length ? el("span", { className: "tags" }, ...tags.map(t => tagChip(t, guessed))) : null;
+}
+
+/* Suggestions under a field, matched with spaces and punctuation ignored, so "gamejam" finds
+ * "game jam". ↑↓ choose, Enter or Tab takes the highlighted one, Escape closes. Enter takes a
+ * suggestion only when it begins with what was typed, so a new tag can still be typed. */
+function suggestField(input, exclude = () => []) {
+  const flat = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const list = el("div", { className: "suggestlist", hidden: true });
+  let items = [], at = -1;
+  const place = () => {
+    const r = input.getBoundingClientRect();
+    Object.assign(list.style, { top: `${r.bottom + 2}px`, left: `${r.left}px`, minWidth: `${r.width}px` });
+  };
+  const draw = () => {
+    list.textContent = "";
+    items.forEach((name, i) => {
+      const row = el("div", { textContent: name, className: i === at ? "on" : "" });
+      const n = TAG_VOCAB.counts.get(name);
+      if (n) row.append(el("i", { textContent: n }));
+      row.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); pick(i); });
+      list.append(row);
+    });
+    list.hidden = !items.length;
+    if (items.length) place();
+  };
+  const update = () => {
+    const q = flat(input.value);
+    if (!q) { items = []; draw(); return; }
+    const skip = new Set(exclude());
+    const hits = TAG_VOCAB.names.filter(n => !skip.has(n) && flat(n).includes(q));
+    items = [...hits.filter(n => flat(n).startsWith(q)), ...hits.filter(n => !flat(n).startsWith(q))].slice(0, 8);
+    at = items.length && flat(items[0]).startsWith(q) ? 0 : -1;
+    draw();
+  };
+  // A click takes the name as Enter would.
+  const pick = i => {
+    input.value = items[i];
+    items = [];
+    draw();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  };
+  document.body.append(list);
+  input.setAttribute("autocomplete", "off");
+  input.addEventListener("input", update);
+  input.addEventListener("blur", () => { items = []; draw(); });
+  // Registered first, so a picked value is in the field before the field's own Enter handler reads it.
+  input.addEventListener("keydown", e => {
+    if (list.hidden) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      at = (Math.max(at, e.key === "ArrowDown" ? -1 : 0) + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length;
+      draw();
+    } else if ((e.key === "Enter" || e.key === "Tab") && at >= 0) {
+      if (e.key === "Tab") e.preventDefault();
+      input.value = items[at];
+      items = [];
+      draw();
+    } else if (e.key === "Escape") {
+      e.stopPropagation();
+      items = [];
+      draw();
+    }
+  });
+  // The field can leave the page (a card thrown, a popover closed); its list goes with it.
+  new MutationObserver((_, obs) => { if (!input.isConnected) { list.remove(); obs.disconnect(); } })
+    .observe(document.body, { childList: true, subtree: true });
+}
+
+/* The editor for one link's tags. Guesses start as dimmed chips; the first change saves what is
+ * shown, so a guess that is kept becomes a tag, and removing every tag brings the guesses back.
+ * Enter on the empty field or Escape is "done": the box fires "tagdone". onSaved(tags) follows a
+ * save; link.tags is updated in place. */
+function tagEditor(link, onSaved) {
+  const start = shownTags(link);
+  let tags = start.tags.slice();
+  let guessed = start.guessed && tags.length > 0;
+  const chips = el("span", { className: "chips" });
+  const input = el("input", { type: "text", placeholder: tags.length ? "add a tag" : "add a tag, Enter" });
+  input.setAttribute("aria-label", "Add a tag");
+  suggestField(input, () => tags);
+  const status = el("span", { className: "tagstatus" });
+  const box = el("div", { className: "tagger" }, chips, input, status);
+
+  const mark = () => {
+    status.textContent = guessed ? "guessed from the site — any change makes them yours" : "";
+    status.classList.remove("bad");
+  };
+  const draw = () => {
+    chips.textContent = "";
+    for (const t of tags) {
+      const chip = tagChip(t, guessed);
+      const x = el("button", { type: "button", textContent: "×", title: `Remove ${t}` });
+      x.onclick = () => { tags = tags.filter(m => m !== t); save(); };
+      chip.append(x);
+      chips.append(chip);
+    }
+    mark();
+  };
+  async function save() {
+    const res = await send({ type: "set-tags", url: link.url, tags });
+    if (!res?.ok) {
+      status.textContent = `not saved — ${res?.error || "no answer"}`;
+      status.classList.add("bad");
+      return;
+    }
+    link.tags = res.tags;
+    link.guessed = res.tags.length ? [] : link.kinds || [];
+    const now = shownTags(link);
+    tags = now.tags.slice();
+    guessed = now.guessed && tags.length > 0;
+    draw();
+    onSaved?.(res.tags);
+  }
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const t = input.value.toLowerCase().replace(/\s+/g, " ").trim();
+      input.value = "";
+      if (!t) { box.dispatchEvent(new CustomEvent("tagdone", { bubbles: true })); return; }
+      if (!tags.includes(t) || guessed) { if (!tags.includes(t)) tags.push(t); save(); }
+    } else if (e.key === "Backspace" && !input.value && tags.length) {
+      tags.pop();
+      save();
+    } else if (e.key === "Escape") {
+      box.dispatchEvent(new CustomEvent("tagdone", { bubbles: true }));
+    }
+  });
+  // Keys typed here are text, not the page's shortcuts.
+  box.addEventListener("keydown", e => e.stopPropagation());
+  draw();
+  return box;
+}
+
+/* A popover anchored under `anchor` holding `content`; closes on Escape, a click outside, or a
+ * "tagdone" from inside, and hands the keyboard back to the page. */
+function anchoredPopover(anchor, content) {
+  document.querySelector(".tagpop")?.remove();
+  const pop = el("div", { className: "tagpop" }, content);
+  document.body.append(pop);
+  const r = anchor.getBoundingClientRect();
+  pop.style.top = `${Math.min(r.bottom + 6, innerHeight - pop.offsetHeight - 8)}px`;
+  pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
+  const close = () => {
+    pop.remove();
+    document.removeEventListener("pointerdown", outside, true);
+    document.activeElement?.blur?.();
+  };
+  const outside = ev => { if (!pop.contains(ev.target) && !ev.target.closest?.(".suggestlist")) close(); };
+  pop.addEventListener("tagdone", close);
+  pop.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+  document.addEventListener("pointerdown", outside, true);
+  pop.querySelector("input")?.focus();
+  return pop;
+}
+
+/* The ✎ that opens a link's editor in a popover. */
+function tagButton(link, onSaved) {
+  const btn = el("button", { type: "button", className: "small ghost tagedit", textContent: "✎", title: "Tags" });
+  btn.setAttribute("aria-label", `Tags for ${labelOf(link) || shortUrl(link.url)}`.slice(0, 120));
+  btn.onclick = e => { e.stopPropagation(); anchoredPopover(btn, tagEditor(link, onSaved)); };
+  btn.addEventListener("pointerdown", e => e.stopPropagation());   // not the start of a drag
+  return btn;
+}
+
+/* One field that adds a tag to many links at once (a whole stash): onAdd(tag) on Enter. */
+function tagAdder(anchor, label, onAdd) {
+  const input = el("input", { type: "text", placeholder: "tag to add, Enter" });
+  input.setAttribute("aria-label", label);
+  suggestField(input);
+  const box = el("div", { className: "tagger adder" }, el("span", { className: "tagstatus", textContent: label }), input);
+  input.addEventListener("keydown", async e => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const t = input.value.toLowerCase().replace(/\s+/g, " ").trim();
+    if (t) await onAdd(t);
+    box.dispatchEvent(new CustomEvent("tagdone", { bubbles: true }));
+  });
+  box.addEventListener("keydown", e => e.stopPropagation());
+  anchoredPopover(anchor, box);
 }

@@ -6,6 +6,9 @@
   const params = new URLSearchParams(location.search);
 
   const storageListeners = new Set();
+  // Tags set by hand, keyed like the link; a few to start with so the chips and filters show.
+  const mockTags = params.has("notags") ? {} : {};
+  let tagsSeeded = params.has("notags");
   const store = {
     ...(params.has("sources") && { viewSources: params.get("sources").split(",").filter(Boolean) }),
     popupUi: params.has("msg")
@@ -102,7 +105,17 @@
               links: r.cap.links, reply_links: r.cap.reply_links, images: r.cap.images, verdict: r.cap.verdict || undefined,
               captured_at: "2026-09-20T10:00:00Z",
             }));
-            return joinLinks({ items, captures, sessions: mockSessions(), currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
+            if (!tagsSeeded) {
+              tagsSeeded = true;
+              M.dump.items.slice(0, 9).forEach((r, i) => { mockTags[keyOf(r.url)] = [["ai tools", "game dev"], ["ai tools"], ["game dev", "to try"]][i % 3]; });
+            }
+            return joinLinks({ items, captures, sessions: mockSessions(), tags: mockTags,
+              currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
+          }
+          case "set-tags": {
+            const tags = [...new Set((msg.tags || []).map(t => String(t).toLowerCase().trim()).filter(Boolean))];
+            if (tags.length) mockTags[keyOf(msg.url)] = tags; else delete mockTags[keyOf(msg.url)];
+            return { ok: true, tags };
           }
           case "import-stashes": {
             // Writes one bookmark every 10 ms, as Firefox reports them, so the progress shows.

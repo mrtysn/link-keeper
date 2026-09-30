@@ -128,6 +128,29 @@ every copy — its capture, its reading-list entry (kept or skipped) and each st
 them all. Nothing is merged or deleted underneath: a stash keeps its bookmarks and the list its
 entries.
 
+### Tags
+
+A tag belongs to a link — the URL wherever it is held — so tagging it on List shows on its Explore
+and Cards copies too. Until a link has tags of its own, what kind of site it is shows in their place,
+dashed: `code` (GitHub, GitLab…), `video`, `post`, `discussion`, `game`, `paper`, `doc`, `article`,
+`local file`. Guesses are never saved; the first change in the editor makes the shown tags yours,
+and removing every tag brings the guess back.
+
+- **✎** on any List row opens the editor (swipe-sort's): chips, a field that suggests tags already in
+  use — most used first, spaces and punctuation ignored, so `gamejam` finds *game jam* — Enter to
+  add, Backspace to take the last one off, Escape or Enter on the empty field when done. Every
+  change is saved at once. Explore has the editor in its detail pane (`t` jumps into it), and `t` on
+  Cards opens it over the card.
+- A stash heading's **⋯ → Tag all tabs…** adds one tag to every tab in it.
+- List has a row of tag chips — any of them, or **Untagged** for the links with none of their own —
+  and **Group by Tag**, where a link shows under each of its tags. Cards deals one tag at a time.
+- **Settings → Tags** lists every tag with its count: click one to rename it (a name already in use
+  merges the two), × to delete it from every link.
+
+Firefox gives extensions no access to bookmark tags, so tags live in the add-on's storage
+(`linkTags`), and travel in both exports — each stashed tab and each capture carries its tags — and
+come back with an import.
+
 ### Cards — judging
 
 Open *Cards* and go through every undecided link in the chosen sources as a shuffled deck. Right

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="nav.css">
+<link rel="stylesheet" href="tags.css">
 <title>Link Keeper — cards</title>
 <style>
   :root {
@@ -125,6 +126,12 @@
   }
   .done b { display: block; color: var(--ink); font-size: 1.1rem; margin-bottom: .3rem; }
   .done a { color: var(--accent); }
+  #deal-tag {
+    margin-left: auto; max-width: 14rem; min-height: 30px; padding: 3px 8px; font: inherit; font-size: .8125rem;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .card .head .tags { margin-left: auto; justify-content: flex-end; max-width: 45%; }
   #msg { text-align: center; color: var(--dim); font-size: .8rem; min-height: 1.1rem; margin-top: .6rem; }
 </style>
 </head>
@@ -133,6 +140,8 @@
 <div class="wrap">
   <header>
     <h1>Judge the undecided</h1>
+    <label class="sr-only" for="deal-tag">Deal one tag</label>
+    <select id="deal-tag" title="Deal one tag at a time"></select>
   </header>
 
   <div class="meter"><i id="bar"></i></div>
@@ -153,7 +162,7 @@
   </div>
   <p class="keys">
     Drag the card, or <kbd>←</kbd> drop · <kbd>→</kbd> keep · <kbd>↑</kbd> later ·
-    <kbd>o</kbd> open · <kbd>u</kbd> undo
+    <kbd>o</kbd> open · <kbd>t</kbd> tags · <kbd>u</kbd> undo
   </p>
   <div id="msg"></div>
 </div>

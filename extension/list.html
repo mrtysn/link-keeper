@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="nav.css">
+<link rel="stylesheet" href="tags.css">
 <title>Link Keeper — list</title>
 <style>
   :root {
@@ -260,6 +261,20 @@
   }
   .panel code, .panel em { font-size: .8125rem; }
 
+  /* tags */
+  .domains .rowlabel { align-self: center; margin-right: 2px; color: var(--dim); font-size: .8125rem; }
+  .domains#tagchips { margin-top: 8px; }
+  .chip.tagchip .tag { background: none; padding: 0; }
+  .chip.tagchip .tag.guess { border: 0; }
+  .meta .tagedit { min-height: 22px; padding: 0 6px; }
+  ul.tag-list li { gap: 6px; }
+  ul.tag-list .n { color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+  ul.exclude.tag-list li button.link { width: auto; margin-left: 0; min-height: 0; padding: 0; border: 0; background: none; cursor: text; }
+  .rename-tag {
+    min-width: 0; flex: 1 1 8rem; min-height: 28px; padding: 2px 8px; font: inherit; font-size: .8125rem;
+    color: var(--ink); background: var(--bg); border: 1px solid var(--field); border-radius: 6px;
+  }
+
   /* duplicates */
   #dups-list { display: grid; gap: 10px; margin-top: 12px; }
   #dups-list .none { color: var(--dim); }
@@ -312,6 +327,7 @@
       <select id="groupby">
         <option value="stash">Stash</option>
         <option value="domain">Domain</option>
+        <option value="tag">Tag</option>
         <option value="status">State</option>
         <option value="day">Day</option>
         <option value="month">Month</option>
@@ -363,6 +379,10 @@
         <label><input type="radio" name="after-restore" value="remove"> <span>Take them out of the stash <span class="hint">(locked stashes keep theirs)</span></span></label>
       </fieldset>
       <fieldset>
+        <legend>Tags</legend>
+        <ul id="tag-list" class="exclude tag-list"></ul>
+      </fieldset>
+      <fieldset>
         <legend>Never stash these sites</legend>
         <ul id="exclude-list" class="exclude"></ul>
         <form id="exclude-form" class="row">
@@ -375,6 +395,7 @@
 
   <p id="msg" role="status"></p>
   <div class="domains" id="domains" role="group" aria-label="Domains, none selected shows all"></div>
+  <div class="domains" id="tagchips" role="group" aria-label="Tags, none selected shows all"></div>
   <div id="out"></div>
 </div>
 <script src="icons.js"></script>
