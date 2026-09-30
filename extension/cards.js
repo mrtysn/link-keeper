@@ -331,7 +331,7 @@ $("later").onclick = () => decide(null);
 $("undo").onclick = undoLast;
 
 document.addEventListener("keydown", e => {
-  if (e.target.matches("input, textarea, select")) return;
+  if (e.target.matches?.("input, textarea, select")) return;
   const k = e.key.toLowerCase();
   if (e.key === "ArrowRight" || k === "k") { e.preventDefault(); decide("keep"); }
   else if (e.key === "ArrowLeft" || k === "d") { e.preventDefault(); decide("drop"); }

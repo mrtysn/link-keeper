@@ -233,8 +233,8 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
   stash under **Imports**, its heading marked *Imported · OneTab* and so on. Capture JSONL goes to the
   reading list instead. It says which format it took the input for before anything is written.
 - A stash's **⋯** menu holds Rename, Delete…, and **Mark as imported** / **Mark as stashed from open
-  tabs**, which moves it between the two sources. Stashes imported before 5.14 were not marked, so
-  they sit under Stashed tabs until marked by hand.
+  tabs**, which moves it between the two sources. Stashes imported before 5.14 were not marked;
+  the one known import of that time is marked by a data patch (below), any other by hand.
 
 **Explore** shows every link in the chosen sources in a sidebar — everything, one stash, or the
 reading list; stashes in the order they were stashed, then the reading list — with a filter and
@@ -524,6 +524,13 @@ than a watcher.
 - The background script is an MV3 event page and is suspended when idle. The list, the
   captures and your position all live in `storage.local` for that reason, so nothing is lost
   when Firefox puts it to sleep.
+- **Data patches.** A fix to data already stored ships as an entry in `DATA_PATCHES`
+  (`extension/background.js`). Each runs on the first launch of the version that brings it and is
+  recorded in `dataPatches` in the add-on's storage, so it never runs twice — even if the data it
+  touched changes later. A patch acts only when its fingerprint matches exactly, and otherwise
+  records why it skipped; one that fails is retried next launch. The first marks the 29 Sep 2026
+  OneTab import (8 stashes written within ten seconds, identified by that window and their tab
+  counts) as an import.
 - There is no bulk clear or reset: links, captures and stashes go one at a time (or the copies
   ticked in Duplicates), each after a confirm where it cannot be undone.
 - Article bodies are read with `innerText`, not `textContent`, so paragraph breaks and code

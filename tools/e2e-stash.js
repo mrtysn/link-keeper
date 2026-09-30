@@ -55,7 +55,8 @@ await check("a whole window of 40 tabs becomes one folder of bookmarks, and ever
   const [s] = await getSessions();
   eq(s.tabs.map(t => t.url), urls.slice(1), "every unpinned tab, in order");
   const left = await browser.tabs.query({ windowId: win });
-  eq(left.map(t => t.url).sort(), [url(0), browser.runtime.getURL("list.html?group=stash")].sort(), "pinned tab and the List page, grouped by stash, stay");
+  // List takes up ?group=stash and then drops it from its address, so either form is the List page.
+  eq(left.map(t => t.url.replace("?group=stash", "")).sort(), [url(0), browser.runtime.getURL("list.html")].sort(), "pinned tab and the List page stay");
   await browser.windows.remove(win);
 });
 
@@ -305,4 +306,120 @@ await check("List's Import adds pasted links to the reading list with their date
   eq(items.find(i => i.url === "https://dated.example/a")?.saved_at, "2024-03-05T00:00:00.000Z", "the date is kept");
   yes(items.some(i => i.url === "https://dated.example/b"), "the undated one is added too");
   await browser.tabs.remove(tab.id);
+});
+
+const viewOf = page => browser.extension.getViews({ type: "tab" }).find(v => v.location.pathname === `/${page}`);
+
+await check("right-click Stash menu: each scope stashes what it names, relative to the tab clicked", async () => {
+  const urls = Array.from({ length: 6 }, (_, i) => url(300 + i));
+  const win = await windowOf(urls);
+  const tabs = await browser.tabs.query({ windowId: win });
+  await onMenuClicked({ menuItemId: "stash:tab:right" }, tabs[3]);
+  eq((await getSessions())[0].tabs.map(t => t.url), [url(304), url(305)], "Tabs to the right of the clicked tab");
+  await onMenuClicked({ menuItemId: "stash:page:tab" }, tabs[1]);
+  eq((await getSessions())[0].tabs.map(t => t.url), [url(301)], "Only this tab");
+  await onMenuClicked({ menuItemId: "stash:tab:left" }, tabs[3]);
+  eq((await getSessions())[0].tabs.map(t => t.url), [url(300), url(302)], "Tabs to the left, without the ones already gone");
+  const left = (await browser.tabs.query({ windowId: win })).map(t => t.url).filter(u => u.startsWith("http"));
+  eq(left, [url(303)], "the clicked tab stays");
+  await onMenuClicked({ menuItemId: "stash:page:exclude" }, { url: "https://never.example/x", windowId: win });
+  yes((await getStashSettings()).exclude.includes("never.example"), "Never stash this site adds it");
+  await onMenuClicked({ menuItemId: "stash:page:exclude" }, { url: "https://never.example/x", windowId: win });
+  yes(!(await getStashSettings()).exclude.includes("never.example"), "and pressing it again takes it off");
+  await browser.windows.remove(win);
+});
+
+await check("List: dragging a row onto a row of another stash moves the bookmark there, ahead of it", async () => {
+  const res = await importStashes([
+    { name: "Drag A", tabs: ["a1", "a2", "a3"].map(n => ({ url: `https://${n}.drag.example/`, title: `row ${n}` })) },
+    { name: "Drag B", tabs: [{ url: "https://b1.drag.example/", title: "row b1" }] },
+  ], "text");
+  yes(res.ok, res.error);
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("list.html?group=stash"), active: true });
+  await wait(1500);
+  const view = viewOf("list.html"), d = view.document;
+  const row = text => [...d.querySelectorAll("ul.rows.stash > li")].find(li => li.querySelector(".ttl")?.textContent === text);
+  const from = row("row a2"), onto = row("row b1");
+  yes(from && onto, "both rows listed");
+  eq(from.draggable, true, "an unlocked stash's row drags");
+  const dt = new view.DataTransfer();
+  const drag = (type, node, y) => node.dispatchEvent(new view.DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientY: y }));
+  const top = onto.getBoundingClientRect().top + 2;
+  drag("dragstart", from, 0);
+  drag("dragover", onto, top);
+  yes(onto.classList.contains("drop-before"), "the drop spot is marked");
+  drag("drop", onto, top);
+  await wait(1000);
+  const s = await getSessions();
+  eq(s.find(x => x.name === "Drag B").tabs.map(t => t.title), ["row a2", "row b1"], "moved into B, ahead of b1");
+  eq(s.find(x => x.name === "Drag A").tabs.map(t => t.title), ["row a1", "row a3"], "and out of A");
+  await browser.tabs.remove(tab.id);
+});
+
+await check("popup: the Stash ▾ scopes stash what they say from the popup", async () => {
+  const win = await windowOf([url(400), url(401)]);
+  const popup = await browser.tabs.create({ windowId: win, url: browser.runtime.getURL("popup.html"), active: true });
+  await browser.windows.update(win, { focused: true });
+  await wait(1200);
+  const d = viewOf("popup.html").document;
+  d.getElementById("stash-more").click();
+  d.querySelector('#stash-menu [data-scope="left"]').click();
+  await wait(1500);
+  eq((await getSessions())[0].tabs.map(t => t.url), [url(400), url(401)], "Tabs to the left of the popup's tab");
+  await browser.tabs.remove(popup.id).catch(() => {});
+  await browser.windows.remove(win).catch(() => {});
+});
+
+await check("Cards: t opens the tag editor over the card; a tag typed there is saved for that link", async () => {
+  await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("cards.html"), active: true });
+  await wait(1500);
+  const view = viewOf("cards.html"), d = view.document;
+  const cardUrl = d.querySelector(".card.top .open")?.href;
+  yes(cardUrl, "a card is dealt");
+  d.body.dispatchEvent(new view.KeyboardEvent("keydown", { key: "t", bubbles: true }));
+  await wait(200);
+  const input = d.querySelector(".tagpop .tagger input");
+  yes(input, "the editor opens");
+  input.value = "from cards";
+  input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await wait(600);
+  const link = (await getLinks()).links.find(l => l.url === cardUrl || l.key === keyOf(cardUrl));
+  yes(link?.tags.includes("from cards"), `saved for the card's link: ${JSON.stringify(link?.tags)}`);
+  yes(d.querySelector(".card.top .tags")?.textContent.includes("from cards"), "the card shows it at once");
+  input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await wait(200);
+  eq(d.querySelector(".tagpop"), null, "Escape closes it");
+  await browser.tabs.remove(tab.id);
+});
+
+await check("Settings: renaming a tag onto another merges them on every link", async () => {
+  await setTags("https://merge.example/1", ["mergeme"]);
+  await setTags("https://merge.example/2", ["target", "mergeme"]);
+  await addItems([{ url: "https://merge.example/1" }, { url: "https://merge.example/2" }]);
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("list.html"), active: true });
+  await wait(1500);
+  const view = viewOf("list.html"), d = view.document;
+  d.getElementById("settings").click();
+  const chip = [...d.querySelectorAll("#tag-list button.link")].find(b => b.textContent === "mergeme");
+  yes(chip, "the tag is listed");
+  chip.click();
+  const input = d.querySelector("#tag-list input.rename-tag");
+  input.value = "target";
+  input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await wait(800);
+  const tags = (await browser.storage.local.get("linkTags")).linkTags;
+  eq([tags["merge.example/1"], tags["merge.example/2"]], [["target"], ["target"]], "merged, with no repeat");
+  yes(/Merged mergeme → target on 2 links/.test(d.getElementById("msg").textContent), "and it says so");
+  await browser.tabs.remove(tab.id);
+});
+
+await check("data patches run once and are recorded; a fingerprint not found here changes nothing", async () => {
+  const before = (await getSessions()).map(s => [s.id, s.source]);
+  const done = await applyDataPatches();
+  const rec = done["2026-09-29-mark-onetab-import"];
+  yes(rec?.at, "recorded with when it ran");
+  yes(/folders in the window/.test(rec.skipped || ""), `skipped here: ${JSON.stringify(rec)}`);
+  eq((await getSessions()).map(s => [s.id, s.source]), before, "no stash changed");
+  eq((await browser.storage.local.get("dataPatches")).dataPatches["2026-09-29-mark-onetab-import"].at, rec.at, "stored");
 });
