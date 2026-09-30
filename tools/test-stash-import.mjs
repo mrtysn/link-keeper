@@ -101,6 +101,19 @@ check("freeform text: every URL in it, once, without trailing punctuation", () =
   assert.deepEqual(r.stashes[0].tabs.map(t => t.url), ["https://a.example/post", "https://b.example/q?x=1", "about:preferences"]);
 });
 
+check("capture JSONL goes to the reading list, a bad line skipped, U+2028 inside text kept", () => {
+  const r = parse([
+    JSON.stringify({ url: "https://x.com/a/status/1", text: "one\u2028two" }),
+    "{not json",
+    JSON.stringify({ url: "https://b.example/", title: "B" }),
+  ].join("\n"));
+  assert.equal(r.format, "captures");
+  assert.deepEqual(r.stashes, []);
+  assert.equal(r.records.length, 2);
+  assert.equal(r.records[0].text, "one\u2028two");
+  assert.equal(r.skipped, 1);
+});
+
 check("empty or URL-less input reads as nothing", () => {
   assert.deepEqual(parse("   ").stashes, []);
   assert.deepEqual(parse("no links here at all").stashes, []);

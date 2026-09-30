@@ -1,17 +1,12 @@
-/* A shuffled deck of everything you have read but not yet judged.
+/* A shuffled deck of every undecided link in the sources chosen in the top bar.
  *
- * The deck runs over *captures*, never over bare URLs. A card has to be judgeable, and
- * `x.com/i/status/2086188444317819246` tells you nothing — the whole reason this extension exists
- * is that the URL is opaque and only the page has the content. So reading comes first (walk the
- * list, Keep as you go, which is an ingest and not a verdict) and the deck comes after, when every
- * card carries an author, a title, text, images and a screenshot.
+ * A card shows what is known: a page that was read carries its author, title, text, images and
+ * screenshot; a stashed tab never read shows its tab title and address. Reading first (Read on the
+ * List or Explore page) makes a card easier to judge.
  *
- * Keep and drop are verdicts on the capture. Neither deletes anything: a drop is a flag, so a
- * change of mind costs one click in the list.
+ * Keep and drop are one verdict per URL, written to every copy — capture, reading-list entry and
+ * each stash. Neither deletes anything: a drop is a flag, so a change of mind costs one click.
  */
-
-const $ = id => document.getElementById(id);
-const send = msg => browser.runtime.sendMessage(msg);
 
 const THRESHOLD = 105;
 
@@ -21,13 +16,6 @@ let tally = { keep: 0, drop: 0 };
 const undo = [];
 
 function say(text) { $("msg").textContent = text; }
-
-function hostOf(url) {
-  try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ""); }
-  catch (e) { return "(unparseable)"; }
-}
-
-function shortUrl(url) { return String(url).replace(/^https?:\/\/(www\.)?/, ""); }
 
 /* Stable hue per domain, so the same site always wears the same colour. */
 function hue(str) {
@@ -60,11 +48,33 @@ function shuffle(list) {
   return out;
 }
 
+function toCard(link) {
+  const cap = link.cap || {};
+  return {
+    url: link.url,
+    kind: cap.kind || null,
+    title: cap.title || link.title || null,
+    handle: cap.handle || null,
+    name: cap.name || null,
+    text: cap.text || null,
+    note: cap.note || link.list?.note || null,
+    saved_at: link.date || null,
+    images: cap.images || [],
+    links: cap.links || [],
+    reply_links: cap.reply_links || [],
+    shotThumb: cap.shotThumb || null,
+    code_blocks: cap.code_blocks || 0,
+  };
+}
+
+let known = 0;
 async function load() {
-  const res = await send({ type: "deck" });
-  tally = { keep: res.keep || 0, drop: res.drop || 0 };
-  deck = shuffle(res.cards || []);
+  const { links } = await loadLinks();
+  known = links.length;
+  tally = { keep: links.filter(l => l.verdict === "keep").length, drop: links.filter(l => l.verdict === "drop").length };
+  deck = shuffle(links.filter(l => !l.verdict).map(toCard));
   index = 0;
+  undo.length = 0;
   render();
 }
 
@@ -184,14 +194,13 @@ function render() {
   stage.textContent = "";
 
   if (left <= 0) {
-    const box = document.createElement("div");
-    box.className = "done";
-    box.innerHTML = total
-      ? '<b>Deck finished.</b>Read some more links, then come back — or see <a href="list.html">the whole list</a>.'
-      : '<b>Nothing captured yet to judge.</b>Cards need a page\'s content to be judgeable at all. '
-        + 'Walk your list with <kbd>⌃⇧J</kbd> and press <kbd>⌃⇧K</kbd> on anything worth reading, '
-        + 'then come back. <a href="list.html">The whole list →</a>';
-    stage.append(box);
+    const [head, rest] = total
+      ? ["Deck finished.", "Everything undecided in the chosen sources has been through the deck. "]
+      : known
+        ? ["Nothing undecided.", "Every link in the chosen sources already has a verdict. "]
+        : ["Nothing to judge.", "Choose a source with links in it in the bar at the top, or stash some tabs. "];
+    stage.append(el("div", { className: "done" }, el("b", { textContent: head }), rest,
+      el("a", { href: "list.html", textContent: "The whole list →" })));
     return;
   }
 
@@ -213,7 +222,7 @@ async function commit(card, verdict, el, xdir = 0, ydir = 0) {
   undo.push({ url: card.url, verdict });
   if (verdict) {
     tally[verdict]++;
-    await send({ type: "judge", url: card.url, verdict });
+    await send({ type: "judge-link", url: card.url, verdict });
   }
   index++;
   if (el) {
@@ -240,7 +249,7 @@ async function undoLast() {
   index = Math.max(0, index - 1);
   if (last.verdict) {
     tally[last.verdict] = Math.max(0, tally[last.verdict] - 1);
-    await send({ type: "judge", url: last.url, verdict: null });
+    await send({ type: "judge-link", url: last.url, verdict: null });
   }
   render();
 }
@@ -306,4 +315,6 @@ document.addEventListener("keydown", e => {
   }
 });
 
+// A change of sources deals a new deck; other changes leave the one in hand alone.
+window.LinkSources.onChange(load);
 load();

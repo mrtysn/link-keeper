@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="nav.css">
-<title>Link Keeper — explore stashed tabs</title>
+<title>Link Keeper — explore</title>
 <style>
   :root {
     /* Measured in WCAG 2 and APCA on every ground these pages use. WCAG overrates light text on a
@@ -97,7 +97,10 @@
   .where { font-weight: 650; }
   .when { color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
   .pos { margin-left: auto; white-space: nowrap; color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
-  .dtitle { margin: 14px 0 6px; font-size: 1.5rem; line-height: 1.25; letter-spacing: -.015em; overflow-wrap: anywhere; text-wrap: pretty; }
+  .dtitle {
+    margin: 14px 0 6px; font-size: 1.5rem; line-height: 1.25; letter-spacing: -.015em; overflow-wrap: anywhere; text-wrap: pretty;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+  }
   .dtitle.plain { font: 1.05rem/1.5 ui-monospace, Menlo, monospace; }
   .durl { font: .8125rem/1.5 ui-monospace, Menlo, monospace; color: var(--dim); overflow-wrap: anywhere; user-select: all; }
   .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
@@ -154,8 +157,8 @@
 <body>
 <script src="nav.js"></script>
 <header class="top">
-  <h1>Stashed tabs</h1>
-  <select id="scope" aria-label="Which stash"></select>
+  <h1>Explore</h1>
+  <select id="scope" aria-label="Which stash or list"></select>
   <label class="sr-only" for="q">Filter</label>
   <input id="q" type="search" placeholder="Filter by title or URL…" autocomplete="off" spellcheck="false">
   <div class="seg" role="group" aria-label="Verdict">
@@ -170,6 +173,7 @@
   <main id="detail"></main>
 </div>
 <script src="icons.js"></script>
+<script src="link-view.js"></script>
 <script src="stash-cards.js"></script>
 </body>
 </html>

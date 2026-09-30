@@ -114,23 +114,32 @@ The popup shows the same actions as buttons, a progress bar, what is coming next
 for attaching a note to the next thing you keep. One action is filled at a time: **Keep** while a
 list item is open in the tab, **Next** otherwise.
 
-### Cards — judging what you have read
+### Viewers and sources
 
-Two stages, in this order, because the order is forced:
+Links come from three **sources** — **Stashed tabs** (stashes made from your open tabs), **Imports**
+(stashes brought in from OneTab, TidyTab, a file or pasted text) and the **Reading list** (links you
+queued, and pages you kept) — and three **viewers** show them: **List**, **Cards** and **Explore**.
+The bar across the top of every page links the viewers and holds a chip per source; turn any mix on,
+and the choice holds as you switch viewers and between visits. Each chip counts its links.
 
-1. **Read.** Walk the list with `Ctrl+Shift+J` and press `Ctrl+Shift+K` on anything worth reading.
-   This is an ingest, not a verdict — it pulls the page's author, text, links and images into the
-   store.
-2. **Judge.** Open *Cards* and go through what you have read as a shuffled deck. Right keeps, left
-   drops, up defers to the next session. `o` opens, `u` undoes.
+A URL is one link wherever it is held. In a joint view it shows once, with badges saying where it
+is (*Reading list*, *Stashed*, *Imported ×2*), and **Keep** / **Drop** is one verdict written to
+every copy — its capture, its reading-list entry (kept or skipped) and each stash. Clearing it clears
+them all. Nothing is merged or deleted underneath: a stash keeps its bookmarks and the list its
+entries.
 
-The deck runs over **captures**, never over bare URLs. A card has to be judgeable, and
-`x.com/i/status/2086188444317819246` tells you nothing — that opacity is the entire reason this
-extension exists. So a card only appears once the page behind it has been read, and then it carries
-the headline, the text, the embedded links, the images and the screenshot preview.
+### Cards — judging
 
-A verdict never deletes anything. Dropping sets a flag, visible in the list as `✕ Drop`, and one
-click reverses it. Deferring records nothing, so the card returns next session.
+Open *Cards* and go through every undecided link in the chosen sources as a shuffled deck. Right
+keeps, left drops, up defers to the next session. `o` opens, `u` undoes.
+
+A card shows what is known. A page that was read (`Ctrl+Shift+K`, or **Read** on List or Explore)
+carries its headline, text, embedded links, images and screenshot preview; a stashed tab never read
+shows only its tab title and address — `x.com/i/status/2086188444317819246` tells you nothing, so
+reading first makes a card judgeable.
+
+A verdict never deletes anything. Dropping sets a flag, struck through in the list, and one click
+reverses it. Deferring records nothing, so the card returns next session.
 
 The deck is shuffled fresh each visit: ordered by date it would be 133 x.com cards in a row, and
 mixing the domains keeps each card an actual decision.
@@ -139,14 +148,14 @@ mixing the domains keeps each card an actual decision.
 
 OneTab's move, kept apart from the reading list. **Stash** (`Ctrl+Shift+S`, the popup, the page's
 right-click menu, or right-click on the tab strip) folds tabs into a saved group and closes them:
-the selected tabs if you have selected several, otherwise the whole window. *Stashed tabs* opens in
-their place.
+the selected tabs if you have selected several, otherwise the whole window. The List page, grouped
+by stash, opens in their place.
 
 The **Stash** submenu — on a page, and on a tab in the tab strip — and the row under the popup's
 Stash button take other scopes too: **only this tab**, **tabs to the left**, **tabs to the right**,
 **all except this one**, and **every window** (one stash per window). On the tab strip, "this tab" is
 the one you right-clicked. **Never stash this site** in the same submenu puts a site on a list that
-stashing leaves open; **Settings** on the Stashed tabs page shows the list. Two commands without a
+stashing leaves open; **Settings** on the List page shows the list. Two commands without a
 default key, *Stash only this tab* and *Show stashed tabs*, can be bound in Firefox's
 *Manage Extension Shortcuts*.
 
@@ -159,10 +168,12 @@ storage; an uninstall loses those, never a tab. A reinstall finds the folder aga
 Stashes made before 5.9 move into bookmarks once, when 5.9 first runs; the old record is kept aside
 (`sessions_before_bookmarks`) rather than deleted.
 
-There is one Stashed tabs page, like OneTab's tab: pin it, and stashing, the popup's **Stashed**
-button and the menu all switch to that tab, in whichever window it is, instead of opening another.
-A new one opens only when none is open. Stashing a whole window while the page is pinned in a
-different window closes the stashed window, as OneTab does.
+There is one List tab to show stashes in, like OneTab's tab: pin it, and stashing, the popup's
+**Stashed** button and the menu all switch to that tab, grouped by stash, in whichever window it is,
+instead of opening another. A new one opens only when none is open. Stashing a whole window while
+the page is pinned in a different window closes the stashed window, as OneTab does. Until 5.14 this
+was a separate Stashed tabs page; its address (`sessions.html`) now forwards to List grouped by
+stash, so a tab pinned on it keeps working. Link Keeper's own pages are never stashed.
 
 - Pinned tabs, empty tabs and never-stash sites stay open; everything else is stashed. Stashing
   only this tab takes it whatever it is. Duplicate tabs all close and are recorded once; a URL
@@ -188,19 +199,24 @@ different window closes the stashed window, as OneTab does.
 - Drag a row to reorder it or drop it into another stash (ahead of or after the row it lands on, or
   last on a stash's heading); the row's **⋯** menu does the same from the keyboard. A stash emptied
   this way goes.
-- **Group by** Stash, Day or Month; the date views put stashes under date headings.
-- **Export** downloads every stash as JSON. **Import…** reads it back, and also OneTab's *Export
-  URLs* text, a TidyTab export, CSV with a `url` column (optionally `title`, `group`, `date`), a
-  JSON list of URLs, or any text with links in it — pasted or from a file. It says which format it
-  took the input for before anything is written.
+- **Export → Stashes** downloads every stash as JSON. **Import…** reads it back, and also OneTab's
+  *Export URLs* text, a TidyTab export, CSV with a `url` column (optionally `title`, `group`,
+  `date`), a JSON list of URLs, or any text with links in it — pasted or from a file — each group a
+  stash under **Imports**, its heading marked *Imported · OneTab* and so on. Capture JSONL goes to the
+  reading list instead. It says which format it took the input for before anything is written.
+- A stash's **⋯** menu holds Rename, Delete…, and **Mark as imported** / **Mark as stashed from open
+  tabs**, which moves it between the two sources. Stashes imported before 5.14 were not marked, so
+  they sit under Stashed tabs until marked by hand.
 
-**Explore** shows every stashed tab in a sidebar — one stash or all, in the order they were stashed,
-with a filter and Undecided / Kept / Dropped chips — and the chosen tab in full beside it. Click any
-row to jump to it, or walk with `↑` `↓`. The detail pane shows the tabs that sat beside it in the tab
-strip, its capture if the page was ever read, whether it is on the reading list or in another stash,
-and how many stashed tabs share its site. **Open**, **Keep**, **Drop**, **To list** and **Read** act
-on it (`o` `k` `d` `l` `r`); pressing Keep or Drop again clears it. A drop is a flag, struck through
-in the list; **Clear dropped…** on the Stashed tabs page removes dropped tabs, after a confirm.
+**Explore** shows every link in the chosen sources in a sidebar — everything, one stash, or the
+reading list; stashes in the order they were stashed, then the reading list — with a filter and
+Undecided / Kept / Dropped chips, and the chosen link in full beside it. Click any row to jump to it,
+or walk with `↑` `↓`. The detail pane shows, for a stashed tab, the tabs that sat beside it in the tab
+strip; for any link, its capture if the page was ever read, whether it is on the reading list or in
+other stashes, and how many links share its site. **Open**, **Keep**, **Drop**, **To list** and
+**Read** act on it (`o` `k` `d` `l` `r`); pressing Keep or Drop again clears it. A drop is a flag,
+struck through in the list; **Clear dropped…** on the List page removes dropped stashed tabs, after a
+confirm.
 
 The **live preview** (`p`) shows the page itself, half a second after you land on a tab. Most sites
 forbid being framed, so for frames inside this page only, the extension strips `X-Frame-Options` and
@@ -216,28 +232,30 @@ a throwaway headless Firefox — real tabs, real bookmarks, a temporary profile 
 `node tools/test-stash-import.mjs` checks every import format.
 `tools/test-open-local-files.py` checks the helper's refusals without opening anything.
 
-### Seeing the whole list
+### The List page
 
-*Open list* in the popup opens a full page — the readable view when there are
-hundreds of entries, rather than a 22rem popup.
+*Open list* in the popup opens it — the readable view when there are hundreds of links, rather than
+a 22rem popup.
 
-Every full page — List, Cards, Stashed, Explore — carries the same bar across the top, with a link
-to each of the others and the current one marked.
-
-- Grouped **by domain** by default, or by status, or flat newest- or oldest-first.
-- Filter box searches URLs, captured titles, tweet text, notes and embedded links.
-- Status chips narrow to what is left, seen, skipped, or kept.
-- Rows show the date the link was saved; a dimmed date means only the paste date is known.
-- A status mark per row, told apart by shape as well as colour: a ring for pending, a dot for
-  seen, a tick for kept, a cross for skipped. The current item carries a *Current* badge and a
-  line down its left edge.
+- **Group by** Stash (each stash under its heading with its actions, then the reading list's links),
+  Domain (local files and browser pages under their own names), State, Day, Month, or flat newest-
+  or oldest-first. Grouped by stash, a URL in two stashes is a row in each; everywhere else it is
+  one row.
+- Filter box searches URLs, titles, captured text, notes and embedded links; domain chips narrow to
+  sites.
+- State chips narrow to what is left (never opened, restored or read), seen, kept or dropped.
+- A state mark per row, told apart by shape as well as colour: a ring for left, a dot for seen, a
+  tick for kept, a cross for dropped. The reading list's current item carries a *Current* badge and
+  a line down its left edge.
 - Rows show the captured title, the post's text and any links found inside it, so a tweet you
   already read is legible without opening it again.
-- Per row: **Re-read** reads it again in the background, and **⋯** holds **Open in this tab**
-  (loads it here and makes it current), **Mark kept**, **Skip** and **Remove from list**.
+- Per row: **Re-read** reads it again in the background, and **⋯** holds Open or **Open in this
+  tab**, **Keep** and **Drop**, **Add to** or **Move to reading list**, the stash moves when grouped
+  by stash, and a **Remove from …** for each place it is held.
 
-Clicking a title opens it in a new tab and marks that entry current, so a `Ctrl+Shift+K`
-there attaches the capture to the right list entry.
+Clicking a reading-list title opens it in a new tab and marks that entry current, so a
+`Ctrl+Shift+K` there attaches the capture to the right list entry; clicking a stashed tab's title
+reopens it through its stash, in its container.
 
 ### Filling the list
 

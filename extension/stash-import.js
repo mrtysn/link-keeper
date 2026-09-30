@@ -1,5 +1,6 @@
 /* Reads stashes out of whatever was pasted or dropped on the Stashed tabs page, and says which
- * format it took it for. Pure: text in, { format, stashes, skipped } out, where a stash is
+ * format it took it for. Pure: text in, { format, stashes, skipped } out (plus records, for capture
+ * JSONL, which goes to the reading list rather than into stashes), where a stash is
  * { name?, created_at?, tabs: [{ url, title?, container?, verdict?, seen_at? }] }. The background
  * checks every URL again before writing anything.
  *
@@ -7,6 +8,8 @@
  *   link-keeper — this page's own Export: { sessions: [...] }
  *   tidytab     — TidyTab's export: { data: { tabGroups: [{ name, timestamp, tabs: [{ url, title }] }] } }
  *   json        — a JSON list of URLs, or of objects with a url
+ *   captures    — capture JSONL: one JSON object with a url per line (the list's own export,
+ *                 importers/enrich-x.py); these merge into the reading list
  *   csv         — a header row naming a url column; optional title, stash/group and date columns
  *   onetab      — OneTab's Export URLs: "url | title" per line, a blank line between groups
  *   text        — anything else: every URL found in it, as one stash
@@ -26,6 +29,8 @@ function parseStashImport(text) {
     if (Array.isArray(json)) return fromJsonList(json);
   }
   const lines = raw.split(/\r?\n/);
+  const captures = fromJsonl(raw);
+  if (captures) return captures;
   if (csvHeader(lines[0])) return fromCsv(lines);
   const filled = lines.filter(l => l.trim());
   if (filled.filter(l => URL_START.test(l.trim())).length >= filled.length * 0.6) return fromOneTab(lines);
@@ -75,6 +80,22 @@ function fromJsonList(list) {
     else skipped++;
   }
   return { format: "json", stashes: [{ tabs }], skipped };
+}
+
+/* Capture JSONL when most lines are JSON objects with a url. split("\n") only: U+2028 appears raw
+ * inside tweet text and would tear a record in two. */
+function fromJsonl(raw) {
+  const filled = raw.split("\n").map(l => l.trim()).filter(Boolean);
+  if (!filled.length || !filled[0].startsWith("{")) return null;
+  const records = [];
+  let skipped = 0;
+  for (const line of filled) {
+    let rec;
+    try { rec = JSON.parse(line); } catch (e) { rec = null; }
+    if (rec && typeof rec === "object" && !Array.isArray(rec) && typeof rec.url === "string") records.push(rec);
+    else skipped++;
+  }
+  return records.length && records.length >= filled.length * 0.6 ? { format: "captures", stashes: [], records, skipped } : null;
 }
 
 /* RFC 4180-ish: quoted fields may hold the separator, doubled quotes and newlines. */

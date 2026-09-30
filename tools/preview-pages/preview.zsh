@@ -12,16 +12,17 @@
 #   preview.zsh --captures file.jsonl    # default: $DATA_DIR/link-captures-all.jsonl
 #
 # Pages: frame.html shows three popup states side by side; popup.html, list.html, cards.html and
-# sessions.html open alone.
+# stash-cards.html open alone.
 # Query flags on either page:
 #   msg      restore a message, as if a keep just happened
 #   add      open "Add links"            house   open "Export and housekeeping"
 #   onpage   a list item is open in the current tab
 #   light    drop the dark-scheme rules to show the light palette
-#   empty    sessions.html with nothing stashed
-#   settings, import   sessions.html with that panel open
-#   import-run         sessions.html importing 300 tabs, slowly enough to see the progress
-#   view=day|month     sessions.html grouped by date
+#   empty    nothing stashed
+#   settings, import   list.html with that panel open
+#   import-run         list.html importing 300 tabs, slowly enough to see the progress
+#   group=stash|domain|status|day|month|newest|oldest   list.html grouped that way
+#   sources=tabs,import,list                           the sources chosen in the top bar
 #
 # DATA_DIR comes from the environment, else from config.local.sh at the repo root, else this
 # repo's own data/. out/ holds captured text and is gitignored.
@@ -60,13 +61,22 @@ fi
 
 mkdir -p "$out"
 stamp=$(date +%s)
-for page in popup list cards sessions standin stash-cards; do
-  sed -e "s#<meta charset=\"utf-8\">#<meta charset=\"utf-8\"><meta name=\"darkreader-lock\">#" \
-      -e "s#<script src=\"$page.js\"></script>#<script src=\"mock-data.js?v=$stamp\"></script><script src=\"mock-browser.js?v=$stamp\"></script><script src=\"$page.js?v=$stamp\"></script>#" \
+# The fake API goes in ahead of the first script that calls it: nav.js on pages with the top bar,
+# the page's own script on the rest.
+mock="<script src=\"mock-data.js?v=$stamp\"></script><script src=\"links.js?v=$stamp\"></script><script src=\"mock-browser.js?v=$stamp\"></script>"
+for page in popup list cards standin stash-cards; do
+  if grep -q '<script src="nav.js"></script>' "$ext/$page.html"; then
+    first='<script src="nav.js"></script>'
+    swap="s#$first#$mock<script src=\"nav.js?v=$stamp\"></script>#"
+  else
+    swap="s#<script src=\"$page.js\"></script>#$mock<script src=\"$page.js?v=$stamp\"></script>#"
+  fi
+  sed -e "s#<meta charset=\"utf-8\">#<meta charset=\"utf-8\"><meta name=\"darkreader-lock\">#" -e "$swap" \
+      -e "s#<script src=\"$page.js\"></script>#<script src=\"$page.js?v=$stamp\"></script>#" \
       "$ext/$page.html" > "$out/$page.html"
   ln -sf "$ext/$page.js" "$out/$page.js"
 done
-ln -sf "$ext/icons.js" "$out/icons.js"
+for shared in icons.js links.js link-view.js; do ln -sf "$ext/$shared" "$out/$shared"; done
 ln -sf "$ext/nav.js" "$out/nav.js"
 ln -sf "$ext/nav.css" "$out/nav.css"
 ln -sf "$ext/icon.svg" "$out/icon.svg"
@@ -79,7 +89,7 @@ python3 "$here/make-mock.py" "$captures" "$out/mock-data.js"
 print "http://127.0.0.1:$port/frame.html"
 print "http://127.0.0.1:$port/list.html"
 print "http://127.0.0.1:$port/cards.html"
-print "http://127.0.0.1:$port/sessions.html"
+print "http://127.0.0.1:$port/list.html?group=stash"
 print "http://127.0.0.1:$port/stash-cards.html"
 print "http://127.0.0.1:$port/standin.html?url=file:///tmp/x.html&title=Report&why=the+helper+is+not+installed"
 cd "$out"

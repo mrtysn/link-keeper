@@ -104,6 +104,7 @@
     border: 1px solid var(--field); border-radius: 8px;
   }
   #import-msg { font-size: .875rem; color: var(--dim); }
+  #import-progress { width: 12rem; height: 6px; accent-color: var(--accent); }
   #import-msg.ok { color: var(--ok); } #import-msg.bad { color: var(--bad); }
 
   /* --- rows --- */
@@ -127,20 +128,20 @@
     display: inline-block; flex: none; width: 16px; height: 16px; margin-top: 4px;
     background: center/contain no-repeat; border-radius: 4px;
   }
-  /* Status by shape as well as colour: ring pending, dot seen, tick kept, cross skipped. */
+  /* State by shape as well as colour: ring not looked at, dot seen, tick kept, cross dropped. */
   .mark { display: grid; place-items: center; width: 14px; height: 14px; margin-top: 5px; }
   .mark::before {
     content: ""; box-sizing: border-box; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--mark);
   }
   li[data-status="seen"] .mark::before { background: var(--seen); border-color: var(--seen); }
   li[data-status="kept"] .mark::before,
-  li[data-status="skipped"] .mark::before {
+  li[data-status="dropped"] .mark::before {
     width: auto; height: auto; border: 0; border-radius: 0; font-size: 13px; font-weight: 700; line-height: 1;
   }
   li[data-status="kept"] .mark::before { content: "✓"; color: var(--ok); }
-  li[data-status="skipped"] .mark::before { content: "✕"; color: var(--bad); font-size: 11px; }
-  /* The strike says skipped; the title stays readable (opacity .6 left it at Lc 43). */
-  li[data-status="skipped"] .ttl { color: var(--dim); text-decoration: line-through; }
+  li[data-status="dropped"] .mark::before { content: "✕"; color: var(--bad); font-size: 11px; }
+  /* The strike says dropped; the title stays readable (opacity .6 left it at Lc 43). */
+  li[data-status="dropped"] .ttl { color: var(--dim); text-decoration: line-through; }
 
   .main { min-width: 0; }
   .ttl {
@@ -209,6 +210,55 @@
     padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
     background: var(--chip); font: .8125rem ui-sans-serif, -apple-system, sans-serif;
   }
+
+  /* --- stash headings --- */
+  .group > h2 .when { color: var(--dim); font-size: .8125rem; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .group > h2 .gacts { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+  .group > h2 .gacts button { margin-left: 0; }
+  .rename {
+    min-width: 0; flex: 0 1 20rem; min-height: 30px; padding: 4px 10px; font: inherit; font-weight: 600;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--field); border-radius: 8px;
+  }
+  @media (max-width: 40rem) { .group > h2 .gacts { width: 100%; margin-left: 0; } }
+
+  /* stars, locks, duplicates */
+  .star-mark { color: var(--seen); }
+  .lock-mark { padding: 0 8px; border-radius: 999px; background: var(--chip); color: var(--dim); font-size: .75rem; font-weight: 400; line-height: 1.6; }
+  .group > h2 .toggle[aria-pressed="true"] { color: var(--ink); background: var(--chip); }
+  .group > h2 > .badge { font-weight: 400; }
+  .group > h2 .gacts .more { margin-left: 0; }
+  .badge.dup { color: var(--dim); }
+
+
+  /* drag and drop */
+  ul.rows.stash > li[draggable="true"] { cursor: grab; }
+  ul.rows.stash > li.dragging { opacity: .5; }
+  ul.rows.stash > li.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+  ul.rows.stash > li.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+  ul.rows.stash.drop-end { box-shadow: 0 2px 0 var(--accent); }
+  ul.rows.stash { min-height: 12px; }
+  .group > h2.drop-end { border-bottom-color: var(--accent); }
+
+  /* the filter bar's grouping choice */
+  .view { display: inline-flex; align-items: center; gap: 8px; color: var(--dim); font-size: .875rem; }
+  #export { display: inline-flex; }
+
+  /* settings */
+  .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 16px 24px; margin-top: 12px; }
+  fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+  legend { padding: 0; margin-bottom: 6px; font-size: .875rem; font-weight: 600; }
+  fieldset > label { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; font-size: .875rem; }
+  .hint { color: var(--dim); }
+  ul.exclude { list-style: none; margin: 0; padding: 0; font-size: .875rem; }
+  ul.exclude li { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+  ul.exclude li .src { margin-top: 0; }
+  ul.exclude li.none { color: var(--dim); }
+  ul.exclude li button { margin-left: auto; width: 28px; padding: 0; justify-content: center; }
+  #exclude-form input {
+    flex: 1 1 10rem; min-width: 0; min-height: 30px; padding: 4px 10px; font: inherit; font-size: .875rem;
+    color: var(--ink); background: var(--bg); border: 1px solid var(--field); border-radius: 8px;
+  }
+  .panel code, .panel em { font-size: .8125rem; }
 </style>
 </head>
 <body>
@@ -216,61 +266,91 @@
 <div class="wrap">
   <header class="top">
     <div class="heading">
-      <h1>Link Keeper</h1>
+      <h1>Links</h1>
       <p class="sub" id="sub">Loading…</p>
     </div>
     <div class="page-actions">
-      <button id="show-import" aria-expanded="false" aria-controls="import-panel"
-        title="Import capture JSONL produced outside the browser">Import…</button>
-      <button id="export">Export captures</button>
+      <button class="danger" id="clear-dropped" hidden title="Remove every stashed tab you dropped; locked stashes keep theirs">Clear dropped…</button>
+      <button id="import" aria-expanded="false" aria-controls="import-panel" title="Bring in stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links, or capture JSONL for the reading list">Import…</button>
+      <span id="export-slot"></span>
+      <button id="settings" aria-expanded="false" aria-controls="settings-panel" title="What happens after stashing and restoring, and sites never to stash">Settings</button>
+      <button class="primary" id="stash" title="Stash the selected tabs, or every other tab in this window, and close them">Stash this window</button>
     </div>
   </header>
 
   <div class="meter" aria-hidden="true"><i class="k" id="bar-kept"></i><i class="s" id="bar-seen"></i><i class="x" id="bar-skipped"></i></div>
 
-  <section id="import-panel" class="panel" aria-labelledby="import-h" hidden>
-    <h2 id="import-h">Import captures</h2>
-    <p>Capture JSONL from <code>importers/enrich-x.py</code>, or an export from this extension. Records
-    merge on URL, and an imported record only fills in a link that has no text yet.</p>
-    <div class="row">
-      <label class="sr-only" for="import-file">Capture file</label>
-      <input type="file" id="import-file" accept=".jsonl,.json,.ndjson">
-      <span class="sub">or paste it below</span>
+  <div class="bar">
+    <label class="sr-only" for="q">Filter</label>
+    <input id="q" type="search" placeholder="Filter by title, URL, text, note…" autocomplete="off" spellcheck="false">
+    <div class="seg" role="group" aria-label="State">
+      <button class="chip" id="f-all" aria-pressed="true">All</button>
+      <button class="chip" id="f-left" aria-pressed="false" title="Not opened, restored or read yet">Left</button>
+      <button class="chip" id="f-seen" aria-pressed="false" title="Opened, restored or read, and not yet judged">Seen</button>
+      <button class="chip" id="f-kept" aria-pressed="false">Kept</button>
+      <button class="chip" id="f-dropped" aria-pressed="false">Dropped</button>
     </div>
-    <label class="sr-only" for="import-text">Capture JSONL</label>
-    <textarea id="import-text" placeholder='{"url": "https://x.com/…", "text": "…"}&#10;one JSON object per line'></textarea>
+    <label class="view">Group by
+      <select id="groupby">
+        <option value="stash">Stash</option>
+        <option value="domain">Domain</option>
+        <option value="status">State</option>
+        <option value="day">Day</option>
+        <option value="month">Month</option>
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+      </select>
+    </label>
+  </div>
+
+  <section class="panel" id="import-panel" hidden aria-labelledby="import-h">
+    <h2 id="import-h">Import</h2>
+    <p>Paste or choose a file: OneTab's <em>Export URLs</em> text, a TidyTab or Link Keeper export, CSV with a <code>url</code> column
+      (and optionally <code>title</code>, <code>group</code>, <code>date</code>), or any text with links in it — each group becomes a stash under Imports.
+      Capture JSONL (from <code>importers/enrich-x.py</code> or Export) merges into the reading list instead.</p>
+    <textarea id="import-text" spellcheck="false" aria-label="Text to import" placeholder="https://example.com/ | Example"></textarea>
     <div class="row">
-      <button class="primary" id="do-import">Import</button>
-      <button id="hide-import">Close</button>
+      <input type="file" id="import-file" accept=".json,.jsonl,.ndjson,.csv,.txt,text/*,application/json" aria-label="Import from a file">
+      <progress id="import-progress" hidden></progress>
       <span id="import-msg" role="status"></span>
+    </div>
+    <div class="row">
+      <button class="primary" id="import-go" disabled>Import</button>
+      <button class="ghost" id="import-cancel">Cancel</button>
     </div>
   </section>
 
-  <div class="bar">
-    <label class="sr-only" for="q">Filter</label>
-    <input id="q" type="search" placeholder="Filter by URL, title, note…" autocomplete="off" spellcheck="false">
-    <div class="seg" role="group" aria-label="Status">
-      <button class="chip" id="f-all" aria-pressed="true">All</button>
-      <button class="chip" id="f-pending" aria-pressed="false">Left</button>
-      <button class="chip" id="f-seen" aria-pressed="false">Seen</button>
-      <button class="chip" id="f-skipped" aria-pressed="false">Skipped</button>
-      <button class="chip" id="f-kept" aria-pressed="false">Kept</button>
+  <section class="panel" id="settings-panel" hidden aria-labelledby="settings-h">
+    <h2 id="settings-h">Settings</h2>
+    <div class="settings">
+      <fieldset>
+        <legend>After stashing</legend>
+        <label><input type="radio" name="after-stash" value="show"> <span>Show them here, grouped by stash</span></label>
+        <label><input type="radio" name="after-stash" value="stay"> <span>Stay where I am <span class="hint">(a new tab if the window would close)</span></span></label>
+      </fieldset>
+      <fieldset>
+        <legend>After restoring</legend>
+        <label><input type="radio" name="after-restore" value="keep"> <span>Keep the tabs here, marked restored</span></label>
+        <label><input type="radio" name="after-restore" value="remove"> <span>Take them out of the stash <span class="hint">(locked stashes keep theirs)</span></span></label>
+      </fieldset>
+      <fieldset>
+        <legend>Never stash these sites</legend>
+        <ul id="exclude-list" class="exclude"></ul>
+        <form id="exclude-form" class="row">
+          <input id="exclude-host" type="text" placeholder="example.com" autocomplete="off" spellcheck="false" aria-label="Site never to stash">
+          <button type="submit" class="small">Add</button>
+        </form>
+      </fieldset>
     </div>
-    <label class="sr-only" for="groupby">Group by</label>
-    <select id="groupby">
-      <option value="domain">By domain</option>
-      <option value="status">By status</option>
-      <option value="flat">Newest first</option>
-      <option value="oldest">Oldest first</option>
-    </select>
-  </div>
+  </section>
 
   <p id="msg" role="status"></p>
   <div class="domains" id="domains" role="group" aria-label="Domains, none selected shows all"></div>
-
   <div id="out"></div>
 </div>
 <script src="icons.js"></script>
+<script src="link-view.js"></script>
+<script src="stash-import.js"></script>
 <script src="list.js"></script>
 </body>
 </html>

@@ -55,7 +55,7 @@ await check("a whole window of 40 tabs becomes one folder of bookmarks, and ever
   const [s] = await getSessions();
   eq(s.tabs.map(t => t.url), urls.slice(1), "every unpinned tab, in order");
   const left = await browser.tabs.query({ windowId: win });
-  eq(left.map(t => t.url).sort(), [url(0), browser.runtime.getURL("sessions.html")].sort(), "pinned tab and the Stashed tabs page stay");
+  eq(left.map(t => t.url).sort(), [url(0), browser.runtime.getURL("list.html?group=stash")].sort(), "pinned tab and the List page, grouped by stash, stay");
   await browser.windows.remove(win);
 });
 
@@ -132,4 +132,68 @@ await check("import takes OneTab's raw URLs — unicode, spaces, uppercase hosts
   const [a, b] = await getSessions();
   eq([...a.tabs, ...b.tabs].map(t => t.url), ["https://jysk.com.tr/depolama/antre-%C3%BCnitesi-egeby", "https://example.com/",
     "https://www.google.com/search?udm=2&q=EGEBY%20%20jysk#vhid=P1", "https://example.com/a%20b", "https://xn--bcher-kva.de/x"], "as Firefox stores them");
+});
+
+await check("the joined dataset: one link per URL across stashes and the list, one verdict for every copy, imports marked", async () => {
+  const res = await importStashes([{ tabs: [{ url: "https://joint.example/a", title: "A" }, { url: "https://joint.example/b" }] }], "onetab");
+  yes(res.ok, res.error);
+  await addItems([{ url: "https://joint.example/a", title: "A on the list" }]);
+  let { links, stashes } = await getLinks();
+  const a = links.filter(l => l.url.startsWith("https://joint.example/a"));
+  eq(a.length, 1, "one row for a URL held in a stash and on the list");
+  eq(a[0].sources.sort(), ["import", "list"], "held in both");
+  eq([stashes[0].source, stashes[0].format], ["import", "onetab"], "the import is marked");
+  const judged = await judgeLink("https://joint.example/a", "drop");
+  eq([judged.list, judged.stashed], [1, 1], "the verdict reached the list and the stash");
+  ({ links } = await getLinks());
+  eq(links.find(l => l.key === a[0].key).verdict, "drop", "one verdict");
+  eq((await getItems()).find(i => i.url === "https://joint.example/a").status, "skipped", "the list entry is skipped");
+  eq((await getSessions())[0].tabs[0].verdict, "drop", "the bookmark's record is dropped");
+  await judgeLink("https://joint.example/a", null);
+  eq((await getSessions())[0].tabs[0].verdict, undefined, "cleared everywhere");
+});
+
+await check("List, Cards and Explore load in Firefox with the bar, the sources and rows from every source", async () => {
+  const errors = [];
+  const open = async page => {
+    const tab = await browser.tabs.create({ url: browser.runtime.getURL(page), active: true });
+    await wait(1500);
+    const view = browser.extension.getViews({ type: "tab" }).find(v => v.location.pathname === `/${page.split("?")[0]}`);
+    yes(view, `${page}: no page to inspect`);
+    view.addEventListener("error", e => errors.push(`${page}: ${e.message}`));
+    return { tab, doc: view.document, view };
+  };
+  const list = await open("list.html?group=stash");
+  const d = list.doc;
+  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["List", "Cards", "Explore"], "viewers in the bar");
+  eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "List", "List is marked");
+  eq([...d.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["true", "true", "true"], "every source on at first");
+  yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
+  yes([...d.querySelectorAll(".group > h2 .badge")].some(b => b.textContent.startsWith("Imported")), "an import is marked on its heading");
+  eq(d.getElementById("groupby").value, "stash", "grouped by stash");
+
+  // Turning Stashed tabs and Imports off leaves the reading list, on every page.
+  d.querySelectorAll(".app-sources button")[0].click();
+  d.querySelectorAll(".app-sources button")[1].click();
+  await wait(800);
+  eq((await browser.storage.local.get("viewSources")).viewSources, ["list"], "the choice is stored");
+  eq(d.querySelectorAll("ul.rows.stash > li").length, 0, "no stash rows with stashes off");
+  yes([...d.querySelectorAll(".group > h2")].some(h => h.textContent.startsWith("Reading list")), "the reading list shows");
+
+  const explore = await open("stash-cards.html");
+  eq([...explore.doc.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["false", "false", "true"], "Explore shares the choice");
+  yes(explore.doc.querySelector("#side h2")?.textContent.startsWith("Reading list"), "Explore lists the reading list");
+  await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
+  await wait(800);
+  yes(explore.doc.querySelectorAll("#side li").length > 300, "Explore lists stashed tabs once they are back on");
+  yes(explore.doc.querySelector(".dtitle"), "a link is shown in full");
+
+  const cards = await open("cards.html");
+  yes(cards.doc.querySelector(".card.top"), "Cards deals a card");
+
+  const sessions = await browser.tabs.create({ url: browser.runtime.getURL("sessions.html"), active: true });
+  await wait(1000);
+  eq((await browser.tabs.get(sessions.id)).url, browser.runtime.getURL("list.html?group=stash").replace("?group=stash", ""), "the old page forwards to List (its ?group is taken up and dropped)");
+  eq(errors, [], "no script errors");
+  await browser.tabs.remove([list.tab.id, explore.tab.id, cards.tab.id, sessions.id]);
 });

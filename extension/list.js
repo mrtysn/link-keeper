@@ -1,112 +1,120 @@
-/* The full-page list. Everything the popup shows, but readable at 277 rows.
+/* List: every link from the sources chosen in the top bar — stashed tabs, imports, the reading list
+ * — one row per URL, grouped by stash, domain, status, day or month, or in date order.
  *
- * Rows come pre-joined from the background (list entry + its capture, if any), so this file
- * only presents and filters. Clicking a title opens it in a new tab and tells the background
- * that entry is now current, so a Ctrl+Shift+K on that tab attaches the capture to it.
+ * Grouped by stash it is what the Stashed tabs page was: each stash under its own heading with its
+ * actions, rows that drag between and within stashes, and the reading list's links after them. A
+ * URL held in two stashes shows in both there, since a stash is a container; in every other
+ * grouping it shows once, with badges saying where it is held.
+ *
+ * Keep and Drop are one verdict per URL, written to every copy (judge-link). A stash is the only
+ * record of the tabs it closed, so Delete and Remove are the only ways to lose one; a lock
+ * prevents both, and Delete asks first.
  */
 
-const $ = id => document.getElementById(id);
-const send = msg => browser.runtime.sendMessage(msg);
+const GROUPS = ["stash", "domain", "status", "day", "month", "newest", "oldest"];
+const GROUP_KEY = "listGroup";
+const FILTERS = ["all", "left", "seen", "kept", "dropped"];
 
-let rows = [];
+let data = { links: [], stashes: [], all: { links: [], stashes: [] }, sources: new Set(), byKey: new Map() };
+let settings = { afterStash: "show", afterRestore: "keep", exclude: [] };
 let filter = "all";
 const domainSel = new Set();   // empty = every domain
 let domainsExpanded = false;
-let menuSeq = 0;
-let usingKeyboard = false;
-addEventListener("keydown", () => { usingKeyboard = true; }, true);
-addEventListener("pointerdown", () => { usingKeyboard = false; }, true);
+let renaming = null;
+let dragging = null;
+
+let group = "domain";
+try { group = localStorage.getItem(GROUP_KEY) || "domain"; } catch (e) { /* storage blocked: default */ }
+{
+  // ?group=stash is how the popup's Stashed button and stashing itself land here.
+  const asked = new URLSearchParams(location.search).get("group");
+  if (asked) {
+    group = asked;
+    try { localStorage.setItem(GROUP_KEY, asked); } catch (e) { /* not remembered */ }
+    history.replaceState(null, "", location.pathname + location.hash);
+  }
+  if (group === "flat") group = "newest";
+  if (!GROUPS.includes(group)) group = "domain";
+}
 
 function say(text) { $("msg").textContent = text; }
 
-function shortUrl(url) { return String(url).replace(/^https?:\/\/(www\.)?/, ""); }
-
-/* The date the link was saved, not when it was pasted in — a Telegram export spans years. */
-function savedOn(row) { return row.saved_at || row.added_at || ""; }
-const byNewest = (a, b) => String(savedOn(b)).localeCompare(String(savedOn(a)));
-
-const el = (tag, props = {}, ...children) => {
-  const node = Object.assign(document.createElement(tag), props);
-  node.append(...children);
-  return node;
-};
-
-/* A plain tweet's title is only its handle, so its text is what identifies it. */
-function isTextPost(cap) {
-  return !!(cap?.text && (!cap.title || /^@?\S+ on X$|^X post$/.test(cap.title)));
-}
-
-function labelOf(row) {
-  const cap = row.cap;
-  if (!cap) return row.title || null;
-  const body = (cap.text || "").replace(/\s+/g, " ").trim();
-  if (isTextPost(cap)) return (cap.handle ? `${cap.handle}: ` : "") + body;
-  if (cap.handle && cap.title && !cap.title.includes(cap.handle)) return `${cap.handle} — ${cap.title}`;
-  return cap.title || cap.handle || null;
-}
-
 async function load() {
-  const { items, loose } = await send({ type: "dump" });
-  rows = [...items, ...loose];
+  const [d, { settings: st }] = await Promise.all([loadLinks(), send({ type: "stash-settings" })]);
+  data = d;
+  settings = st;
   render();
 }
 
-function matches(row, term) {
-  if (filter !== "all" && row.status !== filter) return false;
-  if (domainSel.size && !domainSel.has(hostOf(row.url))) return false;
+async function act(msg, done) {
+  const res = await send(msg);
+  if (res && res.ok === false) say(res.error || "That did not work");
+  else if (done) say(done(res));
+  await load();
+  return res;
+}
+
+const stashById = id => data.all.stashes.find(s => s.id === id);
+const visibleStash = id => data.stashes.some(s => s.id === id);
+
+/* --- filtering ------------------------------------------------------------------ */
+
+/* A web page's site; local files and browser pages have none, so they group under a name. */
+const siteOf = url => ({ web: () => hostOf(url), file: () => "Local files", other: () => "Browser pages" })[kindOf(url)]();
+
+function matches(link, term) {
+  if (filter !== "all" && stateOf(link) !== filter) return false;
+  if (domainSel.size && !domainSel.has(siteOf(link.url))) return false;
   if (!term) return true;
-  const hay = [row.url, labelOf(row), row.cap?.text, row.note, row.cap?.screenshot, savedOn(row),
-    row.cap?.verdict, ...(row.cap?.links || []), ...(row.cap?.reply_links || []).map(l => l.href)]
-    .filter(Boolean).join(" ").toLowerCase();
+  const cap = link.cap;
+  const hay = [link.url, link.title, labelOf(link), cap?.text, link.list?.note, cap?.screenshot, link.date,
+    ...(cap?.links || []), ...(cap?.reply_links || []).map(l => l.href)].filter(Boolean).join(" ").toLowerCase();
   return hay.includes(term);
 }
 
-function groupRows(visible, mode) {
-  if (mode === "flat") return [["", [...visible].sort(byNewest)]];
-  if (mode === "oldest") return [["", [...visible].sort(byNewest).reverse()]];
-  if (mode === "status") {
-    const order = ["pending", "seen", "skipped", "kept"];
-    const names = {
-      pending: "Left to go through",
-      seen: "Opened, undecided",
-      skipped: "Skipped",
-      kept: "Kept",
-    };
-    return order
-      .map(s => [names[s], visible.filter(r => r.status === s).sort(byNewest)])
-      .filter(([, list]) => list.length);
-  }
-  const byHost = new Map();
-  for (const row of visible) {
-    const host = hostOf(row.url);
-    if (!byHost.has(host)) byHost.set(host, []);
-    byHost.get(host).push(row);
-  }
-  for (const list of byHost.values()) list.sort(byNewest);
-  return [...byHost.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+/* --- rows ----------------------------------------------------------------------- */
+
+const byNewest = (a, b) => String(b.date || "").localeCompare(String(a.date || ""));
+
+/* Where a stash-only link reopens from: a stash on show if it is in one, else any. */
+function copyToOpen(link) {
+  return link.copies.find(c => visibleStash(c.stash)) || link.copies[0] || null;
 }
 
-const STATUS_NAMES = { pending: "Not opened yet", seen: "Opened, undecided", kept: "Kept", skipped: "Skipped" };
+function openCopy(copy) {
+  return act({ type: "restore-stash", id: copy.stash, ids: [copy.tab] }, restoredText);
+}
 
-function titleLink(row) {
-  const cap = row.cap;
-  const a = el("a", { className: "ttl", href: row.url, target: "_blank", rel: "noopener noreferrer" });
+function titleLink(link, ctx) {
+  const cap = link.cap;
+  const web = isWeb(link.url);
+  const a = el("a", { className: "ttl", href: link.url, draggable: false });
+  if (web) Object.assign(a, { target: "_blank", rel: "noopener noreferrer" });
+  const label = labelOf(link);
   if (isTextPost(cap)) {
     const body = cap.text.replace(/\s+/g, " ").trim();
     if (cap.handle) a.append(el("span", { className: "who", textContent: cap.handle }), " ");
     a.append(body);
     a.title = body;
-  } else if (labelOf(row)) {
+  } else if (label) {
     a.classList.add("titled");
-    a.textContent = labelOf(row);
-    a.title = labelOf(row);
+    a.textContent = label;
+    a.title = `${label}\n${link.url}`;
   } else {
     a.classList.add("plain");
-    a.textContent = shortUrl(row.url);
-    a.title = row.url;
+    a.textContent = shortUrl(link.url);
+    a.title = link.url;
   }
-  // Opening from the list makes this the current item, so a later keep attaches to it.
-  a.addEventListener("click", () => send({ type: "set-current", url: row.url }).then(load));
+  /* A stashed tab reopens through the background, which keeps its container and marks it
+   * restored; a reading-list link opens in a new tab and becomes the current entry, so a keep on
+   * that tab attaches to it. Middle-click and copy-link behave as on any link. */
+  a.addEventListener("click", e => {
+    if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (ctx) { e.preventDefault(); openCopy({ stash: ctx.stash.id, tab: ctx.tab.id }); return; }
+    if (link.list && web) { send({ type: "set-current", url: link.url }).then(load); return; }
+    const copy = copyToOpen(link);
+    if (copy) { e.preventDefault(); openCopy(copy); }
+  });
   return a;
 }
 
@@ -114,208 +122,417 @@ function linkChip(href, text, title, className = "") {
   return el("a", { href, target: "_blank", rel: "noopener noreferrer", textContent: text, title, className });
 }
 
-/* Row actions beyond reading live in a native popover: Escape and outside clicks close it, and
- * the row keeps its width instead of reserving room for buttons that are hidden most of the time. */
-function rowMenu(row, name) {
-  const id = `row-menu-${++menuSeq}`;
-  const trigger = el("button", { className: "small ghost more", textContent: "⋯", title: "More actions" });
-  trigger.setAttribute("aria-label", `More actions for ${name.length > 80 ? `${name.slice(0, 80)}…` : name}`);
-  trigger.setAttribute("popovertarget", id);
-
-  const menu = el("div", { id, className: "menu" });
-  menu.popover = "auto";
-  const item = (text, fn, className = "") => {
-    const b = el("button", { textContent: text, className });
-    b.onclick = async () => { menu.hidePopover(); await fn(); load(); };
-    return b;
-  };
-  menu.append(
-    item("Open in this tab", () => send({ type: "set-current", url: row.url })
-      .then(() => browser.tabs.update({ url: row.url }))),
-    item(row.status === "kept" ? "Unmark kept" : "Mark kept",
-      () => send({ type: "mark", url: row.url, status: row.status === "kept" ? "seen" : "kept" })),
-    item(row.status === "skipped" ? "Unskip" : "Skip",
-      () => send({ type: "mark", url: row.url, status: row.status === "skipped" ? "seen" : "skipped" })),
-    el("hr"),
-    item("Remove from list", () => send({ type: "remove", urls: [row.url] }), "danger"),
-  );
-  menu.addEventListener("toggle", e => {
-    if (e.newState !== "open") return;
-    const r = trigger.getBoundingClientRect();
-    const w = menu.offsetWidth, h = menu.offsetHeight;
-    const below = r.bottom + 4 + h <= innerHeight;
-    menu.style.top = `${below ? r.bottom + 4 : Math.max(8, r.top - 4 - h)}px`;
-    menu.style.left = `${Math.max(8, Math.min(r.right - w, innerWidth - w - 8))}px`;
-    // From the keyboard, land on the first item; a pointer user keeps focus where it was.
-    if (usingKeyboard) menu.querySelector("button")?.focus();
-  });
-  return [trigger, menu];
+/* Where else a link is held, as badges — only worth showing when more than one source is on show. */
+function whereBadges(link, ctx) {
+  const out = [];
+  const mixed = data.sources.size > 1;
+  if (ctx) {
+    if (link.list && mixed) out.push(el("span", { className: "badge", textContent: "Reading list" }));
+    const also = link.copies.filter(c => c.stash !== ctx.stash.id).map(c => stashById(c.stash)).filter(Boolean);
+    if (also.length) {
+      out.push(el("span", { className: "badge dup", textContent: `Also in ${also.length === 1 ? "1 other stash" : `${also.length} other stashes`}`,
+        title: also.map(stashName).join("\n") }));
+    }
+    return out;
+  }
+  if (!mixed && link.copies.length < 2) return out;
+  if (link.list && mixed) out.push(el("span", { className: "badge", textContent: "Reading list" }));
+  for (const source of ["tabs", "import"]) {
+    const held = link.copies.map(c => stashById(c.stash)).filter(s => s?.source === source);
+    if (!held.length) continue;
+    out.push(el("span", { className: "badge", textContent: `${SOURCE_NAMES[source]}${held.length > 1 ? ` ×${held.length}` : ""}`,
+      title: held.map(stashName).join("\n") }));
+  }
+  return out;
 }
 
-function rowEl(row, groupedByDomain) {
-  const li = document.createElement("li");
-  li.dataset.status = row.status;
-  if (row.current) li.classList.add("current");
+function rowMenu(link, ctx) {
+  const web = isWeb(link.url);
+  const v = link.verdict;
+  const judge = verdict => act({ type: "judge-link", url: link.url, verdict: v === verdict ? null : verdict });
+  const items = [];
+  if (ctx) items.push({ text: "Open", run: () => openCopy({ stash: ctx.stash.id, tab: ctx.tab.id }) });
+  else if (link.copies.length) items.push({ text: "Reopen from its stash", run: () => openCopy(copyToOpen(link)) });
+  if (link.list && web) {
+    items.push({ text: "Open in this tab", run: () => send({ type: "set-current", url: link.url }).then(() => browser.tabs.update({ url: link.url })) });
+  }
+  items.push("-",
+    { text: v === "keep" ? "Clear kept" : "Keep", run: () => judge("keep") },
+    { text: v === "drop" ? "Clear dropped" : "Drop", run: () => judge("drop") });
+  if (ctx && web) {
+    items.push({ text: "Move to reading list", disabled: ctx.stash.locked, run: () => act({ type: "move-stash", id: ctx.stash.id, ids: [ctx.tab.id] },
+      r => (r.added ? "Moved to the reading list" : "Already on the reading list; taken out of the stash")) });
+  } else if (!ctx && web && !link.list) {
+    items.push({ text: "Add to reading list", run: () => act({ type: "add", urls: [{ url: link.url, title: link.title || undefined }] }, () => "Added to the reading list") });
+  }
+  if (ctx) {
+    const { stash, index } = ctx;
+    const others = data.stashes.filter(s => s.id !== stash.id).slice(0, 8);
+    items.push("-",
+      { text: "Move up", disabled: index === 0, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index - 1]?.id) },
+      { text: "Move down", disabled: index === stash.tabs.length - 1, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index + 2]?.id || null) },
+      ...others.map(s => ({ text: `Move to ${stashName(s)}`, disabled: stash.locked, run: () => moveTab(ctx.tab.id, s.id, null) })),
+      "-",
+      { text: "Remove from this stash", className: "danger", disabled: stash.locked, title: stash.locked ? "The stash is locked" : "",
+        run: () => act({ type: "delete-stash", id: stash.id, ids: [ctx.tab.id] }) });
+  } else {
+    const removals = [];
+    for (const c of link.copies) {
+      const s = stashById(c.stash);
+      if (!s) continue;
+      removals.push({ text: `Remove from ${stashName(s)}`, className: "danger", disabled: s.locked, title: s.locked ? "The stash is locked" : "",
+        run: () => act({ type: "delete-stash", id: s.id, ids: [c.tab] }) });
+    }
+    if (link.list && !link.list.loose) {
+      removals.push({ text: "Remove from reading list", className: "danger", run: () => act({ type: "remove", urls: [link.url] }) });
+    }
+    if (removals.length) items.push("-", ...removals);
+  }
+  return popoverMenu("⋯", `More actions for ${labelOf(link) || shortUrl(link.url)}`, items);
+}
 
-  li.append(srcIcon(row.url));
-  const mark = el("span", { className: "mark", title: STATUS_NAMES[row.status] || row.status });
+function rowEl(link, ctx) {
+  const state = stateOf(link);
+  const li = el("li");
+  li.dataset.status = state;
+  if (link.list?.current) li.classList.add("current");
+
+  li.append(srcIcon(link.url));
+  const mark = el("span", { className: "mark", title: STATE_NAMES[state] });
   mark.setAttribute("role", "img");
-  mark.setAttribute("aria-label", STATUS_NAMES[row.status] || row.status);
+  mark.setAttribute("aria-label", STATE_NAMES[state]);
   li.append(mark);
 
   const main = el("div", { className: "main" });
-  main.append(titleLink(row));
+  main.append(titleLink(link, ctx));
+  const cap = link.cap;
 
   // A titled page carries a description worth a second line, unless the title already is that text.
   const squash = s => String(s || "").replace(/\s+/g, " ").trim();
-  const text = squash(row.cap?.text);
-  if (text && !isTextPost(row.cap) && !squash(labelOf(row)).includes(text.slice(0, 60))) {
-    main.append(el("div", { className: "body", textContent: row.cap.text }));
+  const text = squash(cap?.text);
+  if (text && !isTextPost(cap) && !squash(labelOf(link)).includes(text.slice(0, 60))) {
+    main.append(el("div", { className: "body", textContent: cap.text }));
   }
 
+  const kind = kindOf(link.url);
   const meta = el("div", { className: "meta" });
-  if (!groupedByDomain) meta.append(el("span", { textContent: hostOf(row.url) }));
-  const when = savedOn(row);
-  if (when) {
-    const t = el("time", { dateTime: when, textContent: when.slice(0, 10) });
-    t.title = row.saved_at ? "Saved on this date" : "Added to the list on this date; the original date is unknown";
-    if (!row.saved_at) t.style.opacity = ".7";
+  if (kind === "web" && group !== "domain") meta.append(el("span", { textContent: hostOf(link.url) }));
+  if (kind === "file") {
+    meta.append(el("span", { className: "badge", textContent: "Local file",
+      title: "Reopened through Link Keeper's helper, or as a stand-in if the helper is not installed" }));
+  }
+  if (kind === "other") {
+    meta.append(el("span", { className: "badge", textContent: "Stand-in",
+      title: "Firefox will not let an extension open this page; reopening opens a tab with the URL to paste" }));
+  }
+  if (!ctx && link.date) {
+    const t = el("time", { dateTime: link.date, textContent: link.date.slice(0, 10) });
+    t.title = link.list?.saved_at ? "Saved on this date" : link.list ? "Added to the list on this date; the original date is unknown" : "Stashed on this date";
     meta.append(t);
   }
-  if (row.cap?.kind && row.cap.kind !== "page") meta.append(el("span", { textContent: row.cap.kind }));
-  if (!row.cap) meta.append(el("span", { textContent: "not read yet" }));
-  if (row.current) meta.append(el("span", { className: "badge current", textContent: "Current" }));
-  if (row.cap?.verdict) {
-    const keep = row.cap.verdict === "keep";
-    meta.append(el("span", { className: `badge ${keep ? "keep" : "drop"}`, textContent: keep ? "✓ Keep" : "✕ Drop" }));
-  }
-  if (row.note) meta.append(el("span", { className: "note", textContent: row.note }));
+  if (cap?.kind && cap.kind !== "page") meta.append(el("span", { textContent: cap.kind }));
+  if (link.list && !cap && kind === "web") meta.append(el("span", { textContent: "not read yet" }));
+  if (link.list?.current) meta.append(el("span", { className: "badge current", textContent: "Current" }));
+  meta.append(...whereBadges(link, ctx));
+  const container = ctx ? ctx.tab.container : link.copies.find(c => c.container)?.container;
+  if (container) meta.append(el("span", { className: "badge", textContent: "Container", title: container }));
+  if (ctx?.tab.seen_at) meta.append(el("time", { dateTime: ctx.tab.seen_at, textContent: `restored ${whenOf(ctx.tab.seen_at)}` }));
+  if (link.list?.note) meta.append(el("span", { className: "note", textContent: link.list.note }));
   main.append(meta);
 
-  if (row.cap?.links?.length) {
-    const inner = el("div", { className: "inner" });
-    for (const url of row.cap.links.slice(0, 5)) inner.append(linkChip(url, shortUrl(url), url));
-    main.append(inner);
+  if (cap?.links?.length) {
+    main.append(el("div", { className: "inner" }, ...cap.links.slice(0, 5).map(url => linkChip(url, shortUrl(url), url))));
   }
-
   // Links harvested from the replies — the author's own reply is the one that usually matters.
-  if (row.cap?.reply_links?.length) {
-    const box = el("div", { className: "inner replies" });
-    for (const l of row.cap.reply_links.slice(0, 6)) {
-      box.append(linkChip(l.href, `↩ ${shortUrl(l.href)}`,
-        l.self ? `From the author's own reply (${l.from || "?"})` : `From a reply by ${l.from || "?"}`,
-        l.self ? "from-author" : ""));
-    }
-    main.append(box);
+  if (cap?.reply_links?.length) {
+    main.append(el("div", { className: "inner replies" }, ...cap.reply_links.slice(0, 6).map(l => linkChip(l.href, `↩ ${shortUrl(l.href)}`,
+      l.self ? `From the author's own reply (${l.from || "?"})` : `From a reply by ${l.from || "?"}`, l.self ? "from-author" : ""))));
   }
-
   // Actual thumbnails, not URLs — the point of keeping image links is to see them.
-  if (row.cap?.images?.length) {
+  if (cap?.images?.length) {
     const shots = el("div", { className: "shots" });
-    for (const src of row.cap.images.slice(0, 8)) {
+    for (const src of cap.images.slice(0, 8)) {
       const img = el("img", { src, loading: "lazy", alt: "" });
       const a = el("a", { href: src, target: "_blank", rel: "noopener noreferrer" }, img);
       // A dead image would otherwise collapse to a hairline beside the text.
-      img.addEventListener("error", () => {
-        a.remove();
-        if (!shots.querySelector("img")) shots.remove();
-      });
+      img.addEventListener("error", () => { a.remove(); if (!shots.querySelector("img")) shots.remove(); });
       shots.append(a);
     }
-    if (row.cap.images.length > 8) {
-      shots.append(el("span", { className: "png", textContent: `+${row.cap.images.length - 8} more` }));
-    }
+    if (cap.images.length > 8) shots.append(el("span", { className: "png", textContent: `+${cap.images.length - 8} more` }));
     main.append(shots);
   }
-
-  if (row.cap?.screenshot && !row.cap.shotThumb) {
+  if (cap?.screenshot && !cap.shotThumb) {
     // No preview stored — Firefox's own screenshot, or one taken before previews existed.
-    main.append(el("div", { className: "shots" }, el("span", { className: "png", textContent: `📄 ${row.cap.screenshot}` })));
+    main.append(el("div", { className: "shots" }, el("span", { className: "png", textContent: `📄 ${cap.screenshot}` })));
   }
-
-  if (row.cap?.shotThumb) {
-    const img = el("img", { src: row.cap.shotThumb, className: "shot-preview", loading: "lazy", alt: "" });
+  if (cap?.shotThumb) {
+    const img = el("img", { src: cap.shotThumb, className: "shot-preview", loading: "lazy", alt: "" });
     // The PNG itself lives in Downloads, which this page cannot load; the downloads API opens it.
-    const btn = el("button", { className: "shot-btn", title: `Open ${row.cap.screenshot}` }, img);
-    btn.setAttribute("aria-label", `Open screenshot ${row.cap.screenshot}`);
+    const btn = el("button", { className: "shot-btn", title: `Open ${cap.screenshot}` }, img);
+    btn.setAttribute("aria-label", `Open screenshot ${cap.screenshot}`);
     btn.onclick = async () => {
-      const res = await send({ type: "open-shot", id: row.cap.shotId, filename: row.cap.screenshot });
+      const res = await send({ type: "open-shot", id: cap.shotId, filename: cap.screenshot });
       if (!res?.ok) say(res?.error || "Unable to open the screenshot");
     };
     main.append(el("div", { className: "shots" }, btn));
   }
-
   li.append(main);
 
-  const acts = el("div", { className: "acts" });
-
   /* Read it without leaving this page: opens the link out of sight in your own session, extracts,
-   * closes it. Needs permission for that site, asked for here because a permission prompt must come
-   * from a click on an extension page. */
-  const readLabel = row.cap ? "Re-read" : "Read";
-  const grab = el("button", { className: "small", textContent: readLabel, title: "Open it in the background, read it, close it" });
-  grab.onclick = async () => {
-    let origin;
-    try {
-      origin = new URL(row.url).origin + "/*";
-    } catch (e) {
-      return say("That URL cannot be opened");
-    }
-    const granted = await browser.permissions.request({ origins: [origin] }).catch(() => false);
-    if (!granted) return say(`Reading it needs access to ${hostOf(row.url)}`);
-
-    grab.disabled = true;
-    grab.textContent = "Reading…";
-    const res = await send({ type: "capture-url", url: row.url });
-    if (res?.ok) {
-      const r = res.record;
-      const extra = [
-        r.links?.length ? `${r.links.length} link${r.links.length > 1 ? "s" : ""}` : null,
-        r.reply_links?.length ? `${r.reply_links.length} from replies` : null,
-      ].filter(Boolean).join(", ");
-      say(`Read ${r.title || hostOf(row.url)}${extra ? ` — ${extra}` : ""}`);
-    } else {
-      say(res?.error || "Unable to read it");
-      grab.disabled = false;
-      grab.textContent = readLabel;
-    }
-    load();
-  };
-  acts.append(grab, ...rowMenu(row, labelOf(row) || shortUrl(row.url)));
+   * closes it. */
+  const acts = el("div", { className: "acts" });
+  if (kind === "web" && isWeb(link.url)) {
+    const readLabel = cap ? "Re-read" : "Read";
+    const grab = el("button", { className: "small", textContent: readLabel, title: "Open it in the background, read it, close it" });
+    grab.onclick = async () => {
+      grab.disabled = true;
+      grab.textContent = "Reading…";
+      const res = await readLink(link.url);
+      if (res?.ok) {
+        const r = res.record;
+        const extra = [r.links?.length ? plural(r.links.length, "link") : null,
+          r.reply_links?.length ? `${r.reply_links.length} from replies` : null].filter(Boolean).join(", ");
+        say(`Read ${r.title || hostOf(link.url)}${extra ? ` — ${extra}` : ""}`);
+      } else {
+        say(res?.error || "Unable to read it");
+        grab.disabled = false;
+        grab.textContent = readLabel;
+      }
+      load();
+    };
+    acts.append(grab);
+  }
+  acts.append(...rowMenu(link, ctx));
   li.append(acts);
+
+  if (ctx) dragRow(li, link, ctx);
   return li;
 }
 
-/* Domain toggles. Multi-select: clicking narrows to the chosen set, clicking again releases;
- * nothing selected means no narrowing. The long tail hides behind an expander so fifty
- * one-off domains do not swallow the toolbar. */
+/* One malformed row must not blank the page; it falls back to the bare URL. */
+function safeRow(link, ctx) {
+  try {
+    return rowEl(link, ctx);
+  } catch (e) {
+    console.error("row failed", link.url, e);
+    return el("li", {}, el("span"), el("span"), el("div", { className: "main", textContent: `${shortUrl(link.url)} — could not render: ${e.message}` }));
+  }
+}
+
+/* --- drag and drop -----------------------------------------------------------------
+ * Grouped by stash, a row dropped on the top half of another goes ahead of it, on the bottom half
+ * after it; dropped on a stash's heading or the empty end of its list, it goes last. Out of a
+ * locked stash, nothing drags. */
+
+function moveTab(id, to, before) {
+  return act({ type: "move-stashed", ids: [id], to, before });
+}
+
+function clearDropMarks() {
+  for (const n of document.querySelectorAll(".drop-before, .drop-after, .drop-end")) n.classList.remove("drop-before", "drop-after", "drop-end");
+}
+
+function dropTarget(node, stash, spotOf) {
+  node.addEventListener("dragover", e => {
+    if (!dragging) return;
+    const spot = spotOf(e);
+    if (spot === undefined) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    clearDropMarks();
+    node.classList.add(spot.mark);
+  });
+  node.addEventListener("dragleave", e => { if (!node.contains(e.relatedTarget)) node.classList.remove("drop-before", "drop-after", "drop-end"); });
+  node.addEventListener("drop", e => {
+    if (!dragging) return;
+    const spot = spotOf(e);
+    if (spot === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const id = dragging.id;
+    dragging = null;
+    clearDropMarks();
+    if (spot.before !== id) moveTab(id, stash.id, spot.before);
+  });
+}
+
+function dragRow(li, link, { stash, tab, index }) {
+  if (!stash.locked) {
+    li.draggable = true;
+    li.addEventListener("dragstart", e => {
+      dragging = { id: tab.id };
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/uri-list", link.url);
+      e.dataTransfer.setData("text/plain", link.url);
+      li.classList.add("dragging");
+    });
+    li.addEventListener("dragend", () => { dragging = null; li.classList.remove("dragging"); clearDropMarks(); });
+  }
+  dropTarget(li, stash, e => {
+    const r = li.getBoundingClientRect();
+    return e.clientY > r.top + r.height / 2
+      ? { before: stash.tabs[index + 1]?.id || null, mark: "drop-after" }
+      : { before: tab.id, mark: "drop-before" };
+  });
+}
+
+/* --- stash headings ------------------------------------------------------------------ */
+
+function stashHeading(stash, shown) {
+  const h2 = el("h2");
+  if (stash.starred) h2.append(el("span", { className: "star-mark", textContent: "★", title: "Starred" }));
+  if (stash.locked) h2.append(el("span", { className: "lock-mark", textContent: "Locked" }));
+  if (renaming === stash.id) {
+    const input = el("input", { className: "rename", value: renamed(stash) ? stash.name : "", placeholder: whenOf(stash.created_at) });
+    input.setAttribute("aria-label", "Stash name");
+    const finish = async save => {
+      if (renaming !== stash.id) return;
+      renaming = null;
+      if (save) await act({ type: "rename-stash", id: stash.id, name: input.value });
+      else render();
+    };
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") finish(true);
+      if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+    h2.append(input);
+    queueMicrotask(() => { input.focus(); input.select(); });
+  } else {
+    h2.append(el("span", { className: "name", textContent: stash.name }));
+    if (renamed(stash)) h2.append(el("span", { className: "when", textContent: whenOf(stash.created_at) }));
+  }
+  const n = stash.tabs.length;
+  h2.append(el("span", { className: "n", textContent: shown === n ? plural(n, "tab") : `${shown} of ${n}` }));
+  if (stash.source === "import") {
+    h2.append(el("span", { className: "badge", textContent: `Imported${stash.format ? ` · ${FORMAT_SHORT[stash.format] || stash.format}` : ""}` }));
+  }
+
+  const button = (text, cls, title, fn, disabled = false) => {
+    const b = el("button", { className: `small ${cls}`, textContent: text, title, disabled });
+    b.onclick = fn;
+    return b;
+  };
+  const toggle = (text, on, title, fn) => {
+    const b = button(text, "ghost toggle", title, fn);
+    b.setAttribute("aria-pressed", String(on));
+    return b;
+  };
+  const locked = stash.locked;
+  const imported = stash.source === "import";
+  h2.append(el("div", { className: "gacts" },
+    button("Restore all", "primary", settings.afterRestore === "remove" && !locked
+      ? "Reopen every tab, unloaded until you switch to it, and take them out of the stash"
+      : "Reopen every tab, unloaded until you switch to it; the stash stays",
+    () => act({ type: "restore-stash", id: stash.id }, restoredText)),
+    button("Move to list", "", "Add these to the reading list and take them out of the stash",
+      () => act({ type: "move-stash", id: stash.id },
+        r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}` +
+          (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : "")), locked),
+    button("Explore", "", "Browse this stash with a sidebar, details and a live preview",
+      () => send({ type: "open-stash-cards", id: stash.id })),
+    toggle(stash.starred ? "★ Starred" : "☆ Star", stash.starred, "Starred stashes stay at the top",
+      () => act({ type: "flag-stash", id: stash.id, starred: !stash.starred })),
+    toggle(locked ? "Locked" : "Lock", locked, "A locked stash cannot lose a tab: no delete, remove or move out, and restoring keeps it",
+      () => act({ type: "flag-stash", id: stash.id, locked: !locked })),
+    ...popoverMenu("⋯", `More actions for the stash ${stashName(stash)}`, [
+      { text: "Rename", run: () => { renaming = stash.id; render(); } },
+      { text: imported ? "Mark as stashed from open tabs" : "Mark as imported",
+        title: "Which source this stash belongs to in the top bar",
+        run: () => act({ type: "set-stash-source", id: stash.id, source: imported ? "tabs" : "import" },
+          () => (imported ? "Now under Stashed tabs" : "Now under Imports")) },
+      "-",
+      { text: "Delete…", className: "danger", disabled: locked, title: locked ? "Unlock it first" : "Remove this stash; its tabs are closed, so this is their only record",
+        run: () => {
+          if (!confirm(`Delete this stash of ${plural(n, "tab")}? They are closed, so this removes the only record of them.`)) return;
+          return act({ type: "delete-stash", id: stash.id }, () => `Deleted a stash of ${plural(n, "tab")}`);
+        } },
+    ]),
+  ));
+  dropTarget(h2, stash, () => ({ before: null, mark: "drop-end" }));
+  return h2;
+}
+
+/* --- grouping ------------------------------------------------------------------------- */
+
+function section(title, count, rows, extraClass = "") {
+  const s = el("section", { className: `group${extraClass}` });
+  if (title) s.append(el("h2", {}, el("span", { textContent: title }), el("span", { className: "n", textContent: count })));
+  s.append(el("ul", { className: "rows" }, ...rows));
+  return s;
+}
+
+function renderByStash(out, visible, term) {
+  const filtering = !!(term || filter !== "all" || domainSel.size);
+  const show = new Set(visible.map(l => l.key));
+  let any = false;
+  for (const stash of data.stashes) {
+    const rows = stash.tabs.map((tab, index) => ({ tab, index, link: data.byKey.get(tab.key) })).filter(r => r.link && show.has(r.link.key));
+    if (!rows.length && filtering) continue;
+    any = true;
+    const ul = el("ul", { className: "rows stash" }, ...rows.map(r => safeRow(r.link, { stash, tab: r.tab, index: r.index })));
+    dropTarget(ul, stash, e => (e.target === ul ? { before: null, mark: "drop-end" } : undefined));
+    out.append(el("section", { className: `group${stash.locked ? " locked" : ""}` }, stashHeading(stash, rows.length), ul));
+  }
+  // Reading-list links not already shown under a stash.
+  const listOnly = visible.filter(l => l.list && !l.copies.some(c => visibleStash(c.stash))).sort(byNewest);
+  if (listOnly.length) {
+    any = true;
+    out.append(section("Reading list", listOnly.length, listOnly.map(l => safeRow(l, null)), " list-group"));
+  }
+  return any;
+}
+
+function bucketsOf(visible) {
+  if (group === "newest") return [["", [...visible].sort(byNewest)]];
+  if (group === "oldest") return [["", [...visible].sort(byNewest).reverse()]];
+  if (group === "status") {
+    return ["left", "seen", "kept", "dropped"]
+      .map(s => [STATE_NAMES[s], visible.filter(l => stateOf(l) === s).sort(byNewest)])
+      .filter(([, list]) => list.length);
+  }
+  const keyFor = {
+    domain: l => siteOf(l.url),
+    day: l => (l.date ? new Date(l.date).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "No date"),
+    month: l => (l.date ? new Date(l.date).toLocaleDateString(undefined, { month: "long", year: "numeric" }) : "No date"),
+  }[group];
+  const buckets = new Map();
+  for (const l of [...visible].sort(byNewest)) {
+    const k = keyFor(l);
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k).push(l);
+  }
+  const list = [...buckets.entries()];
+  // Domains by size; dates stay newest first, with the undated last.
+  if (group === "domain") list.sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  else list.sort((a, b) => (a[0] === "No date") - (b[0] === "No date"));
+  return list;
+}
+
+/* --- domain chips ------------------------------------------------------------------------
+ * Multi-select: clicking narrows to the chosen set, clicking again releases; nothing selected means
+ * no narrowing. The long tail hides behind an expander so fifty one-off domains do not swallow the
+ * toolbar. */
 function renderDomainChips() {
   const box = $("domains");
   box.textContent = "";
   const counts = new Map();
-  for (const r of rows) {
-    const h = hostOf(r.url);
+  for (const l of data.links) {
+    const h = siteOf(l.url);
     counts.set(h, (counts.get(h) || 0) + 1);
   }
   const hosts = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const shown = domainsExpanded ? hosts : hosts.slice(0, 12);
-
-  const domainChip = (host, n) => {
-    const chip = el("button", { className: "chip" }, srcIcon(`https://${host}/`), host,
-      el("span", { className: "n", textContent: n }));
-    chip.setAttribute("aria-pressed", String(domainSel.has(host)));
-    chip.onclick = () => {
-      domainSel.has(host) ? domainSel.delete(host) : domainSel.add(host);
-      render();
-    };
-    return chip;
+  const chip = (host, n) => {
+    const icon = host === "Local files" ? srcIcon("file:///") : host === "Browser pages" ? srcIcon("about:blank") : srcIcon(`https://${host}/`);
+    const b = el("button", { className: "chip" }, icon, host, el("span", { className: "n", textContent: n }));
+    b.setAttribute("aria-pressed", String(domainSel.has(host)));
+    b.onclick = () => { domainSel.has(host) ? domainSel.delete(host) : domainSel.add(host); render(); };
+    return b;
   };
-
-  for (const [host, n] of shown) box.append(domainChip(host, n));
+  for (const [host, n] of shown) box.append(chip(host, n));
   // Selected domains always stay visible, even from the collapsed tail.
-  for (const host of domainSel) {
-    if (!shown.some(([h]) => h === host)) box.append(domainChip(host, counts.get(host) || 0));
-  }
+  for (const host of domainSel) if (!shown.some(([h]) => h === host)) box.append(chip(host, counts.get(host) || 0));
   if (hosts.length > 12) {
     const more = el("button", { className: "chip ghost", textContent: domainsExpanded ? "Show fewer" : `${hosts.length - 12} more` });
     more.setAttribute("aria-expanded", String(domainsExpanded));
@@ -329,13 +546,9 @@ function renderDomainChips() {
   }
 }
 
-function setChip(id, label, n) {
-  $(id).replaceChildren(`${label} `, el("span", { className: "n", textContent: n }));
-}
-
 function setFilter(which) {
   filter = which;
-  for (const other of FILTERS) $(`f-${other}`).setAttribute("aria-pressed", String(other === which));
+  for (const f of FILTERS) $(`f-${f}`).setAttribute("aria-pressed", String(f === which));
 }
 
 function clearFilters() {
@@ -345,199 +558,279 @@ function clearFilters() {
   render();
 }
 
+/* --- render ------------------------------------------------------------------------------- */
+
 function render() {
   renderDomainChips();
+  renderSettings();
   const term = $("q").value.trim().toLowerCase();
-  const counts = { pending: 0, seen: 0, kept: 0, skipped: 0 };
-  for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
-  const total = rows.length;
+  const counts = { left: 0, seen: 0, kept: 0, dropped: 0 };
+  for (const l of data.links) counts[stateOf(l)]++;
+  const total = data.links.length;
 
+  const stashBit = data.stashes.length ? ` · ${data.stashes.length === 1 ? "1 stash" : `${data.stashes.length} stashes`}` : "";
   $("sub").textContent = total
-    ? `${total} links · ${counts.kept} kept · ${counts.skipped} skipped · ${counts.seen} seen · ${counts.pending} left`
-    : "Nothing on the list yet";
-  $("bar-kept").style.width = total ? `${counts.kept / total * 100}%` : "0";
-  $("bar-seen").style.width = total ? `${counts.seen / total * 100}%` : "0";
-  $("bar-skipped").style.width = total ? `${counts.skipped / total * 100}%` : "0";
-  setChip("f-all", "All", total);
-  setChip("f-pending", "Left", counts.pending);
-  setChip("f-seen", "Seen", counts.seen);
-  setChip("f-kept", "Kept", counts.kept);
-  setChip("f-skipped", "Skipped", counts.skipped);
+    ? `${plural(total, "link")} · ${counts.kept} kept · ${counts.dropped} dropped · ${counts.seen} seen · ${counts.left} left${stashBit}`
+    : "Nothing to show";
+  for (const [id, k] of [["bar-kept", "kept"], ["bar-seen", "seen"], ["bar-skipped", "dropped"]]) {
+    $(id).style.width = total ? `${counts[k] / total * 100}%` : "0";
+  }
+  const names = { all: "All", left: "Left", seen: "Seen", kept: "Kept", dropped: "Dropped" };
+  for (const f of FILTERS) $(`f-${f}`).replaceChildren(`${names[f]} `, el("span", { className: "n", textContent: f === "all" ? total : counts[f] }));
+  $("groupby").value = group;
 
-  const visible = rows.filter(r => matches(r, term));
+  const dropped = data.all.stashes.reduce((n, s) => n + (s.locked ? 0 : s.tabs.filter(t => t.verdict === "drop").length), 0);
+  $("clear-dropped").hidden = !dropped;
+  $("clear-dropped").textContent = `Clear ${dropped} dropped from stashes…`;
+
   const out = $("out");
   out.textContent = "";
+  const visible = data.links.filter(l => matches(l, term));
 
+  if (!data.sources.size) {
+    out.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: "No source chosen" }),
+      el("p", { textContent: "Pick Stashed tabs, Imports or Reading list in the bar at the top." })));
+    return;
+  }
+  if (!total) {
+    out.append(el("div", { className: "empty" },
+      el("p", { className: "title", textContent: "Nothing here yet" }),
+      el("p", {}, "Stash tabs with ", el("kbd", { textContent: "⌃⇧S" }), " (", el("kbd", { textContent: "Alt+Shift+S" }),
+        " off a Mac), queue a page with ", el("kbd", { textContent: "Ctrl+Shift+U" }), ", or Import a OneTab export.")));
+    return;
+  }
   if (!visible.length) {
-    const box = el("div", { className: "empty" });
-    if (total) {
-      const which = { all: "", pending: "unopened ", seen: "seen ", skipped: "skipped ", kept: "kept " }[filter];
-      const where = domainSel.size ? ` on ${[...domainSel].join(", ")}` : "";
-      const query = term ? ` match “${$("q").value.trim()}”` : "";
-      const clear = el("button", { textContent: "Clear filters" });
-      clear.onclick = clearFilters;
-      box.append(el("p", { className: "title", textContent: "No matches" }),
-        el("p", { textContent: `No ${which}links${where}${query}.` }), clear);
-    } else {
-      box.append(el("p", { className: "title", textContent: "The list is empty" }),
-        el("p", {}, "Add links from the popup, or press ", el("kbd", { textContent: "Ctrl+Shift+U" }), " on a page."));
-    }
-    out.append(box);
+    const clear = el("button", { textContent: "Clear filters" });
+    clear.onclick = clearFilters;
+    out.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: "No matches" }),
+      el("p", { textContent: "Nothing on show matches the filter." }), clear));
     return;
   }
 
-  const mode = $("groupby").value;
-  for (const [name, list] of groupRows(visible, mode)) {
-    const section = el("section", { className: "group" });
-    if (name) section.append(el("h2", {}, el("span", { textContent: name }), el("span", { className: "n", textContent: list.length })));
-    const ul = el("ul", { className: "rows" });
-    for (const row of list) {
-      try {
-        ul.append(rowEl(row, mode === "domain"));
-      } catch (e) {
-        // One malformed row must not blank the page; fall back to the bare URL.
-        const li = document.createElement("li");
-        li.dataset.status = row.status;
-        li.append(document.createElement("span"), document.createElement("span"), el("div", {
-          className: "main", textContent: `${shortUrl(row.url)} — could not render: ${e.message}`,
-        }));
-        ul.append(li);
-        console.error("row failed", row.url, e);
-      }
-    }
-    section.append(ul);
-    out.append(section);
+  if (group === "stash") {
+    renderByStash(out, visible, term);
+    return;
+  }
+  for (const [name, list] of bucketsOf(visible)) out.append(section(name, list.length, list.map(l => safeRow(l, null))));
+}
+
+/* --- settings ------------------------------------------------------------------------------ */
+
+function renderSettings() {
+  for (const r of document.querySelectorAll('input[name="after-stash"]')) r.checked = r.value === settings.afterStash;
+  for (const r of document.querySelectorAll('input[name="after-restore"]')) r.checked = r.value === settings.afterRestore;
+  const list = $("exclude-list");
+  list.textContent = "";
+  if (!settings.exclude.length) list.append(el("li", { className: "none", textContent: "None yet. Right-click a page → Stash → Never stash this site." }));
+  for (const host of settings.exclude) {
+    const b = el("button", { className: "small ghost", textContent: "×", title: `Stash ${host} again` });
+    b.setAttribute("aria-label", `Stash ${host} again`);
+    b.onclick = () => act({ type: "toggle-excluded", host }, () => `${host} will be stashed again`);
+    list.append(el("li", {}, srcIcon(`https://${host}/`), el("span", { textContent: host }), b));
   }
 }
 
-$("q").addEventListener("input", render);
-$("groupby").addEventListener("change", render);
-
-const FILTERS = ["all", "pending", "seen", "skipped", "kept"];
-for (const which of FILTERS) {
-  $(`f-${which}`).onclick = () => { setFilter(which); render(); };
-}
-
-// A popover is placed once, when it opens; scrolling would leave it behind, so close it instead.
-addEventListener("scroll", () => {
-  for (const open of document.querySelectorAll(".menu:popover-open")) open.hidePopover();
-}, { passive: true });
-
-$("export").onclick = async () => {
-  const { captures } = await send({ type: "export" });
-  if (!captures.length) return say("Nothing captured yet");
-  const a = document.createElement("a");
-  const body = captures.map(r =>
-    JSON.stringify(r).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")).join("\n") + "\n";
-  a.href = URL.createObjectURL(new Blob([body], { type: "application/x-ndjson" }));
-  a.download = "link-captures.jsonl";
-  a.click();
-  URL.revokeObjectURL(a.href);
-  say(`Exported ${captures.length} captures to Downloads`);
+for (const r of document.querySelectorAll('input[name="after-stash"]')) r.onchange = () => act({ type: "set-stash-settings", afterStash: r.value });
+for (const r of document.querySelectorAll('input[name="after-restore"]')) r.onchange = () => act({ type: "set-stash-settings", afterRestore: r.value });
+$("exclude-form").onsubmit = e => {
+  e.preventDefault();
+  let host = $("exclude-host").value.trim().toLowerCase();
+  try { if (/^[a-z][a-z0-9+.-]*:\/\//.test(host)) host = new URL(host).hostname; } catch (err) { /* keep what was typed */ }
+  host = host.replace(/^www\./, "").replace(/\/.*$/, "");
+  if (!host || settings.exclude.includes(host)) return;
+  $("exclude-host").value = "";
+  act({ type: "toggle-excluded", host }, () => `${host} will not be stashed`);
 };
 
-/* Import lives here rather than in the popup: choosing a file opens an OS dialog, which closes a
- * browser-action popup and destroys its JS before onchange can fire. A tab survives it. */
-function showImport(open) {
-  $("import-panel").hidden = !open;
-  $("show-import").setAttribute("aria-expanded", String(open));
-}
-$("show-import").onclick = () => {
-  showImport($("import-panel").hidden);
+function openPanel(which) {
+  for (const id of ["settings-panel", "import-panel"]) $(id).hidden = id !== which || !$(id).hidden;
+  $("settings").setAttribute("aria-expanded", String(!$("settings-panel").hidden));
+  $("import").setAttribute("aria-expanded", String(!$("import-panel").hidden));
   if (!$("import-panel").hidden) $("import-text").focus();
-};
-$("hide-import").onclick = () => { showImport(false); $("show-import").focus(); };
-
-function parseJsonl(raw) {
-  // split("\n") only: U+2028 appears raw inside tweet text and would tear a record in two.
-  const records = [];
-  let bad = 0;
-  for (const line of raw.split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
-    try { records.push(JSON.parse(t)); } catch (e) { bad++; }
-  }
-  return { records, bad };
 }
+$("settings").onclick = () => openPanel("settings-panel");
 
-async function runImport(raw) {
+/* --- import ---------------------------------------------------------------------------------
+ * One panel for everything: stashes (OneTab, TidyTab, a Link Keeper export, CSV, text with links)
+ * become stashes marked as imported; capture JSONL merges into the reading list. */
+
+const FORMAT_NAMES = {
+  "link-keeper": "a Link Keeper export", tidytab: "a TidyTab export", json: "a JSON list", csv: "CSV",
+  onetab: "OneTab's Export URLs", text: "text with links in it", captures: "capture JSONL",
+};
+const FORMAT_SHORT = { "link-keeper": "Link Keeper", tidytab: "TidyTab", json: "JSON", csv: "CSV", onetab: "OneTab", text: "text" };
+let parsed = null;
+
+function previewImport() {
+  $("import-cancel").textContent = "Cancel";
+  parsed = parseStashImport($("import-text").value);
   const note = $("import-msg");
-  const { records, bad } = parseJsonl(raw);
-  if (!records.length) {
-    note.className = "bad";
-    note.textContent = `Nothing readable${bad ? ` — ${bad} unparseable lines` : ""}. Paste one JSON object per line.`;
+  note.className = "";
+  if (parsed.format === "captures") {
+    note.textContent = `Read as capture JSONL: ${plural(parsed.records.length, "record")}; they merge into the reading list` +
+      (parsed.skipped ? ` · ${plural(parsed.skipped, "line")} unreadable` : "") + ".";
+    $("import-go").disabled = !parsed.records.length;
     return;
   }
-  const res = await send({ type: "import-captures", records });
-  note.className = "ok";
-  note.textContent = `${res.added} new, ${res.enriched} filled in, ${res.skipped} already known`
-    + `${res.marked ? `, ${res.marked} taken off the queue` : ""}`
-    + `${bad ? `, ${bad} bad lines skipped` : ""} — ${res.total} captures held`;
-  $("import-text").value = "";
-  load();
+  const n = parsed.stashes.reduce((sum, s) => sum + s.tabs.length, 0);
+  if (!parsed.format) note.textContent = "Paste OneTab's Export URLs, a TidyTab or Link Keeper export, CSV with a url column, capture JSONL, or any text with links.";
+  else if (!n) { note.textContent = `Read as ${FORMAT_NAMES[parsed.format]}, but found no links.`; note.className = "bad"; }
+  else note.textContent = `Read as ${FORMAT_NAMES[parsed.format]}: ${plural(n, "tab")} in ${plural(parsed.stashes.filter(s => s.tabs.length).length, "stash")}, under Imports` +
+    (parsed.skipped ? ` · ${plural(parsed.skipped, "line")} without a link skipped` : "") + ".";
+  $("import-go").disabled = !n;
 }
 
+$("import").onclick = () => { openPanel("import-panel"); previewImport(); };
+$("import-text").addEventListener("input", previewImport);
 $("import-file").onchange = async e => {
   const file = e.target.files[0];
   if (!file) return;
-  $("import-msg").textContent = `Reading ${file.name}…`;
-  await runImport(await file.text());
-  e.target.value = "";
+  $("import-text").value = await file.text();
+  previewImport();
+};
+$("import-cancel").onclick = () => {
+  $("import-panel").hidden = true;
+  $("import").setAttribute("aria-expanded", "false");
 };
 
-$("do-import").onclick = () => {
-  const raw = $("import-text").value.trim();
-  if (!raw) {
-    $("import-msg").className = "bad";
-    $("import-msg").textContent = "Paste some JSONL, or choose a file";
-    return;
+function importDone(text) {
+  $("import-text").value = "";
+  $("import-file").value = "";
+  parsed = null;
+  $("import-go").disabled = true;
+  $("import-cancel").textContent = "Close";
+  $("import-msg").className = "ok";
+  $("import-msg").textContent = text;
+}
+
+const captureSummary = res => `${res.added} new, ${res.enriched} filled in, ${res.skipped} already known` +
+  `${res.marked ? `, ${res.marked} taken off the queue` : ""} — ${res.total} captures held`;
+
+/* Writing a few hundred bookmarks takes seconds, so the panel counts them as Firefox reports each
+ * one, then stays open with the result instead of vanishing. */
+$("import-go").onclick = async () => {
+  if (parsed?.format === "captures") {
+    const res = await send({ type: "import-captures", records: parsed.records });
+    importDone(captureSummary(res));
+    return load();
   }
-  runImport(raw);
+  if (!parsed?.stashes.length) return;
+  const total = parsed.stashes.reduce((sum, s) => sum + s.tabs.length, 0);
+  const note = $("import-msg"), bar = $("import-progress");
+  const controls = ["import-go", "import-cancel", "import-text", "import-file"].map($);
+  for (const c of controls) c.disabled = true;
+  let written = 0;
+  const onCreated = (id, node) => {
+    if (!node.url) return;
+    written++;
+    bar.value = Math.min(written, total);
+    note.textContent = `Importing… ${written} of ${total} tabs`;
+  };
+  note.className = "";
+  note.textContent = `Importing… 0 of ${total} tabs`;
+  bar.max = total;
+  bar.value = 0;
+  bar.hidden = false;
+  browser.bookmarks.onCreated.addListener(onCreated);
+  let res;
+  try {
+    res = await send({ type: "import-stashes", stashes: parsed.stashes, format: parsed.format });
+  } finally {
+    browser.bookmarks.onCreated.removeListener(onCreated);
+    bar.hidden = true;
+    for (const c of controls) c.disabled = false;
+  }
+  if (res?.ok) {
+    importDone(`Imported ${plural(res.tabs, "tab")} in ${plural(res.stashes, "stash")}; grouped by stash, they are at the top, under Imports.`);
+  } else {
+    previewImport();
+    note.className = "bad";
+    note.textContent = res?.error || "The import did not go through; nothing was written.";
+  }
+  await load();
 };
-
-if (location.hash === "#import") showImport(true);
 
 /* If a refresh is waiting on loopback, take it now. Import is idempotent, so doing this on every
  * visit costs nothing and means the only step after a rebuild is opening this page. */
-(async () => {
+async function takePendingRefresh() {
   const res = await send({ type: "fetch-pending" });
   if (!res?.ok) return;
-
-  // A refresh hands over both halves: what it could read, and what it could not. The second lot are
-  // the only links that still need a browser, so they go straight onto the queue rather than being
-  // printed as a shell command to run by hand.
+  // A refresh hands over both halves: what it could read, and what it could not. The second lot
+  // are the only links that still need a browser, so they go straight onto the queue.
   let records = [], queue = [];
   const body = res.body.trim();
-  if (body.startsWith("{")) {
+  if (body.startsWith("{") && !body.includes("\n{")) {
     try {
       const bundle = JSON.parse(body);
       records = bundle.captures || [];
       queue = bundle.queue || [];
     } catch (e) { return; }
   } else {
-    records = parseJsonl(body).records;
+    records = parseStashImport(body).records || [];
   }
   if (!records.length && !queue.length) return;
-
   const bits = [];
   if (records.length) {
     const out = await send({ type: "import-captures", records });
-    bits.push(`${records.length} read — ${out.added} new, ${out.enriched} filled in`
-      + `${out.marked ? `, ${out.marked} off the queue` : ""}`);
+    bits.push(`${records.length} read — ${out.added} new, ${out.enriched} filled in${out.marked ? `, ${out.marked} off the queue` : ""}`);
   }
   if (queue.length) {
     const out = await send({ type: "add", urls: queue });
-    bits.push(`${queue.length} needing a browser — ${out.added} queued`
-      + `${out.skipped ? `, ${out.skipped} already there` : ""}`);
+    bits.push(`${queue.length} needing a browser — ${out.added} queued${out.skipped ? `, ${out.skipped} already there` : ""}`);
   }
-
-  const note = $("import-msg");
-  note.className = "ok";
-  note.textContent = `From the last refresh: ${bits.join("; ")}`;
-  showImport(true);
+  openPanel("import-panel");
+  $("import-msg").className = "ok";
+  $("import-msg").textContent = `From the last refresh: ${bits.join("; ")}`;
   load();
-})();
+}
 
+/* --- page actions ------------------------------------------------------------------------------- */
+
+$("q").addEventListener("input", render);
+$("groupby").onchange = () => {
+  group = $("groupby").value;
+  try { localStorage.setItem(GROUP_KEY, group); } catch (e) { /* not remembered */ }
+  render();
+};
+for (const f of FILTERS) $(`f-${f}`).onclick = () => { setFilter(f); render(); };
+
+$("stash").onclick = () => act({ type: "stash" }, r => `Stashed ${plural(r.stashed, "tab")}${r.why ? ` · left open: ${r.why}` : ""}`);
+
+$("clear-dropped").onclick = () => {
+  const n = data.all.stashes.reduce((sum, s) => sum + (s.locked ? 0 : s.tabs.filter(t => t.verdict === "drop").length), 0);
+  if (!confirm(`Remove the ${n} stashed tabs you dropped? They are closed, so this removes the only record of them. Locked stashes keep theirs.`)) return;
+  act({ type: "clear-dropped" }, r => `Removed ${plural(r.removed, "dropped tab")}`);
+};
+
+function download(name, type, body) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([body], { type }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+{
+  const [trigger, menu] = popoverMenu("Export", "Export", [
+    { text: "Stashes (JSON)", title: "Every stash; Import reads it back", run: async () => {
+      const { sessions } = await send({ type: "sessions" });
+      if (!sessions.length) return say("Nothing stashed");
+      download(`link-keeper-stashes-${new Date().toISOString().slice(0, 10)}.json`, "application/json",
+        JSON.stringify({ exported_at: new Date().toISOString(), sessions }, null, 2));
+      say(`Exported ${plural(sessions.length, "stash")} to Downloads`);
+    } },
+    { text: "Captures (JSONL)", title: "Every page read, one JSON object per line", run: async () => {
+      const { captures } = await send({ type: "export" });
+      if (!captures.length) return say("Nothing captured yet");
+      download("link-captures.jsonl", "application/x-ndjson",
+        captures.map(r => JSON.stringify(r).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")).join("\n") + "\n");
+      say(`Exported ${plural(captures.length, "capture")} to Downloads`);
+    } },
+  ], "");
+  trigger.id = "export";
+  $("export-slot").replaceWith(trigger, menu);
+}
+
+if (location.hash === "#import") { openPanel("import-panel"); previewImport(); }
+takePendingRefresh();
+reloadOnChanges(load, () => !!(renaming || dragging));
 load();
-// Cheap way to stay in step with captures made in other tabs.
-browser.storage.onChanged.addListener(load);
