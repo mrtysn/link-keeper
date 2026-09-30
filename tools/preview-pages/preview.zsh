@@ -64,7 +64,7 @@ stamp=$(date +%s)
 # The fake API goes in ahead of the first script that calls it: nav.js on pages with the top bar,
 # the page's own script on the rest.
 mock="<script src=\"mock-data.js?v=$stamp\"></script><script src=\"links.js?v=$stamp\"></script><script src=\"mock-browser.js?v=$stamp\"></script>"
-for page in popup list cards standin stash-cards; do
+for page in popup list cards standin stash-cards tag; do
   if grep -q '<script src="nav.js"></script>' "$ext/$page.html"; then
     first='<script src="nav.js"></script>'
     swap="s#$first#$mock<script src=\"nav.js?v=$stamp\"></script>#"
@@ -91,6 +91,7 @@ print "http://127.0.0.1:$port/list.html"
 print "http://127.0.0.1:$port/cards.html"
 print "http://127.0.0.1:$port/list.html?group=stash"
 print "http://127.0.0.1:$port/stash-cards.html"
+print "http://127.0.0.1:$port/tag.html"
 print "http://127.0.0.1:$port/standin.html?url=file:///tmp/x.html&title=Report&why=the+helper+is+not+installed"
 cd "$out"
 exec python3 -m http.server "$port" --bind 127.0.0.1
