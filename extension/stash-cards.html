@@ -66,14 +66,19 @@
 
   /* --- two panes --- */
   .panes { display: grid; grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr); min-height: 0; }
-  #side { overflow-y: auto; border-right: 1px solid var(--line); padding: 4px 0 24px; }
+  #side { overflow-y: auto; border-right: 1px solid var(--line); padding: 0 0 24px; }
+  /* Each stash is a band of its own: a filled heading ruled above and below, and a gap before the
+     next one, so where one group ends is plain at a glance — also while its heading is stuck on top. */
   #side h2 {
-    position: sticky; top: 0; z-index: 1; margin: 0; padding: 10px 14px 6px; background: var(--bg);
-    font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim);
+    position: sticky; top: 0; z-index: 1; margin: 0; padding: 9px 14px; background: var(--panel);
+    border-block: 1px solid var(--line);
+    font-size: .75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink);
     display: flex; gap: 8px;
   }
-  #side h2 .n { margin-left: auto; font-variant-numeric: tabular-nums; }
-  #side ul { list-style: none; margin: 0; padding: 0 6px; }
+  #side h2:first-child { border-top: 0; }
+  #side ul + h2 { margin-top: 16px; }
+  #side h2 .n { margin-left: auto; color: var(--dim); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #side ul { list-style: none; margin: 0; padding: 4px 6px 6px; }
   #side li button {
     display: grid; grid-template-columns: 16px minmax(0, 1fr) 14px; gap: 8px; align-items: center;
     width: 100%; min-height: 30px; padding: 4px 8px; border: 0; border-radius: 6px; background: none;
