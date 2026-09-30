@@ -149,6 +149,11 @@ and removing every tag brings the guess back.
 - A stash heading's **⋯ → Tag all tabs…** adds one tag to every tab in it.
 - List has a row of tag chips — any of them, or **Untagged** for the links with none of their own —
   and **Group by Tag**, where a link shows under each of its tags. Cards deals one tag at a time.
+- **Tag**, the fourth viewer in the top bar, is for tagging many links in one sitting, as swipe-sort's
+  Tag page is: the links on show with no tag of their own, newest first, each with its editor open.
+  Enter saves a tag; Enter on the empty field goes to the next link. A link tagged there keeps its
+  place, marked ✓, until the filter changes, so the list does not jump. Chips narrow to links with a
+  guess, with none, or every link.
 - **Settings → Tags** lists every tag with its count: click one to rename it (a name already in use
   merges the two), × to delete it from every link.
 
@@ -180,7 +185,8 @@ the selected tabs if you have selected several, otherwise the whole window. The 
 by stash, opens in their place.
 
 The **Stash** submenu — on a page, and on a tab in the tab strip — and the ▾ beside the popup's
-Stash button take other scopes too: **only this tab**, **tabs to the left**, **tabs to the right**,
+Stash button take other scopes too: **all tabs in this window** (even when several are selected),
+**only this tab**, **tabs to the left**, **tabs to the right**,
 **all except this one**, and **every window** (one stash per window). On the tab strip, "this tab" is
 the one you right-clicked. **Never stash this site** in the same submenu puts a site on a list that
 stashing leaves open; **Settings** on the List page shows the list. Two commands without a

@@ -571,7 +571,7 @@ const STASH_SETTINGS = { afterStash: "show", afterRestore: "keep", exclude: [] }
  * reopened from the toolbar at any time. */
 const listPage = () => browser.runtime.getURL("list.html");
 const stashView = () => `${listPage()}?group=stash`;
-const VIEWER_PAGES = ["list.html", "sessions.html", "cards.html", "stash-cards.html"];
+const VIEWER_PAGES = ["list.html", "sessions.html", "cards.html", "stash-cards.html", "tag.html"];
 const isViewerPage = url => VIEWER_PAGES.some(p => !!url?.startsWith(browser.runtime.getURL(p)));
 const hostOfUrl = url => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } };
 /* Firefox stores a bookmark's URL in its parsed form — host lowercased, spaces and non-ASCII
@@ -1300,6 +1300,7 @@ function stashMenu(where, title, contexts) {
   return [
     { id: parentId, title, contexts },
     item("auto", "Selected tabs, or the whole window"),
+    item("window", "All tabs in this window"),
     item("tab", "Only this tab"),
     item("left", "Tabs to the left"),
     item("right", "Tabs to the right"),

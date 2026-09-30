@@ -166,7 +166,7 @@ await check("List, Cards and Explore load in Firefox with the bar, the sources a
   };
   const list = await open("list.html?group=stash");
   const d = list.doc;
-  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["List", "Cards", "Explore"], "viewers in the bar");
+  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["List", "Cards", "Explore", "Tag"], "viewers in the bar");
   eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "List", "List is marked");
   eq([...d.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["true", "true", "true"], "every source on at first");
   yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
@@ -280,7 +280,7 @@ await check("the popup: three viewers with live counts, This tab's split buttons
   eq(d.getElementById("n-links").textContent, c.total.toLocaleString(), "List shows the links on show");
   eq(d.getElementById("n-undecided").textContent, c.undecided.toLocaleString(), "Cards shows what is left to judge");
   eq([...d.querySelectorAll("#sources button")].length, 3, "one toggle per source");
-  eq([...d.querySelectorAll("#stash-menu [data-scope]")].map(b => b.dataset.scope), ["tab", "left", "right", "others", "all-windows"], "the five scopes sit behind the arrow");
+  eq([...d.querySelectorAll("#stash-menu [data-scope]")].map(b => b.dataset.scope), ["window", "tab", "left", "right", "others", "all-windows"], "the scopes sit behind the arrow");
   yes(d.getElementById("keep-shot") && d.getElementById("keep-note"), "Keep's arrow offers a screenshot and a note");
   eq(d.querySelector("details"), null, "no drawers left");
   d.getElementById("keep-note").click();
@@ -422,4 +422,40 @@ await check("data patches run once and are recorded; a fingerprint not found her
   yes(/folders in the window/.test(rec.skipped || ""), `skipped here: ${JSON.stringify(rec)}`);
   eq((await getSessions()).map(s => [s.id, s.source]), before, "no stash changed");
   eq((await browser.storage.local.get("dataPatches")).dataPatches["2026-09-29-mark-onetab-import"].at, rec.at, "stored");
+});
+
+await check("Tag page: untagged links with their editor open; Enter saves, Enter on empty moves to the next", async () => {
+  await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("tag.html"), active: true });
+  await wait(1500);
+  const view = viewOf("tag.html"), d = view.document;
+  eq(d.querySelector('.app-pages a[aria-current="page"]')?.textContent, "Tag", "Tag is in the bar, marked");
+  const untagged = (await getLinks()).links.filter(l => !l.tags.length).length;
+  eq(d.querySelectorAll("ul.tagrows > li").length, Math.min(40, untagged), "one row per untagged link, 40 at a time");
+  const [first, second] = d.querySelectorAll("ul.tagrows > li");
+  const url0 = first.querySelector(".ttl").title;
+  const input = first.querySelector(".tagger input");
+  input.focus();
+  input.value = "tagged on the tag page";
+  input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await wait(600);
+  yes((await getLinks()).links.find(l => l.url === url0)?.tags.includes("tagged on the tag page"), "saved for that link");
+  yes(first.classList.contains("done"), "the row stays, marked done");
+  eq(d.querySelectorAll("ul.tagrows > li").length, Math.min(40, untagged), "nothing jumped");
+  input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await wait(100);
+  eq(d.activeElement, second.querySelector(".tagger input"), "Enter on the empty field moves to the next link");
+  await browser.tabs.remove(tab.id);
+});
+
+await check("'All tabs in this window' takes the whole window even when several tabs are selected", async () => {
+  const urls = Array.from({ length: 5 }, (_, i) => url(500 + i));
+  const win = await windowOf(urls, { pinFirst: true });
+  const tabs = await browser.tabs.query({ windowId: win });
+  await browser.tabs.highlight({ windowId: win, tabs: [tabs[2].index, tabs[3].index] });
+  await onMenuClicked({ menuItemId: "stash:page:window" }, tabs[3]);
+  eq((await getSessions())[0].tabs.map(t => t.url), urls.slice(1), "every unpinned tab, not just the selection");
+  const left = (await browser.tabs.query({ windowId: win })).map(t => t.url).filter(u => u.startsWith("http"));
+  eq(left, [url(500)], "the pinned tab stays");
+  await browser.windows.remove(win);
 });
