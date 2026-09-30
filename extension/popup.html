@@ -76,7 +76,11 @@
   h2 .n { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-numeric: tabular-nums; }
 
   /* --- this tab: split buttons, the arrow half opening its menu --- */
+  /* Firefox may give the popup less than its 22rem; the shortcut hints go before a label wraps. */
+  .thistab { container-type: inline-size; }
   .tabacts { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; }
+  .tabacts button { white-space: nowrap; min-width: 0; }
+  @container (max-width: 19.5rem) { .tabacts kbd { display: none; } }
   .split { display: flex; }
   .split > button:first-child { flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; }
   .split > button.arrow { width: 26px; padding: 0; border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
@@ -120,7 +124,7 @@
   </nav>
   <p class="sources" id="sources" aria-label="Links per source"></p>
 
-  <section aria-labelledby="tab-h">
+  <section class="thistab" aria-labelledby="tab-h">
     <h2 id="tab-h">This tab</h2>
     <div class="tabacts">
       <div class="split">
