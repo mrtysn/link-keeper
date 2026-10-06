@@ -93,9 +93,12 @@ function renderTagPick(links) {
 }
 
 let known = 0;
+let stashes = [], onShow = new Set();
 async function load() {
-  const { links } = await loadLinks();
+  const { links, all, stashes: shown } = await loadLinks();
   known = links.length;
+  stashes = all.stashes;
+  onShow = new Set(shown.map(s => s.id));
   tally = { keep: links.filter(l => l.verdict === "keep").length, drop: links.filter(l => l.verdict === "drop").length };
   renderTagPick(links);
   deck = shuffle(links.filter(l => !l.verdict && inDeal(l)).map(toCard));
@@ -189,6 +192,9 @@ function cardEl(card, top) {
     el.append(thumbs);
   }
 
+  const ctx = contextEl(card);
+  if (ctx) el.append(ctx);
+
   const foot = document.createElement("div");
   foot.className = "foot";
   const open = document.createElement("a");
@@ -205,6 +211,50 @@ function cardEl(card, top) {
   el.append(Object.assign(document.createElement("div"), { className: "stamp keep", textContent: "keep" }));
   el.append(Object.assign(document.createElement("div"), { className: "stamp skip", textContent: "drop" }));
   return el;
+}
+
+/* Where the card came from, as Explore's sidebar shows it: the stash it sits in, the tabs stashed
+ * around it, and where else the same URL is held. The newest stash on show is the one told in full. */
+const LIST_STATUS = { pending: "not opened yet", seen: "opened, undecided", kept: "kept", skipped: "skipped" };
+const NEIGHBOURS = 2;
+
+function contextEl(card) {
+  const link = card.link;
+  const held = link.copies
+    .map(c => ({ copy: c, stash: stashes.find(s => s.id === c.stash) }))
+    .filter(h => h.stash)
+    .sort((a, b) => onShow.has(b.stash.id) - onShow.has(a.stash.id) || String(b.stash.created_at).localeCompare(String(a.stash.created_at)));
+  const box = el("section", { className: "ctx" });
+  const facts = [];
+
+  if (held.length) {
+    const { copy, stash } = held[0];
+    const at = stash.tabs.findIndex(t => t.id === copy.tab);
+    box.append(el("div", { className: "ctx-head" },
+      stash.source === "import" ? "Imported " : "Stashed ", whenOf(stash.created_at),
+      renamed(stash) ? el("b", { textContent: ` · ${stash.name}` }) : null,
+      el("span", { className: "ctx-pos", textContent: at === -1 ? "" : ` · tab ${at + 1} of ${stash.tabs.length}` })));
+    if (at !== -1 && stash.tabs.length > 1) {
+      const rows = el("ol", { className: "ctx-tabs" });
+      for (let i = Math.max(0, at - NEIGHBOURS); i <= Math.min(stash.tabs.length - 1, at + NEIGHBOURS); i++) {
+        const t = stash.tabs[i];
+        const title = t.title || shortUrl(t.url);
+        const row = el("li", { className: i === at ? "here" : t.verdict || "", title: `${title}\n${t.url}` },
+          srcIcon(t.url), el("span", { textContent: title }));
+        rows.append(row);
+      }
+      box.append(rows);
+    }
+    if (held.length > 1) facts.push(`also in ${plural(held.length - 1, "other stash")}: ${held.slice(1, 3).map(h => stashName(h.stash)).join(", ")}${held.length > 3 ? ", …" : ""}`);
+  }
+  if (link.list) facts.push(`${held.length ? "on the reading list" : "Reading list"} — ${LIST_STATUS[link.list.status] || link.list.status}`);
+  if (isWeb(link.url)) {
+    const host = hostOf(link.url);
+    const same = deck.slice(index).filter(c => c.link.key !== link.key && isWeb(c.url) && hostOf(c.url) === host).length;
+    if (same) facts.push(`${same} more from ${host} in this deck`);
+  }
+  if (facts.length) box.append(el("div", { className: "ctx-facts", textContent: facts.join(" · ") }));
+  return box.childElementCount ? box : null;
 }
 
 function render() {
