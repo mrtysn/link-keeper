@@ -12,6 +12,7 @@
   font-weight: 650; letter-spacing: -.01em; color: var(--ink); white-space: nowrap;
 }
 .app-brand img { width: 20px; height: 20px; }
+.app-version { color: var(--dim); font-size: .75rem; font-weight: 400; font-variant-numeric: tabular-nums; }
 .app-pages { display: flex; gap: 4px; }
 .app-pages a {
   display: flex; align-items: center; min-height: 44px; padding: 0 10px;
@@ -34,6 +35,6 @@
 .app-sources button .n { color: var(--dim); }
 @media (hover: hover) { .app-sources button:hover { border-color: var(--accent); } }
 @media (max-width: 40rem) {
-  .app-brand { font-size: 0; gap: 0; }
+  .app-brand { font-size: 0; gap: 6px; }
   .app-sources { margin-left: 0; width: 100%; padding-top: 0; }
 }

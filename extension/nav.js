@@ -35,6 +35,15 @@
   logo.src = "icon.svg";
   logo.alt = "";
   brand.append(logo, "Link Keeper");
+  // The installed build, read from the manifest so it cannot go stale.
+  const version = browser.runtime.getManifest?.()?.version;
+  if (version) {
+    const v = document.createElement("span");
+    v.className = "app-version";
+    v.textContent = `v${version}`;
+    v.title = `Link Keeper ${version}`;
+    brand.append(v);
+  }
 
   const pages = document.createElement("div");
   pages.className = "app-pages";

@@ -114,6 +114,7 @@
   window.browser = {
     runtime: {
       getURL: p => `${location.origin}/${p}`,
+      getManifest: () => ({ version: "0.0-preview" }),
       sendMessage: async msg => {
         switch (msg.type) {
           case "status": {
