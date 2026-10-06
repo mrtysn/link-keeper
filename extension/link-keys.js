@@ -1,12 +1,13 @@
 /* What a key means on every Link Keeper page, in one place. List, Cards, Explore and Tag all read
  * this table, and their key hints are drawn from it, so the pages cannot drift apart.
  *
- * Laid out like the reddit keyboard navigation (RES) used beside it: the left hand stays on the
- * number row and Q W A S.
+ * The left hand rests on WASD, as in a game, with the number row as the reddit keyboard navigation
+ * (RES) has it: 1 2 move, 3 4 read and open. Judging sits on Q E, beside the movement keys rather
+ * than on them, so walking can never judge a link.
  *
- *   1 2        previous / next link in the focused pane (held, they repeat)
- *   Q W        previous / next pane — sidebar and view; on a page of one pane, previous / next section
- *   A S        drop / keep, then on to the next link; again on a judged link clears it
+ *   W S  1 2   previous / next link in the focused pane (held, they repeat)
+ *   A D        previous / next pane — sidebar and view; on a page of one pane, previous / next section
+ *   Q E        drop / keep, then on to the next link; again on a judged link clears it
  *   3          read it in        4  open it        ⇧4  open it with the other stash effect
  *   T L M      tags · to the reading list · move to a stash
  *   ⌘⌫  ⌘Z     remove · undo
@@ -24,12 +25,12 @@ const LinkKeys = (() => {
 
   // cmd → the keys shown for it and what it does, in the order the key list gives them.
   const TABLE = [
-    { cmd: "prev", show: ["1", "↑"], does: "previous link" },
-    { cmd: "next", show: ["2", "↓"], does: "next link" },
-    { cmd: "pane-prev", show: ["Q"], does: "previous pane or section" },
-    { cmd: "pane-next", show: ["W"], does: "next pane or section" },
-    { cmd: "drop", show: ["A", "←"], does: "drop, then next" },
-    { cmd: "keep", show: ["S", "→"], does: "keep, then next" },
+    { cmd: "prev", show: ["W", "1", "↑"], does: "previous link" },
+    { cmd: "next", show: ["S", "2", "↓"], does: "next link" },
+    { cmd: "pane-prev", show: ["A"], does: "previous pane or section" },
+    { cmd: "pane-next", show: ["D"], does: "next pane or section" },
+    { cmd: "drop", show: ["Q", "←"], does: "drop, then next" },
+    { cmd: "keep", show: ["E", "→"], does: "keep, then next" },
     { cmd: "read", show: ["3"], does: "read it in" },
     { cmd: "open", show: ["4"], does: "open" },
     { cmd: "open-other", show: ["⇧4"], does: "open, with the other stash effect" },
@@ -45,7 +46,7 @@ const LinkKeys = (() => {
   ];
   const BY_CMD = new Map(TABLE.map(r => [r.cmd, r]));
 
-  const PLAIN = { q: "pane-prev", w: "pane-next", a: "drop", s: "keep", t: "tags", l: "list", m: "move", p: "preview" };
+  const PLAIN = { w: "prev", s: "next", a: "pane-prev", d: "pane-next", q: "drop", e: "keep", t: "tags", l: "list", m: "move", p: "preview" };
   const DIGITS = { Digit1: "prev", Digit2: "next", Digit3: "read", Digit4: "open" };
   const ARROWS = { ArrowUp: "prev", ArrowDown: "next", ArrowLeft: "drop", ArrowRight: "keep" };
   const REPEATING = new Set(["prev", "next"]);
@@ -119,7 +120,7 @@ const LinkKeys = (() => {
     const box = el("div", { id: "keys-help", className: "keys-help" },
       el("h2", { textContent: "Keys" }),
       el("dl", {}, ...rows.flatMap(r => [el("dt", {}, ...r.show.flatMap((k, i) => [i ? " " : null, el("kbd", { textContent: k })]).filter(Boolean)), el("dd", { textContent: r.does })])),
-      el("p", { textContent: "Laid out like reddit's keyboard navigation: the number row walks and opens, Q W change pane, A S judge." }));
+      el("p", { textContent: "WASD walks and changes pane; Q E judge; the number row walks, reads and opens as reddit's keyboard navigation does." }));
     box.setAttribute("role", "dialog");
     box.setAttribute("aria-label", "Keys");
     const close = e => {

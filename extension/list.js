@@ -139,7 +139,7 @@ function whereBadges(link, ctx) {
 }
 
 /* --- keys ------------------------------------------------------------------------
- * A cursor marks the row the keys act on: 1 2 walk it, Q W jump to the previous or next section, a
+ * A cursor marks the row the keys act on: W S walk it, A D jump to the previous or next section, a
  * click on a row puts it there. It is held by the row's identity, so a reload keeps it in place. */
 
 let rowsOnPage = [];   // [{ li, target, id }] in page order, rebuilt by each render
@@ -203,7 +203,8 @@ LinkActions.setup({
       const next = rowsOnPage[i + 1] || rowsOnPage[i - 1];
       if (next) cursorId = next.id;
     }
-    await load();
+    if (res.local) render();
+    else await load();
     setCursor(cursorId);
   },
 });

@@ -24,10 +24,12 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const a = await cur(); await key(p, "2"); const b2 = await cur();
   ok(a !== b2, "explore: 2 walks the sidebar");
   await key(p, "1"); ok(await cur() === a, "explore: 1 walks back");
+  await key(p, "s"); ok(await cur() === b2, "explore: S walks down, judging nothing");
+  await key(p, "w"); ok(await cur() === a, "explore: W walks up");
   // find an undecided row: walk to Companion Link Report (no verdict)
   while (!(await cur()).includes("Companion")) await key(p, "2");
-  await key(p, "s");
-  ok(/Kept/.test(await msg(p)), "explore: S keeps (" + await msg(p) + ")");
+  await key(p, "e");
+  ok(/Kept/.test(await msg(p)), "explore: E keeps (" + await msg(p) + ")");
   ok(!(await cur()).includes("Companion"), "explore: keep moves on");
   const keptNow = await p.$$eval("#side li", lis => lis.find(li => li.textContent.includes("Companion"))?.className);
   ok(/keep/.test(keptNow), "explore: row marked kept");
@@ -51,7 +53,15 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(/Undone: move/.test(await msg(p)), "explore: undo move (" + await msg(p) + ")");
   await key(p, "Shift+?"); ok(!!(await p.$("#keys-help")), "explore: ? opens key list");
   await key(p, "Shift+?"); ok(!(await p.$("#keys-help")), "explore: ? closes it");
-  await key(p, "w"); ok(await p.$eval("#detail", e => e.classList.contains("lk-pane-on")), "explore: W moves to the detail pane");
+  await key(p, "d"); ok(await p.$eval("#detail", e => e.classList.contains("lk-pane-on")), "explore: D moves to the detail pane");
+  // Keeps pressed faster than they are saved all land, and none is painted back by a reload.
+  await key(p, "a");
+  await p.click('.chip[data-f="open"]'); await p.waitForTimeout(200);
+  const undecided = () => p.$$eval("#side li", l => l.length);
+  const u0 = await undecided();
+  for (let i = 0; i < 4; i++) await p.keyboard.press("e");
+  await p.waitForTimeout(900);
+  ok(await undecided() === u0 - 4, `explore: four quick keeps all stick (${u0} → ${await undecided()})`);
   ok(!p.errs.length, "explore: no errors " + p.errs.join("; "));
   await p.close();
 }
@@ -63,21 +73,21 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!!first, "list: 2 places the cursor: " + first);
   await key(p, "2"); await key(p, "2"); await key(p, "2");
   const c4 = await cur();  // Visual bookmarks / companion region
-  await key(p, "a");
-  ok(/Dropped|Cleared/.test(await msg(p)), "list: A drops (" + await msg(p) + ")");
+  await key(p, "q");
+  ok(/Dropped|Cleared/.test(await msg(p)), "list: Q drops (" + await msg(p) + ")");
   ok((await cur()) !== c4, "list: cursor moved on");
   await key(p, "Meta+z"); ok(/Undone/.test(await msg(p)), "list: undo (" + await msg(p) + ")");
   const sec = () => p.$eval(".lk-cursor", e => e.closest("section.group").querySelector("h2").textContent.slice(0, 30));
-  const s1 = await sec(); await key(p, "w"); const s2 = await sec();
-  ok(s1 !== s2, `list: W jumps section (${s1} → ${s2})`);
+  const s1 = await sec(); await key(p, "d"); const s2 = await sec();
+  ok(s1 !== s2, `list: D jumps section (${s1} → ${s2})`);
   const n = await p.$$eval(".rows > li", l => l.length);
   await key(p, "Meta+Backspace");
   ok(/Removed|locked/.test(await msg(p)), "list: ⌘⌫ (" + await msg(p) + ")");
-  await key(p, "q"); await key(p, "q"); await key(p, "q");
+  await key(p, "a"); await key(p, "a"); await key(p, "a");
   await key(p, "Meta+z");
   ok(await p.$$eval(".rows > li", l => l.length) === n, "list: undo restores row count");
   // to the reading list from section c (unlocked, web)
-  await key(p, "w"); await key(p, "w"); await key(p, "2");
+  await key(p, "d"); await key(p, "d"); await key(p, "2");
   const t = await cur();
   await key(p, "l"); ok(/reading list/.test(await msg(p)), `list: L on ${t} (${await msg(p)})`);
   await key(p, "Meta+z"); ok(/Undone/.test(await msg(p)), "list: undo to-list (" + await msg(p) + ")");
@@ -90,15 +100,15 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const top = () => p.$eval(".card.top .title", e => e.textContent.slice(0, 40));
   const kept = () => p.$eval("#t-kept", e => e.textContent);
   const a = await top(); const k = await kept();
-  await key(p, "s"); await p.waitForTimeout(250);
-  ok((await top()) !== a && (await kept()) === String(+k + 1), `cards: S keeps (${k}→${await kept()})`);
+  await key(p, "e"); await p.waitForTimeout(250);
+  ok((await top()) !== a && (await kept()) === String(+k + 1), `cards: E keeps (${k}→${await kept()})`);
   await key(p, "Meta+z"); await p.waitForTimeout(200);
   ok((await top()) === a && (await kept()) === k, "cards: undo brings it back");
   await key(p, "2"); await p.waitForTimeout(250);
   ok((await top()) !== a, "cards: 2 = later");
   await key(p, "Meta+z"); await p.waitForTimeout(200);
   ok((await top()) === a, "cards: undo later");
-  await key(p, "q"); const before = await top();
+  await key(p, "a"); const before = await top();
   await key(p, "2"); await p.waitForTimeout(200);
   ok((await top()) !== before, "cards: in the sidebar, 2 deals the next row");
   ok(!p.errs.length, "cards: no errors " + p.errs.join("; "));
@@ -113,7 +123,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.evaluate(() => !!document.activeElement.closest(".lk-cursor .tagger")), "tag: T focuses the row's tag field");
   await key(p, "Escape");
   ok(await p.evaluate(() => document.activeElement === document.body), "tag: Esc leaves the field");
-  await key(p, "a"); ok(/Dropped/.test(await msg(p)), "tag: A drops (" + await msg(p) + ")");
+  await key(p, "q"); ok(/Dropped/.test(await msg(p)), "tag: Q drops (" + await msg(p) + ")");
   await key(p, "Meta+z"); ok(/Undone/.test(await msg(p)), "tag: undo");
   ok(!p.errs.length, "tag: no errors " + p.errs.join("; "));
   await p.close();

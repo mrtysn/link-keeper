@@ -1,8 +1,8 @@
 /* Explore: every link from the chosen sources in a sidebar, the chosen one in full beside it.
  *
  * The sidebar lists one stash, the reading list, or everything — stashes in the order they were
- * stashed, then the reading list's links; click any row to jump to it, or walk with 1 2. Q W move
- * the keys between the sidebar and the detail pane, where 1 2 scroll instead. The detail
+ * stashed, then the reading list's links; click any row to jump to it, or walk with W S. A D move
+ * the keys between the sidebar and the detail pane, where W S scroll instead. The detail
  * pane shows what is known without touching the network — its capture if the page was ever read,
  * where else it is held — and
  * two things that do: Read (loads it in a background tab and extracts it) and the live preview.
@@ -295,7 +295,8 @@ async function setPreview(on) {
 /* --- actions -------------------------------------------------------------------- */
 
 /* After an action: a verdict moves on to the next link, as does anything that takes the link out of
- * the row it had (to the list, a move, a removal); then everything reloads. */
+ * the row it had (to the list, a move, a removal); then everything reloads — or, for a verdict, which
+ * the data already holds, redraws. */
 LinkActions.setup({
   data: () => data,
   say,
@@ -307,7 +308,8 @@ LinkActions.setup({
       const next = visible[i + 1] || visible[i - 1];
       if (next) current = cardKey(next);
     }
-    await load();
+    if (res.local) refilter();
+    else await load();
   },
   tags: () => { focusPane("detail"); document.querySelector("#detail .tagger input")?.focus(); },
 });
@@ -329,7 +331,7 @@ $("scope").onchange = () => {
   location.search = v === "all" ? "" : `?stash=${encodeURIComponent(v)}`;
 };
 
-/* Two panes: the keys walk the sidebar, or scroll the detail. Q W move between them. */
+/* Two panes: the keys walk the sidebar, or scroll the detail. A D move between them. */
 let pane = "side";
 function focusPane(which) {
   pane = which;

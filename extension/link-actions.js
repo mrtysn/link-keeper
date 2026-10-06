@@ -12,7 +12,9 @@
  * A page calls setup() once with:
  *   data()                 — what loadLinks() last gave it
  *   say(text)              — show a message
- *   after(cmd, target, r)  — reload and move on after an action; cmd is "undo" after an undo
+ *   after(cmd, target, r)  — reload and move on after an action; cmd is "undo" after an undo, and
+ *                            "revert" when a verdict failed to save. r.local: the page's data
+ *                            already holds the change, so redraw it rather than reload
  *   tags(target, anchor)   — optional: open the page's own tag editor instead of a popover
  */
 
@@ -134,14 +136,39 @@ const LinkActions = (() => {
     },
   };
 
-  async function judge(t, verdict) {
+  /* A verdict lands on the page at once and is saved behind it: the link and its stashed copies
+   * take it here, the page redraws from that, and the write follows. Reloads wait for it (pending),
+   * so a reload cannot paint the old verdict back; a write that fails puts the old one back. */
+  let pending = 0;
+  function setVerdict(link, verdict) {
+    link.verdict = verdict || undefined;
+    const d = page.data();
+    for (const c of link.copies || []) {
+      const tab = d?.all.stashes.find(s => s.id === c.stash)?.tabs.find(x => x.id === c.tab);
+      if (tab) tab.verdict = verdict || undefined;
+    }
+  }
+  function saveVerdict(t, verdict, prev) {
+    setVerdict(t.link, verdict);
+    pending++;
+    return send({ type: "judge-link", url: t.link.url, verdict })
+      .then(res => {
+        if (res?.ok) return res;
+        setVerdict(t.link, prev);
+        page.say(`Not saved: ${res?.error || "no answer"}`);
+        page.after("revert", t, {});
+        return res;
+      })
+      .finally(() => { pending--; });
+  }
+
+  function judge(t, verdict) {
     const prev = t.link.verdict || null;
     const next = prev === verdict ? null : verdict;
-    const res = await send({ type: "judge-link", url: t.link.url, verdict: next });
-    if (!res?.ok) return fail(res, "That did not work");
+    saveVerdict(t, next, prev);
     return {
-      ok: true, cleared: !next, say: next === "keep" ? "Kept" : next === "drop" ? "Dropped" : "Cleared",
-      undo: { label: next ? (next === "keep" ? "Keep" : "Drop") : "Clear", run: () => send({ type: "judge-link", url: t.link.url, verdict: prev }) },
+      ok: true, local: true, cleared: !next, say: next === "keep" ? "Kept" : next === "drop" ? "Dropped" : "Cleared",
+      undo: { label: next ? (next === "keep" ? "Keep" : "Drop") : "Clear", local: true, run: () => saveVerdict(t, prev, next) },
     };
   }
 
@@ -167,12 +194,14 @@ const LinkActions = (() => {
   async function undo() {
     const entry = undos.pop();
     if (!entry) { page.say("Nothing to undo"); return null; }
-    const res = await entry.run();
+    // A verdict's undo shows at once; its write goes on behind it.
+    const res = entry.local ? (entry.run(), null) : await entry.run();
     page.say(res && res.ok === false ? `Could not undo ${entry.label.toLowerCase()}: ${res.error || "no answer"}` : `Undone: ${entry.label.toLowerCase()}`);
     await page.after("undo", entry.target, entry);
     return entry;
   }
   const canUndo = () => undos.length > 0;
+  const saving = () => pending > 0;
 
   /* --- pickers ------------------------------------------------------------------- */
 
@@ -290,5 +319,5 @@ const LinkActions = (() => {
     return run(cmd, t);
   }
 
-  return { setup, run, push, undo, canUndo, bar, key, copyOf, moveMenu, tags };
+  return { setup, run, push, undo, canUndo, saving, bar, key, copyOf, moveMenu, tags };
 })();

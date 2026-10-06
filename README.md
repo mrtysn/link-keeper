@@ -166,13 +166,14 @@ come back with an import.
 List, Cards, Explore and Tag offer one set of actions on a link, drawn the same way and answering to
 the same keys. Under the one link Cards and Explore show, every action is a button with its key; on
 a row of List or Tag, **Open**, **Keep** and **Drop** show and the rest sit under **⋯**. The keys are
-laid out like reddit's keyboard navigation (RES): the left hand stays on the number row and Q W A S.
+laid out for a left hand on WASD: W S walk and A D change pane, as in a game; Q E, beside them,
+judge, so walking never judges. The number row works as reddit's keyboard navigation (RES) has it.
 
 | Key | Action |
 |---|---|
-| `1` `2` (`↑` `↓`) | previous / next link in the focused pane; held, they repeat |
-| `Q` `W` | previous / next pane (sidebar and view); on List, the previous / next section |
-| `A` `S` (`←` `→`) | drop / keep, then on to the next link; again on a judged link clears it |
+| `W` `S` (`1` `2`, `↑` `↓`) | previous / next link in the focused pane; held, they repeat |
+| `A` `D` | previous / next pane (sidebar and view); on List, the previous / next section |
+| `Q` `E` (`←` `→`) | drop / keep, then on to the next link; again on a judged link clears it |
 | `4` | open — a stashed tab reopens through its stash, keeping its container and marking it restored |
 | `⇧4` | open with the other stash effect: taken out of the stash if the setting keeps it, and the reverse |
 | `3` | read it in: load it in a background tab and extract its text and images |
@@ -186,16 +187,16 @@ dashed **not read** on a row, card or Explore's header, and a page icon beside t
 Cards and Explore sidebars. Tag rows and cards also badge a verdict, and a card says when its tab was
 last restored.
 
-Only `1` `2` repeat while held, so a held key cannot judge or remove a run of links. Keys never act
+Only walking repeats while held, so a held key cannot judge or remove a run of links. Keys never act
 while a field has the keyboard; `Esc` leaves it. What plain Open does to the stash is **Settings →
 After restoring** on the List page; `⇧4` does the other.
 
 ### Cards — judging
 
-Open *Cards* and go through every undecided link in the chosen sources as a shuffled deck. `S` (or
-right, or a drag right) keeps, `A` drops, `2` defers to the next session (Later) and `1` steps back
-a card. The sidebar lists every stash on show and the reading list, the card's row marked; `Q` `W`
-move the keys there, where `1` `2` walk it and deal each link they reach, and a click deals any row.
+Open *Cards* and go through every undecided link in the chosen sources as a shuffled deck. `E` (or
+right, or a drag right) keeps, `Q` drops, `S` defers to the next session (Later) and `W` steps back
+a card. The sidebar lists every stash on show and the reading list, the card's row marked; `A` `D`
+move the keys there, where `W` `S` walk it and deal each link they reach, and a click deals any row.
 
 A card shows what is known. A page that was read (`Ctrl+Shift+K`, or **Read** on List or Explore)
 carries its headline, text, embedded links, images and screenshot preview; a stashed tab never read
@@ -276,8 +277,8 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 **Explore** shows every link in the chosen sources in a sidebar — everything, one stash, or the
 reading list; stashes in the order they were stashed, then the reading list — with a filter and
 Undecided / Kept / Dropped chips, and the chosen link in full beside it. Click any row to jump to it,
-or walk with `1` `2`; the sidebar keeps each stash in tab-strip order. `Q` `W` move the keys to the
-detail pane, where `1` `2` scroll it. The detail pane shows the
+or walk with `W` `S`; the sidebar keeps each stash in tab-strip order. `A` `D` move the keys to the
+detail pane, where `W` `S` scroll it. The detail pane shows the
 link's capture if the page was ever read, whether it is on the reading list or in other stashes, and
 how many links share its site. The actions and keys are every page's (above); pressing Keep or
 Drop again clears it. A drop is a flag,

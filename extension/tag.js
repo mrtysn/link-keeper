@@ -4,7 +4,7 @@
  * A link tagged here keeps its place, marked ✓, until the filter changes, so the list does not
  * jump under the cursor. Enter on an empty field moves to the next link's field.
  *
- * Out of the fields, the keys are every page's (link-keys.js): 1 2 walk the rows, T types into the
+ * Out of the fields, the keys are every page's (link-keys.js): W S walk the rows, T types into the
  * row's tags, and the rest act on the row as they do anywhere.
  */
 
@@ -148,7 +148,8 @@ LinkActions.setup({
     if (((cmd === "keep" || cmd === "drop") && !res.cleared) || ["list", "move", "remove"].includes(cmd)) {
       if (target?.link.key === cursor) walk(1);
     }
-    await reload();
+    if (res.local) render();
+    else await reload();
   },
 });
 

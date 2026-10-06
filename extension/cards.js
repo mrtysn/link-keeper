@@ -8,8 +8,8 @@
  * each stash. Neither deletes anything: a drop is a flag, so a change of mind costs one click.
  *
  * The actions under the card and their keys are every page's (link-actions.js, link-keys.js). Two
- * panes: on the deck, 2 deals the next card without a verdict (Later) and 1 steps back; Q W move
- * the keys to the sidebar, where 1 2 walk the stashes and deal each link they reach.
+ * panes: on the deck, S (or 2) deals the next card without a verdict (Later) and W steps back; A D
+ * move the keys to the sidebar, where W S walk the stashes and deal each link they reach.
  */
 
 const THRESHOLD = 105;
@@ -124,6 +124,12 @@ async function load() {
 async function refresh() {
   takeData(await loadLinks());
   deck = deck.map(c => (byKey.has(c.link.key) ? toCard(byKey.get(c.link.key)) : c));
+  buildSide();
+}
+
+/* After a verdict, which the data already holds: the tally and the sidebar again, nothing reloaded. */
+function recount() {
+  tally = { keep: data.links.filter(l => l.verdict === "keep").length, drop: data.links.filter(l => l.verdict === "drop").length };
   buildSide();
 }
 
@@ -416,7 +422,7 @@ LinkActions.setup({
     const onTop = deck[index]?.link.key === target?.link.key;
     const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
     if (cmd !== "undo" && onTop && (((cmd === "keep" || cmd === "drop") && !res.cleared) || leaves)) index++;
-    await Promise.all([refresh(), wait]);
+    await Promise.all([res.local ? recount() : refresh(), wait]);
     if (cmd === "undo" && res.mark && target) {
       // Back on top, where it was dealt.
       index = Math.min(res.mark.index, deck.length);
@@ -448,7 +454,7 @@ function renderActions() {
   const box = $("actions");
   box.textContent = "";
   const card = deck[index];
-  const laterB = el("button", { type: "button", title: "Next card, no verdict; it comes back next session (2)", disabled: !card }, "Later", el("kbd", { textContent: "2" }));
+  const laterB = el("button", { type: "button", title: `Next card, no verdict; it comes back next session (${LinkKeys.showOf("next")})`, disabled: !card }, "Later", el("kbd", { textContent: LinkKeys.showOf("next") }));
   laterB.onclick = later;
   const undoB = el("button", { type: "button", title: `Undo the last action (${LinkKeys.showOf("undo")})`, disabled: !LinkActions.canUndo() }, "Undo", el("kbd", { textContent: LinkKeys.showOf("undo") }));
   undoB.onclick = () => LinkActions.undo();

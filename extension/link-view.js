@@ -89,7 +89,8 @@ function reloadOnChanges(load, busy = () => false) {
   const editing = () => !!document.activeElement?.closest?.(".tagger, .tagpop");
   const soon = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => (busy() || editing() ? soon() : load()), 150);
+    // A verdict still being saved would be painted back to the old one by a reload now.
+    timer = setTimeout(() => (busy() || editing() || window.LinkActions?.saving() ? soon() : load()), 150);
   };
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags"].some(k => changes[k])) soon();

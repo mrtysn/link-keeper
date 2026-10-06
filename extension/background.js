@@ -1223,6 +1223,7 @@ const mergeTags = records => editTags(all => {
 
 /* One verdict for a URL wherever it is held: its capture, its reading-list entry (kept or skipped)
  * and every stash copy. null clears it, and a list entry goes back to seen. Nothing is removed. */
+const judgeQueue = serial();
 async function judgeLink(url, verdict) {
   if (verdict !== null && verdict !== "keep" && verdict !== "drop") return { ok: false, error: "a verdict is keep, drop or null" };
   const key = keyOf(url);
@@ -1594,7 +1595,8 @@ browser.runtime.onMessage.addListener(async msg => {
       return getLinks();
 
     case "judge-link":
-      return judgeLink(String(msg.url || ""), msg.verdict ?? null);
+      // In order: keys fire faster than a verdict is written, and each write reads what the last left.
+      return judgeQueue(() => judgeLink(String(msg.url || ""), msg.verdict ?? null));
 
     case "set-tags":
       return setTags(String(msg.url || ""), msg.tags);
