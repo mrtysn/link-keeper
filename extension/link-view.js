@@ -68,7 +68,8 @@ const SOURCE_NAMES = { tabs: "Stashed", import: "Imported", list: "Reading list"
 /* The dataset, cut down to the chosen sources: a link shows if any source holding it is chosen, a
  * stash if its own source is. byKey finds a link from a stash tab's key. */
 async function loadLinks() {
-  const [data, chosen] = await Promise.all([send({ type: "links" }), window.LinkSources.ready]);
+  const [data, chosen, { tagDefs }] = await Promise.all([send({ type: "links" }), window.LinkSources.ready, browser.storage.local.get("tagDefs")]);
+  setTagLibrary(tagDefs);
   const sources = window.LinkSources.get() || chosen;
   const counts = { tabs: 0, import: 0, list: 0 };
   for (const l of data.links) for (const s of l.sources) counts[s]++;
@@ -93,7 +94,7 @@ function reloadOnChanges(load, busy = () => false) {
     timer = setTimeout(() => (busy() || editing() || window.LinkActions?.saving() ? soon() : load()), 150);
   };
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags"].some(k => changes[k])) soon();
+    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagDefs"].some(k => changes[k])) soon();
   });
   for (const ev of ["onCreated", "onRemoved", "onChanged", "onMoved"]) browser.bookmarks?.[ev].addListener(soon);
   window.LinkSources.onChange(load);
@@ -162,6 +163,15 @@ async function readLink(url) {
 /* What a link shows: its own tags, or the guesses, flagged as such. */
 const shownTags = link => (link.tags?.length ? { tags: link.tags, guessed: false } : { tags: link.kinds || [], guessed: true });
 
+/* The tag library (background.js, tagDefs): every tag made or used, presets first, in the order
+ * they were made — the order the editor's palette offers them in — with any colour picked for one. */
+const TAG_LIB = { names: [], hue: new Map() };
+function setTagLibrary(defs) {
+  const list = defs?.seeded && Array.isArray(defs.list) ? defs.list : [];
+  TAG_LIB.names = list.map(d => d.name);
+  TAG_LIB.hue = new Map(list.filter(d => d.hue != null).map(d => [d.name, d.hue]));
+}
+
 /* The tags in use, most used first, then the kinds of site — the pool suggestions come from. */
 const TAG_VOCAB = { names: [], counts: new Map() };
 function setTagVocab(links) {
@@ -172,8 +182,12 @@ function setTagVocab(links) {
   TAG_VOCAB.names = [...[...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([t]) => t), ...kinds];
 }
 
-/* One stable colour per tag, so the same tag always looks the same. */
+/* Every tag there is to pick: the library in its order, then any in use it does not hold yet. */
+const tagPool = () => [...TAG_LIB.names, ...[...TAG_VOCAB.counts.keys()].filter(t => !TAG_LIB.names.includes(t))];
+
+/* A tag's colour: the one picked for it, else one derived from its name, so it always looks the same. */
 function tagHue(tag) {
+  if (TAG_LIB.hue.has(tag)) return TAG_LIB.hue.get(tag);
   let h = 0;
   for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) % 360;
   return h;
@@ -257,6 +271,7 @@ function suggestField(input, exclude = () => []) {
 
 /* The editor for one link's tags. Guesses start as dimmed chips; the first change saves what is
  * shown, so a guess that is kept becomes a tag, and removing every tag brings the guesses back.
+ * Under the field, a palette of every tag toggles them with a click, or 1–9 on an empty field.
  * Enter on the empty field or Escape is "done": the box fires "tagdone", its detail saying which
  * ({ escape: true } for Escape). onSaved(tags) follows a
  * save; link.tags is updated in place. */
@@ -267,9 +282,45 @@ function tagEditor(link, onSaved) {
   const chips = el("span", { className: "chips" });
   const input = el("input", { type: "text", placeholder: tags.length ? "add a tag" : "add a tag, Enter" });
   input.setAttribute("aria-label", "Add a tag");
-  suggestField(input, () => tags);
   const status = el("span", { className: "tagstatus" });
-  const box = el("div", { className: "tagger" }, chips, input, status);
+  const palette = el("div", { className: "palette", role: "group" });
+  palette.setAttribute("aria-label", "Tags to pick");
+  const box = el("div", { className: "tagger" }, chips, input, status, palette);
+
+  /* The palette: every tag there is, a click (or 1–9 on an empty field) toggling it on this link;
+   * typing narrows it, and a name it lacks is offered as a new tag. */
+  const flat = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  let offered = [];
+  const typed = () => input.value.toLowerCase().replace(/\s+/g, " ").trim();
+  const has = t => tags.includes(t) && !guessed;
+  const toggle = t => {
+    if (has(t)) tags = tags.filter(m => m !== t);
+    else if (!tags.includes(t)) tags.push(t);
+    save();
+  };
+  const drawPalette = () => {
+    palette.textContent = "";
+    const q = flat(typed());
+    const pool = tagPool();
+    offered = q ? [...pool.filter(n => flat(n).startsWith(q)), ...pool.filter(n => !flat(n).startsWith(q) && flat(n).includes(q))] : pool;
+    offered.forEach((t, i) => {
+      const b = el("button", { type: "button", className: "tag pick", title: has(t) ? `Take ${t} off` : `Tag it ${t}` },
+        !q && i < 9 ? el("kbd", { textContent: i + 1 }) : null, t);
+      b.style.setProperty("--h", tagHue(t));
+      b.setAttribute("aria-pressed", String(has(t)));
+      // The field keeps the keyboard, so a click does not close a popover or blur a row.
+      b.addEventListener("pointerdown", e => e.preventDefault());
+      b.onclick = () => toggle(t);
+      palette.append(b);
+    });
+    if (q && !pool.includes(typed())) {
+      const b = el("button", { type: "button", className: "tag pick new", title: "A new tag, on this link" }, `+ ${typed()}`);
+      b.addEventListener("pointerdown", e => e.preventDefault());
+      b.onclick = () => { const t = typed(); input.value = ""; if (!tags.includes(t)) tags.push(t); save(); };
+      palette.append(b);
+    }
+  };
+  input.addEventListener("input", drawPalette);
 
   const mark = () => {
     status.textContent = guessed ? "guessed from the site — any change makes them yours" : "";
@@ -285,6 +336,7 @@ function tagEditor(link, onSaved) {
       chips.append(chip);
     }
     mark();
+    drawPalette();
   };
   async function save() {
     const res = await send({ type: "set-tags", url: link.url, tags });
@@ -302,12 +354,28 @@ function tagEditor(link, onSaved) {
     onSaved?.(res.tags);
   }
   input.addEventListener("keydown", e => {
+    const plain = !e.altKey && !e.ctrlKey && !e.metaKey;
+    if (plain && !input.value && /^[1-9]$/.test(e.key)) {
+      e.preventDefault();
+      if (offered[+e.key - 1]) toggle(offered[+e.key - 1]);
+      return;
+    }
+    // Tab, or Enter on part of a name, takes the palette's first match; Enter on a new name makes it.
+    if ((e.key === "Tab" || e.key === "Enter") && input.value.trim() && offered.length && !e.shiftKey) {
+      const q = flat(typed());
+      if (flat(offered[0]).startsWith(q) && offered[0] !== typed()) {
+        e.preventDefault();
+        input.value = offered[0];
+        drawPalette();
+        if (e.key === "Tab") return;
+      }
+    }
     if (e.key === "Enter") {
       e.preventDefault();
       const t = input.value.toLowerCase().replace(/\s+/g, " ").trim();
       input.value = "";
       if (!t) { box.dispatchEvent(new CustomEvent("tagdone", { bubbles: true })); return; }
-      if (!tags.includes(t) || guessed) { if (!tags.includes(t)) tags.push(t); save(); }
+      if (!tags.includes(t) || guessed) { if (!tags.includes(t)) tags.push(t); save(); } else drawPalette();
     } else if (e.key === "Backspace" && !input.value && tags.length) {
       tags.pop();
       save();

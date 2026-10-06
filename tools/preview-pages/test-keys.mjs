@@ -128,6 +128,49 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "tag: no errors " + p.errs.join("; "));
   await p.close();
 }
+// Tags: the library, a tag's links, and the editor's palette
+{
+  const p = await page("tags.html");
+  const names = () => p.$$eval("#lib li .t", l => l.map(e => e.textContent));
+  ok((await names()).slice(0, 3).join() === "to-read,to-watch,to-try", "tags: presets listed first");
+  const chosen = () => p.$eval("#lib [aria-current] .t", e => e.textContent);
+  ok(await chosen() === "ai tools", "tags: opens on the first tag with links (" + await chosen() + ")");
+  ok(await p.$$eval("#coll ul.rows > li", l => l.length) > 0, "tags: the chosen tag's links show");
+  await key(p, "w"); ok(await chosen() !== "ai tools", "tags: W walks the tags");
+  await key(p, "s"); ok(await chosen() === "ai tools", "tags: S walks back");
+  await key(p, "d"); await key(p, "s");
+  ok(!!(await p.$("#coll .lk-cursor")), "tags: D moves into the links");
+  await p.fill("#new-name", "Read Later"); await p.click("#new-hues button:nth-child(3)"); await p.click("#maker button.primary");
+  await p.waitForTimeout(300);
+  ok(await chosen() === "read later", "tags: Create makes the tag and opens it (" + await chosen() + ")");
+  ok(await p.$eval("#lib [aria-current]", e => e.style.getPropertyValue("--h")) === "25", "tags: its colour is the one picked");
+  await p.click(".coll-head .hues button:nth-child(6)"); await p.waitForTimeout(300);
+  ok(await p.$eval("#lib [aria-current]", e => e.style.getPropertyValue("--h")) === "140", "tags: recolour");
+  await p.click(".coll-head .tools button:not(.danger)");
+  await p.fill(".coll-head input", "later"); await p.keyboard.press("Enter"); await p.waitForTimeout(300);
+  ok(await chosen() === "later" && !(await names()).includes("read later"), "tags: rename");
+  await p.click(".coll-head .danger"); await p.click(".coll-head .danger"); await p.waitForTimeout(300);
+  ok(!(await names()).includes("later"), "tags: Delete, clicked twice, removes it (" + await msg(p) + ")");
+  ok(!p.errs.length, "tags: no errors " + p.errs.join("; "));
+  await p.close();
+}
+{
+  const p = await page("stash-cards.html");
+  await key(p, "t");
+  ok(await p.$$eval("#detail .palette .tag.pick", l => l.length) >= 16, "palette: T shows every tag to pick");
+  const first = await p.$eval("#detail .palette .tag.pick", e => e.textContent.replace(/^\d/, ""));
+  await key(p, "1");
+  ok((await p.$eval("#detail .tagger .chips", e => e.textContent)).includes(first), `palette: 1 puts ${first} on the link`);
+  ok(await p.$eval("#detail .palette .tag.pick", e => e.getAttribute("aria-pressed")) === "true", "palette: and marks it on");
+  await key(p, "1");
+  ok(!(await p.$eval("#detail .tagger .chips", e => e.textContent)).includes(first), "palette: 1 again takes it off");
+  await p.keyboard.type("brand new"); await p.waitForTimeout(150);
+  ok(!!(await p.$("#detail .palette .tag.pick.new")), "palette: a name it lacks is offered as new");
+  await key(p, "Enter");
+  ok((await p.$eval("#detail .tagger .chips", e => e.textContent)).includes("brand new"), "palette: Enter makes it");
+  ok(!p.errs.length, "palette: no errors " + p.errs.join("; "));
+  await p.close();
+}
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

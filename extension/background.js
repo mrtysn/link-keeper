@@ -761,6 +761,8 @@ function applyDataPatches() {
 // Moved as soon as the new version runs, not only when a stash page first opens. A failure
 // leaves the old record in place and is retried by the next page or stash.
 browser.runtime.onInstalled.addListener(() => applyDataPatches().catch(() => {}));
+// The tag library is written on the first install or update that has one: the presets and the tags in use.
+browser.runtime.onInstalled.addListener(() => editTags(() => {}).catch(() => {}));
 browser.runtime.onStartup.addListener(() => applyDataPatches().catch(() => {}));
 
 /* There is one List tab to show stashes in, like OneTab's tab: every way in switches to the open
@@ -1153,16 +1155,44 @@ async function getLinks() {
 /* --- tags ------------------------------------------------------------------------
  * linkTags: { [link key]: ["tag", ...] } — the tags set by hand, one list per URL wherever it is
  * held. Firefox gives extensions no access to bookmark tags, so they live here, and travel in the
- * stash and capture exports. One queue, so two edits cannot each overwrite the other. */
+ * stash and capture exports. One queue, so two edits cannot each overwrite the other.
+ *
+ * tagDefs: { seeded: true, list: [{ name, hue }] } — the tag library, in the order tags were made:
+ * the presets, then each tag as it is first used or created. hue is null until a colour is picked,
+ * and the name's own hue shows. Every tag in use is in it; the pages offer it to pick from. */
+const PRESET_TAGS = ["to-read", "to-watch", "to-try", "reference", "inspiration", "work", "personal", "buy",
+  "dev", "ai", "design", "news", "video", "shopping", "music", "games"];
 const tagQueue = serial();
 const editTags = fn => tagQueue(async () => {
   const all = await read("linkTags", {});
-  const res = await fn(all);
+  const defs = await read("tagDefs", null);
+  // The first time: the presets, then the tags already in use.
+  const lib = defs?.seeded ? defs.list.filter(d => cleanTag(d?.name)) : PRESET_TAGS.map(name => ({ name, hue: null }));
+  const res = await fn(all, lib);
   for (const k of Object.keys(all)) if (!all[k]?.length) delete all[k];
-  await browser.storage.local.set({ linkTags: all });
+  const known = new Set(lib.map(d => d.name));
+  for (const tags of Object.values(all)) for (const t of tags) if (!known.has(t)) { known.add(t); lib.push({ name: t, hue: null }); }
+  await browser.storage.local.set({ linkTags: all, tagDefs: { seeded: true, list: lib } });
   return res;
 });
 const tagList = list => [...new Set((Array.isArray(list) ? list : []).map(cleanTag).filter(Boolean))];
+const hueOf = h => (Number.isFinite(+h) && h !== null && h !== "" ? Math.round(+h) % 360 : null);
+
+/* A new tag in the library, on no link yet. */
+const createTag = (name, hue) => editTags((all, lib) => {
+  const t = cleanTag(name);
+  if (!t) return { ok: false, error: "a tag needs a name" };
+  if (lib.some(d => d.name === t)) return { ok: false, error: `${t} already exists` };
+  lib.push({ name: t, hue: hueOf(hue) });
+  return { ok: true, tag: t };
+});
+
+const recolorTag = (name, hue) => editTags((all, lib) => {
+  const d = lib.find(x => x.name === cleanTag(name));
+  if (!d) return { ok: false, error: "no such tag" };
+  d.hue = hueOf(hue);
+  return { ok: true };
+});
 
 /* Replace a link's tags; an empty list clears them, and its guesses show again. */
 const setTags = (url, tags) => editTags(all => { all[keyOf(url)] = tagList(tags); return { ok: true, tags: all[keyOf(url)] }; });
@@ -1185,9 +1215,13 @@ async function tagStash(id, add) {
 }
 
 /* Rename a tag everywhere; renaming onto an existing tag merges the two. */
-const renameTag = (from, to) => editTags(all => {
+const renameTag = (from, to) => editTags((all, lib) => {
   const a = cleanTag(from), b = cleanTag(to);
   if (!a || !b) return { ok: false, error: "a tag needs a name" };
+  // In the library: renamed in place, or, merging, the old one gone and the one it joined kept.
+  const i = lib.findIndex(d => d.name === a);
+  if (lib.some(d => d.name === b)) { if (i !== -1) lib.splice(i, 1); }
+  else if (i !== -1) lib[i] = { ...lib[i], name: b };
   let n = 0;
   for (const k of Object.keys(all)) {
     if (!all[k].includes(a)) continue;
@@ -1197,8 +1231,10 @@ const renameTag = (from, to) => editTags(all => {
   return { ok: true, links: n };
 });
 
-const deleteTag = tag => editTags(all => {
+const deleteTag = tag => editTags((all, lib) => {
   const a = cleanTag(tag);
+  const i = lib.findIndex(d => d.name === a);
+  if (i !== -1) lib.splice(i, 1);
   let n = 0;
   for (const k of Object.keys(all)) {
     if (!all[k].includes(a)) continue;
@@ -1609,6 +1645,12 @@ browser.runtime.onMessage.addListener(async msg => {
 
     case "delete-tag":
       return deleteTag(msg.tag);
+
+    case "create-tag":
+      return createTag(msg.name, msg.hue);
+
+    case "recolor-tag":
+      return recolorTag(msg.tag, msg.hue);
 
     case "open-stash-cards":
       await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html") + (msg.id ? `?stash=${encodeURIComponent(msg.id)}` : "") });

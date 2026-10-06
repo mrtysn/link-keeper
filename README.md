@@ -22,7 +22,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `native/` | the helper that reopens stashed local-file tabs — `native/install.zsh` registers it with Firefox |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, List, Cards and Explore in any browser with a fake extension API and real capture text<br>`preview-pages/test-keys.zsh` — drive List, Cards, Explore and Tag in that preview with the shared keys and check each action and its undo<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, List, Cards and Explore in any browser with a fake extension API and real capture text<br>`preview-pages/test-keys.zsh` — drive List, Cards, Explore, Tags and Untagged in that preview with the shared keys and check each action and its undo, the tag library and the tag palette<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -141,15 +141,23 @@ dashed: `code` (GitHub, GitLab…), `video`, `post`, `discussion`, `game`, `pape
 `local file`. Guesses are never saved; the first change in the editor makes the shown tags yours,
 and removing every tag brings the guess back.
 
-- **✎** on any List row opens the editor (swipe-sort's): chips, a field that suggests tags already in
-  use — most used first, spaces and punctuation ignored, so `gamejam` finds *game jam* — Enter to
-  add, Backspace to take the last one off, Escape or Enter on the empty field when done. Every
-  change is saved at once. Explore has the editor in its detail pane (`t` jumps into it), and `t` on
-  Cards opens it over the card.
+- `T` on any page opens the editor: the link's chips, a field, and under it a palette of every tag
+  there is — click one, or press `1`–`9` on the empty field, to put it on or take it off. Typing
+  narrows the palette (spaces and punctuation ignored, so `gamejam` finds *game jam*); Enter or Tab
+  takes the first match, and a name the palette lacks is offered as **+ new tag**. Backspace takes
+  the last tag off; Escape, or Enter on the empty field, is done. Every change is saved at once.
+  Explore has the editor in its detail pane, and Cards opens it over the card.
 - A stash heading's **⋯ → Tag all tabs…** adds one tag to every tab in it.
 - List has a row of tag chips — any of them, or **Untagged** for the links with none of their own —
   and **Group by Tag**, where a link shows under each of its tags. Cards deals one tag at a time.
-- **Tag**, the fourth viewer in the top bar, is for tagging many links in one sitting, as swipe-sort's
+- **Tags** in the top bar is the tag library, and a tag is a collection: every tag with its colour
+  and how many links on show carry it, and beside it the links of the chosen one, each with the
+  usual actions. Make a tag there with a name and a colour; rename, recolour, **Merge into…**
+  another, or delete one (two clicks; the links stay). `A` `D` move between the tags and the links,
+  `W` `S` walk them. It starts with presets — *to-read, to-watch, to-try, reference, inspiration,
+  work, personal, buy, dev, ai, design, news, video, shopping, music, games* — ahead of the tags
+  already in use; a deleted preset stays deleted. The palette offers tags in the library's order.
+- **Untagged** in the top bar is for tagging many links in one sitting, as swipe-sort's
   Tag page is: the links on show with no tag of their own, newest first, each with its editor open.
   Enter saves a tag; Enter on the empty field goes to the next link. A link tagged there keeps its
   place, marked ✓, until the filter changes, so the list does not jump. Chips narrow to links with a
@@ -158,12 +166,12 @@ and removing every tag brings the guess back.
   merges the two), × to delete it from every link.
 
 Firefox gives extensions no access to bookmark tags, so tags live in the add-on's storage
-(`linkTags`), and travel in both exports — each stashed tab and each capture carries its tags — and
+(`linkTags`, and the library with its colours in `tagDefs`), and travel in both exports — each stashed tab and each capture carries its tags — and
 come back with an import.
 
 ### Acting on a link — the same on every page
 
-List, Cards, Explore and Tag offer one set of actions on a link, drawn the same way and answering to
+List, Cards, Explore, Tags and Untagged offer one set of actions on a link, drawn the same way and answering to
 the same keys. Under the one link Cards and Explore show, every action is a button with its key; on
 a row of List or Tag, **Open**, **Keep** and **Drop** show and the rest sit under **⋯**. The keys are
 laid out for a left hand on WASD: W S walk and A D change pane, as in a game; Q E, beside them,

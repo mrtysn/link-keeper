@@ -9,6 +9,15 @@
   // Tags set by hand, keyed like the link; a few to start with so the chips and filters show.
   const mockTags = params.has("notags") ? {} : {};
   let tagsSeeded = params.has("notags");
+  const PRESETS = ["to-read", "to-watch", "to-try", "reference", "inspiration", "work", "personal", "buy",
+    "dev", "ai", "design", "news", "video", "shopping", "music", "games"];
+  const library = () => (store.tagDefs ||= { seeded: true, list: PRESETS.map(name => ({ name, hue: null })) }).list;
+  // As the background does: every tag in use joins the library, and a change is a storage change.
+  const saveTags = async () => {
+    const lib = library();
+    for (const tags of Object.values(mockTags)) for (const t of tags) if (!lib.some(d => d.name === t)) lib.push({ name: t, hue: null });
+    await window.browser.storage.local.set({ tagDefs: { seeded: true, list: lib } });
+  };
   const store = {
     ...(params.has("sources") && { viewSources: params.get("sources").split(",").filter(Boolean) }),
     popupUi: params.has("msg")
@@ -20,6 +29,8 @@
       }
       : undefined,
   };
+
+  if (!params.has("notags")) library();
 
   // The background hands the list ISO dates; mirror that for records that only carry X's format.
   const toIso = value => {
@@ -146,7 +157,39 @@
           case "set-tags": {
             const tags = [...new Set((msg.tags || []).map(t => String(t).toLowerCase().trim()).filter(Boolean))];
             if (tags.length) mockTags[keyOf(msg.url)] = tags; else delete mockTags[keyOf(msg.url)];
+            await saveTags();
             return { ok: true, tags };
+          }
+          // The tag library, as the background keeps it (tagDefs): made, recoloured, renamed or merged, deleted.
+          case "create-tag": {
+            const t = String(msg.name || "").toLowerCase().replace(/\s+/g, " ").trim();
+            if (!t) return { ok: false, error: "a tag needs a name" };
+            if (library().some(d => d.name === t)) return { ok: false, error: `${t} already exists` };
+            library().push({ name: t, hue: msg.hue ?? null });
+            await saveTags();
+            return { ok: true, tag: t };
+          }
+          case "recolor-tag": {
+            const d = library().find(x => x.name === msg.tag);
+            if (!d) return { ok: false, error: "no such tag" };
+            d.hue = msg.hue ?? null;
+            await saveTags();
+            return { ok: true };
+          }
+          case "rename-tag": case "delete-tag": {
+            const from = msg.type === "rename-tag" ? msg.from : msg.tag, to = msg.to;
+            const lib = library(), i = lib.findIndex(d => d.name === from);
+            if (msg.type === "delete-tag" || lib.some(d => d.name === to)) { if (i !== -1) lib.splice(i, 1); }
+            else if (i !== -1) lib[i].name = to;
+            let n = 0;
+            for (const k of Object.keys(mockTags)) {
+              if (!mockTags[k].includes(from)) continue;
+              n++;
+              mockTags[k] = [...new Set(mockTags[k].flatMap(t => (t !== from ? [t] : to ? [to] : [])))];
+              if (!mockTags[k].length) delete mockTags[k];
+            }
+            await saveTags();
+            return { ok: true, links: n };
           }
           case "import-stashes": {
             // Writes one bookmark every 10 ms, as Firefox reports them, so the progress shows.

@@ -840,6 +840,35 @@ await check("tags: set by hand per URL, guesses from the site until then, one ta
   assert.deepEqual(by("https://github.com").guessed, ["code"], "clearing brings the guess back");
 });
 
+await check("tag library: presets first, every tag in use joins it, made, recoloured, merged and deleted", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.items = [{ url: "https://a.example/", status: "pending" }];
+  const ctx = await load(browser);
+  const keyOf = url => vm.runInContext(`keyOf(${JSON.stringify(url)})`, ctx);
+  store.linkTags = { [keyOf("https://a.example/")]: ["old one"] };
+  const lib = () => store.tagDefs.list.map(d => d.name);
+  await browser.handle({ type: "set-tags", url: "https://a.example/", tags: ["old one", "Fresh"] });
+  assert.deepEqual(lib().slice(0, 3), ["to-read", "to-watch", "to-try"], "the presets come first");
+  assert.equal(lib().length, 18, "then the tags in use: the one there before, and the new one");
+  assert.deepEqual(lib().slice(16), ["old one", "fresh"]);
+
+  assert.equal((await browser.handle({ type: "create-tag", name: " Big  Idea ", hue: 140 })).tag, "big idea");
+  assert.equal((await browser.handle({ type: "create-tag", name: "big idea" })).ok, false, "a name in use is refused");
+  assert.deepEqual(store.tagDefs.list.at(-1), { name: "big idea", hue: 140 });
+  await browser.handle({ type: "recolor-tag", tag: "big idea", hue: null });
+  assert.equal(store.tagDefs.list.at(-1).hue, null, "a colour can go back to the name's own");
+
+  await browser.handle({ type: "rename-tag", from: "fresh", to: "new name" });
+  assert.ok(lib().includes("new name") && !lib().includes("fresh"), "a rename renames it in the library, in place");
+  await browser.handle({ type: "rename-tag", from: "old one", to: "to-read" });
+  assert.ok(!lib().includes("old one"), "merging into a tag drops the merged one");
+  assert.deepEqual(store.linkTags[keyOf("https://a.example/")], ["to-read", "new name"]);
+  await browser.handle({ type: "delete-tag", tag: "to-read" });
+  assert.ok(!lib().includes("to-read"), "a deleted preset leaves the library");
+  await browser.handle({ type: "set-tags", url: "https://a.example/", tags: ["new name"] });
+  assert.ok(!lib().includes("to-read"), "and the presets are not written back");
+});
+
 await check("tags travel in exports and come back with imports", async () => {
   const { browser, store } = makeBrowser([]);
   store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://t.example/1" }] }];

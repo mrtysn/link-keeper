@@ -11,8 +11,8 @@
 #   preview.zsh --no-serve               # build only; rerun after editing a page
 #   preview.zsh --captures file.jsonl    # default: $DATA_DIR/link-captures-all.jsonl
 #
-# Pages: frame.html shows three popup states side by side; popup.html, list.html, cards.html and
-# stash-cards.html open alone.
+# Pages: frame.html shows three popup states side by side; popup.html, list.html, cards.html,
+# stash-cards.html, tag.html and tags.html open alone.
 # Query flags on either page:
 #   msg      restore a message, as if a keep just happened
 #   note     the popup's note field open, as after "Keep with a note…"
@@ -64,7 +64,7 @@ stamp=$(date +%s)
 # The fake API goes in ahead of the first script that calls it: nav.js on pages with the top bar,
 # the page's own script on the rest.
 mock="<script src=\"mock-data.js?v=$stamp\"></script><script src=\"links.js?v=$stamp\"></script><script src=\"mock-browser.js?v=$stamp\"></script>"
-for page in popup list cards standin stash-cards tag; do
+for page in popup list cards standin stash-cards tag tags; do
   if grep -q '<script src="nav.js"></script>' "$ext/$page.html"; then
     first='<script src="nav.js"></script>'
     swap="s#$first#$mock<script src=\"nav.js?v=$stamp\"></script>#"
