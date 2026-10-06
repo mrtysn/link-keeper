@@ -935,7 +935,7 @@ function leftOpen(tabs, excluded = () => false) {
  * so forty tabs back is not forty page loads — each loads when you switch to it. Afterwards the
  * entries are marked restored, or with afterRestore "remove", taken out — never from a locked
  * stash. */
-async function restoreTabs(id, ids) {
+async function restoreTabs(id, ids, flip = false) {
   const session = await findStash(id);
   if (!session) return { ok: false, error: "that stash is gone" };
   const wanted = ids ? session.tabs.filter(t => ids.includes(t.id)) : session.tabs;
@@ -983,13 +983,39 @@ async function restoreTabs(id, ids) {
     }
   }
 
-  const remove = (await getStashSettings()).afterRestore === "remove" && !session.locked;
+  // flip: this once, the other of what the setting says (⇧4 on the viewer pages).
+  const remove = ((await getStashSettings()).afterRestore === "remove") !== !!flip && !session.locked;
   if (remove) await dropFromStash(id, wanted.map(t => t.id));
   else {
     const at = new Date().toISOString();
     await editMeta(m => { for (const t of wanted) m.tabs[t.id] = { ...m.tabs[t.id], seen_at: at }; });
   }
   return { ok: true, restored: wanted.length, removed: remove, viaHelper, standins: standins.length, helperError };
+}
+
+/* Undo of taking tabs out: each goes back into its stash at the place it had, with its marks. A
+ * stash that went with its last tab is written again, with its name, date and flags, at the top.
+ * stash: { id, name, created_at, source?, format?, locked?, starred? }; tabs: [{ url, title?, index,
+ * container?, seen_at?, verdict?, judged_at? }]. Returns the stash's id and the new bookmark ids. */
+async function putBack(stash, tabs) {
+  if (!stash?.id || !tabs.length) return { ok: false, error: "nothing to put back" };
+  let id = stash.id;
+  const [node] = await browser.bookmarks.get(id).catch(() => []);
+  if (!node || node.url) {
+    id = (await writeStash([], { name: stash.name, created_at: stash.created_at, source: stash.source, format: stash.format })).id;
+    if (stash.locked || stash.starred) {
+      await editMeta(m => { Object.assign(m.stashes[id], stash.locked && { locked: true }, stash.starred && { starred: true }); });
+    }
+  }
+  const ids = [];
+  for (const t of [...tabs].sort((a, b) => a.index - b.index)) {
+    const count = (await browser.bookmarks.getChildren(id)).length;
+    const b = await browser.bookmarks.create({ parentId: id, index: Math.min(t.index ?? count, count), title: t.title || t.url, url: t.url });
+    ids.push(b.id);
+    const extra = Object.fromEntries(TAB_META.filter(k => t[k] != null).map(k => [k, t[k]]));
+    if (Object.keys(extra).length) await editMeta(m => { m.tabs[b.id] = extra; });
+  }
+  return { ok: true, id, ids };
 }
 
 /* Take tabs out of a stash — all of them, or the bookmark ids given, which must be in it. A stash
@@ -1413,12 +1439,13 @@ browser.runtime.onMessage.addListener(async msg => {
     case "remove": {
       const drop = new Set(msg.urls.map(keyOf));
       const items = await getItems();
+      const removed = items.filter(i => drop.has(keyOf(i.url)));
       await setItems(items.filter(i => !drop.has(keyOf(i.url))));
       if (msg.alsoCaptures) {
         const captures = await getCaptures();
         await setCaptures(captures.filter(c => !drop.has(keyOf(c.url))));
       }
-      return { ok: true, removed: drop.size };
+      return { ok: true, removed: drop.size, items: removed };
     }
 
     case "open-shot": {
@@ -1480,7 +1507,19 @@ browser.runtime.onMessage.addListener(async msg => {
     }
 
     case "restore-stash":
-      return restoreTabs(msg.id, msg.ids);
+      return restoreTabs(msg.id, msg.ids, msg.flip);
+
+    case "put-back":
+      return putBack(msg.stash, msg.tabs || []);
+
+    case "restore-items": {
+      // Undo of "remove": the entries as they were, back in the list. One already there stays as it is.
+      const items = await getItems();
+      const have = new Set(items.map(i => keyOf(i.url)));
+      const back = (msg.items || []).filter(i => i?.url && !have.has(keyOf(i.url)));
+      await setItems([...items, ...back]);
+      return { ok: true, restored: back.length };
+    }
 
     case "rename-stash": {
       const session = await findStash(msg.id);
