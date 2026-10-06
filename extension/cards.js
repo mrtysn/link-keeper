@@ -93,17 +93,23 @@ function renderTagPick(links) {
 }
 
 let known = 0;
-let stashes = [], onShow = new Set();
+let stashes = [], onShow = new Set(), sources = new Set(), allLinks = [], byKey = new Map();
+const judged = new Map();
 async function load() {
-  const { links, all, stashes: shown } = await loadLinks();
+  const { links, all, stashes: shown, sources: on } = await loadLinks();
   known = links.length;
   stashes = all.stashes;
+  allLinks = all.links;
+  byKey = new Map(all.links.map(l => [l.key, l]));
+  sources = on;
+  judged.clear();
   onShow = new Set(shown.map(s => s.id));
   tally = { keep: links.filter(l => l.verdict === "keep").length, drop: links.filter(l => l.verdict === "drop").length };
   renderTagPick(links);
   deck = shuffle(links.filter(l => !l.verdict && inDeal(l)).map(toCard));
   index = 0;
   undo.length = 0;
+  buildSide();
   render();
 }
 
@@ -213,48 +219,99 @@ function cardEl(card, top) {
   return el;
 }
 
-/* Where the card came from, as Explore's sidebar shows it: the stash it sits in, the tabs stashed
- * around it, and where else the same URL is held. The newest stash on show is the one told in full. */
+/* Where a card came from. The newest stash on show is its home, where the sidebar marks it; the card
+ * names the other places the same URL is held. */
 const LIST_STATUS = { pending: "not opened yet", seen: "opened, undecided", kept: "kept", skipped: "skipped" };
-const NEIGHBOURS = 2;
 
-function contextEl(card) {
-  const link = card.link;
-  const held = link.copies
+function heldIn(link) {
+  return link.copies
     .map(c => ({ copy: c, stash: stashes.find(s => s.id === c.stash) }))
     .filter(h => h.stash)
     .sort((a, b) => onShow.has(b.stash.id) - onShow.has(a.stash.id) || String(b.stash.created_at).localeCompare(String(a.stash.created_at)));
-  const box = el("section", { className: "ctx" });
-  const facts = [];
+}
 
-  if (held.length) {
-    const { copy, stash } = held[0];
-    const at = stash.tabs.findIndex(t => t.id === copy.tab);
-    box.append(el("div", { className: "ctx-head" },
-      stash.source === "import" ? "Imported " : "Stashed ", whenOf(stash.created_at),
-      renamed(stash) ? el("b", { textContent: ` · ${stash.name}` }) : null,
-      el("span", { className: "ctx-pos", textContent: at === -1 ? "" : ` · tab ${at + 1} of ${stash.tabs.length}` })));
-    if (at !== -1 && stash.tabs.length > 1) {
-      const rows = el("ol", { className: "ctx-tabs" });
-      for (let i = Math.max(0, at - NEIGHBOURS); i <= Math.min(stash.tabs.length - 1, at + NEIGHBOURS); i++) {
-        const t = stash.tabs[i];
-        const title = t.title || shortUrl(t.url);
-        const row = el("li", { className: i === at ? "here" : t.verdict || "", title: `${title}\n${t.url}` },
-          srcIcon(t.url), el("span", { textContent: title }));
-        rows.append(row);
-      }
-      box.append(rows);
-    }
-    if (held.length > 1) facts.push(`also in ${plural(held.length - 1, "other stash")}: ${held.slice(1, 3).map(h => stashName(h.stash)).join(", ")}${held.length > 3 ? ", …" : ""}`);
-  }
-  if (link.list) facts.push(`${held.length ? "on the reading list" : "Reading list"} — ${LIST_STATUS[link.list.status] || link.list.status}`);
+function contextEl(card) {
+  const link = card.link;
+  const held = heldIn(link);
+  const facts = [];
+  if (held.length > 1) facts.push(`Also in ${plural(held.length - 1, "other stash")}: ${held.slice(1, 3).map(h => stashName(h.stash)).join(", ")}${held.length > 3 ? ", …" : ""}`);
+  if (link.list && held.length) facts.push(`on the reading list — ${LIST_STATUS[link.list.status] || link.list.status}`);
   if (isWeb(link.url)) {
     const host = hostOf(link.url);
     const same = deck.slice(index).filter(c => c.link.key !== link.key && isWeb(c.url) && hostOf(c.url) === host).length;
     if (same) facts.push(`${same} more from ${host} in this deck`);
   }
-  if (facts.length) box.append(el("div", { className: "ctx-facts", textContent: facts.join(" · ") }));
-  return box.childElementCount ? box : null;
+  return facts.length ? el("div", { className: "ctx", textContent: facts.join(" · ") }) : null;
+}
+
+/* What a link stands at now: this session's verdicts first, as the dataset is not reloaded. */
+const verdictNow = link => (judged.has(link.url) ? judged.get(link.url) : link.verdict);
+
+/* The sidebar: every stash on show and then the reading list, as Explore lists them, with the top
+ * card marked in its home stash. Built once per deal; each new card only moves the marks. Any row
+ * deals its link next, decided or not. */
+let sideRows = [];
+function buildSide() {
+  const side = $("side");
+  side.textContent = "";
+  sideRows = [];
+  const group = (id, name, sub, rows) => {
+    if (!rows.length) return;
+    const ul = el("ul");
+    for (const r of rows) {
+      const title = r.title || shortUrl(r.url);
+      const b = el("button", { title: `${title}\n${r.url}` }, srcIcon(r.url),
+        el("span", { className: `t${r.title ? "" : " plain"}`, textContent: title }), el("span", { className: "m" }));
+      b.onclick = () => dealNext(r.key);
+      sideRows.push({ group: id, key: r.key, b });
+      ul.append(el("li", {}, b));
+    }
+    side.append(el("section", { className: "grp" },
+      el("h2", { title: sub }, el("span", { className: "t", textContent: name }), el("span", { className: "n", textContent: rows.length })), ul));
+  };
+  const inShown = new Set();
+  for (const s of stashes.filter(s => onShow.has(s.id))) {
+    for (const t of s.tabs) inShown.add(t.key);
+    group(s.id, stashName(s), `${s.source === "import" ? "Imported" : "Stashed"} ${whenOf(s.created_at)}`,
+      s.tabs.map(t => ({ key: t.key, url: t.url, title: labelOf(byKey.get(t.key) || {}) || t.title })));
+  }
+  if (sources.has("list")) {
+    group("list", "Reading list", "Links you queued to read, and pages you kept",
+      allLinks.filter(l => l.list && !inShown.has(l.key)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+        .map(l => ({ key: l.key, url: l.url, title: labelOf(l) })));
+  }
+}
+
+function renderSide() {
+  const card = deck[index];
+  const home = card ? (heldIn(card.link).find(h => onShow.has(h.stash.id))?.stash.id || "list") : null;
+  let mark = null;
+  for (const r of sideRows) {
+    const link = byKey.get(r.key);
+    r.b.parentElement.className = (link && verdictNow(link)) || "";
+    const here = !!card && r.key === card.link.key && r.group === home;
+    r.b.toggleAttribute("aria-current", here);
+    if (here) mark = r.b;
+  }
+  // Scroll the sidebar alone: scrollIntoView would move the page too.
+  if (mark) {
+    const side = $("side"), r = mark.getBoundingClientRect(), box = side.getBoundingClientRect();
+    const head = mark.closest(".grp").querySelector("h2").offsetHeight;
+    if (r.top < box.top + head) side.scrollTop -= box.top + head - r.top;
+    else if (r.bottom > box.bottom) side.scrollTop += r.bottom - box.bottom;
+  }
+}
+
+/* Deal any link next from a sidebar click: the card already in the deck if it is still to come,
+ * else a fresh card for it — so a decided link can be judged again. */
+function dealNext(key) {
+  if (deck[index]?.link.key === key) return;
+  const link = byKey.get(key);
+  if (!link) return;
+  const i = deck.findIndex((c, j) => j > index && c.link.key === key);
+  const card = i === -1 ? toCard(link) : deck.splice(i, 1)[0];
+  deck.splice(index, 0, card);
+  render();
 }
 
 function render() {
@@ -268,6 +325,7 @@ function render() {
   $("undo").disabled = undo.length === 0;
   for (const id of ["skip", "later", "keep"]) $(id).disabled = left === 0;
 
+  renderSide();
   const stage = $("stage");
   stage.textContent = "";
 
@@ -300,6 +358,7 @@ async function commit(card, verdict, el, xdir = 0, ydir = 0) {
   undo.push({ url: card.url, verdict });
   if (verdict) {
     tally[verdict]++;
+    judged.set(card.url, verdict);
     await send({ type: "judge-link", url: card.url, verdict });
   }
   index++;
@@ -327,6 +386,7 @@ async function undoLast() {
   index = Math.max(0, index - 1);
   if (last.verdict) {
     tally[last.verdict] = Math.max(0, tally[last.verdict] - 1);
+    judged.set(last.url, null);
     await send({ type: "judge-link", url: last.url, verdict: null });
   }
   render();

@@ -98,19 +98,42 @@
   }
   .open:hover { border-color: var(--accent); }
   .siblings { color: var(--dim); font-size: .78rem; }
-  /* Where the card came from: its stash, the tabs around it, and where else it is held. */
-  .ctx { margin-top: auto; flex: none; display: grid; gap: .35rem; border-top: 1px solid var(--line); padding-top: .7rem; font-size: .8rem; color: var(--dim); }
+  /* Where else the card's URL is held, above its foot. */
+  .ctx { margin-top: auto; flex: none; border-top: 1px solid var(--line); padding-top: .7rem; font-size: .8rem; color: var(--dim); overflow-wrap: anywhere; }
   .ctx + .foot { margin-top: 0; }
-  .ctx-head { font-variant-numeric: tabular-nums; }
-  .ctx-head b { color: var(--ink); font-weight: 600; }
-  .ctx-tabs { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
-  .ctx-tabs li { display: flex; align-items: center; gap: .5rem; padding: .15rem .4rem; border-radius: .35rem; min-width: 0; }
-  .ctx-tabs li span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ctx-tabs li.here { background: var(--chip); color: var(--ink); font-weight: 600; }
-  .ctx-tabs li.keep span:last-child { color: var(--keep); }
-  .ctx-tabs li.drop span:last-child { color: var(--skip); text-decoration: line-through; }
-  .src { display: inline-block; flex: none; width: 14px; height: 14px; background: center/contain no-repeat; border-radius: 3px; }
-  .ctx-facts { overflow-wrap: anywhere; }
+
+  /* Every stash on show and the reading list, as Explore's sidebar lists them. */
+  .layout { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); gap: 2rem; align-items: start; }
+  #side {
+    position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: .8rem; font-size: .8125rem;
+  }
+  #side:empty { display: none; }
+  #side .grp + .grp { border-top: 1px solid var(--line); }
+  #side h2 {
+    position: sticky; top: 0; z-index: 1; display: flex; gap: .5rem; align-items: baseline; margin: 0; padding: .7rem .8rem .2rem;
+    background: var(--panel); font-size: .75rem; letter-spacing: .04em; text-transform: uppercase;
+  }
+  #side h2 .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #side h2 .n { margin-left: auto; flex: none; color: var(--dim); font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+  #side ul { list-style: none; margin: 0; padding: .2rem .35rem .5rem; }
+  #side li button {
+    display: grid; grid-template-columns: 16px minmax(0, 1fr) 1rem; align-items: center; gap: .5rem; width: 100%;
+    padding: .3rem .45rem; font: inherit; text-align: left; color: var(--ink); background: none; border: 0; border-radius: .4rem; cursor: pointer;
+  }
+  @media (hover: hover) { #side li button:hover { background: var(--chip); } }
+  #side li button[aria-current] { background: var(--accent); color: var(--bg); font-weight: 600; }
+  #side li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #side li .t.plain { font-family: ui-monospace, Menlo, monospace; font-size: .75rem; }
+  #side li.drop .t { text-decoration: line-through; }
+  #side li .m { font-weight: 700; text-align: center; }
+  #side li.keep .m::before { content: "✓"; color: var(--keep); }
+  #side li.drop .m::before { content: "✕"; color: var(--skip); }
+  .src { display: inline-block; width: 16px; height: 16px; background: center/contain no-repeat; border-radius: 4px; }
+  @media (max-width: 52rem) {
+    .layout { display: block; }
+    #side { position: static; max-height: 35vh; margin-bottom: 1.5rem; }
+  }
 
   .stamp {
     position: absolute; top: 1.2rem; padding: .25rem .65rem; border-radius: .4rem; font-weight: 700;
@@ -150,6 +173,8 @@
 </head>
 <body>
 <script src="nav.js"></script>
+<div class="layout">
+<aside id="side" aria-label="Every stash on show"></aside>
 <div class="wrap">
   <header>
     <h1>Judge the undecided</h1>
@@ -178,6 +203,7 @@
     <kbd>o</kbd> open · <kbd>t</kbd> tags · <kbd>u</kbd> undo
   </p>
   <div id="msg"></div>
+</div>
 </div>
 <script src="icons.js"></script>
 <script src="link-view.js"></script>
