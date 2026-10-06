@@ -7,9 +7,9 @@
  * Keep and drop are one verdict per URL, written to every copy — capture, reading-list entry and
  * each stash. Neither deletes anything: a drop is a flag, so a change of mind costs one click.
  *
- * The actions under the card and their keys are every page's (link-actions.js, link-keys.js). Two
- * panes: on the deck, S (or 2) deals the next card without a verdict (Later) and W steps back; A D
- * move the keys to the sidebar, where W S walk the stashes and deal each link they reach.
+ * The actions under the card and their keys are every page's (link-actions.js, link-keys.js). The
+ * deck and the sidebar move together: S (or 2) deals the next card without a verdict (Later), W
+ * steps back, and A D deal the first link of the previous or next stash in the sidebar.
  */
 
 const THRESHOLD = 105;
@@ -471,20 +471,14 @@ function renderActions() {
 
 /* --- keys --- */
 
-let pane = "deck";
-function focusPane(which) {
-  pane = which;
-  $("side").classList.toggle("lk-pane-on", pane === "side");
-  $("stage").classList.toggle("lk-pane-on", pane === "deck");
-}
-
-/* 1 2 in the sidebar: the row above or below the marked one is dealt next. */
-function sideWalk(by) {
+/* A D: the first link of the previous or next stash in the sidebar is dealt next. */
+function jumpGroup(by) {
   const at = sideRows.findIndex(r => r.b.hasAttribute("aria-current"));
-  const here = deck[index]?.link.key;
-  for (let i = (at === -1 ? (by > 0 ? -1 : sideRows.length) : at) + by; i >= 0 && i < sideRows.length; i += by) {
-    if (sideRows[i].key !== here) return dealNext(sideRows[i].key);
-  }
+  const here = sideRows[at]?.group;
+  const groups = [...new Set(sideRows.map(r => r.group))];
+  const g = groups[at === -1 ? (by > 0 ? 0 : groups.length - 1) : groups.indexOf(here) + by];
+  const first = g && sideRows.find(r => r.group === g && r.key !== deck[index]?.link.key);
+  if (first) dealNext(first.key);
 }
 
 const onTop = cmd => () => {
@@ -494,18 +488,16 @@ const onTop = cmd => () => {
 };
 
 LinkKeys.listen({
-  prev: () => (pane === "side" ? sideWalk(-1) : back()),
-  next: () => (pane === "side" ? sideWalk(1) : later()),
-  "pane-prev": () => focusPane(pane === "side" ? "deck" : "side"),
-  "pane-next": () => focusPane(pane === "side" ? "deck" : "side"),
+  prev: () => back(),
+  next: () => later(),
+  "group-prev": () => jumpGroup(-1), "group-next": () => jumpGroup(1),
   drop: () => decide("drop"), keep: () => decide("keep"),
   read: onTop("read"), open: onTop("open"), "open-other": onTop("open-other"),
   tags: () => openTags(), list: onTop("list"), move: onTop("move"), remove: onTop("remove"),
   undo: () => LinkActions.undo(),
   escape: () => document.querySelector(".tagpop")?.remove(),
-});
-$("keys-line").append("Drag the card, or ", ...LinkKeys.hint(["drop", "keep", "next", "prev", "pane-next", "open", "tags"]));
-focusPane("deck");
+}, { labels: { prev: "back", next: "later", "group-prev": "◂ stash", "group-next": "stash ▸" } });
+$("keys-line").append("Drag the card, or ", ...LinkKeys.hint(["drop", "keep", "next", "prev", "group-next", "open", "tags"]));
 
 /* --- drag --- */
 

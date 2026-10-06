@@ -3,15 +3,14 @@
  * tag is a collection. A tag is made, renamed, merged into another, recoloured or deleted here; it
  * is put on a link with the tag editor's palette (T on any page).
  *
- * The keys are every page's (link-keys.js): A D move between the tags and the links, W S walk the
- * focused one, and on a link the rest act as they do anywhere.
+ * The keys are every page's (link-keys.js): W S walk the chosen tag's links, A D choose the previous
+ * or next tag, and on a link the rest act as they do anywhere.
  */
 
 const HUES = [0, 25, 45, 90, 140, 170, 195, 215, 250, 280, 310, 335];
 
 let data = { links: [], all: { links: [] }, sources: new Set() };
 let chosen = new URLSearchParams(location.search).get("tag") || null;
-let pane = "lib";
 let cursor = null;   // the key of the link the keys act on
 
 function say(text) { $("msg").textContent = text; }
@@ -80,13 +79,12 @@ function renderLib(by) {
   lib.append(ul);
 }
 
-function choose(t, focusLinks = false) {
+function choose(t) {
   chosen = t;
   cursor = null;
   history.replaceState(null, "", `?tag=${encodeURIComponent(t)}`);
   render();
   document.querySelector("#lib [aria-current]")?.scrollIntoView({ block: "nearest" });
-  if (focusLinks) focusPane("coll");
 }
 
 /* --- the chosen tag: its tools and its links --- */
@@ -190,7 +188,7 @@ function rowEl(link) {
   const li = el("li", {}, srcIcon(link.url), el("div", { className: "main" }, a, meta), LinkActions.bar({ link }, { compact: true }));
   li.dataset.key = link.key;
   if (link.key === cursor) li.classList.add("lk-cursor");
-  li.addEventListener("pointerdown", () => { setCursor(link.key, false); focusPane("coll"); });
+  li.addEventListener("pointerdown", () => setCursor(link.key, false));
   return li;
 }
 
@@ -202,7 +200,7 @@ function render() {
   $("sub").textContent = `${plural(by.size, "tag")}, ${used} on links on show · a tag is a collection: pick one to see its links`;
   renderLib(by);
   renderColl(by);
-  focusPane(pane);
+  if (!rowLis().some(li => li.dataset.key === cursor)) setCursor(rowLis()[0]?.dataset.key || null, false);
 }
 
 async function load() {
@@ -212,26 +210,18 @@ async function load() {
 
 /* --- keys --- */
 
-function focusPane(which) {
-  pane = which;
-  $("lib").classList.toggle("lk-pane-on", pane === "lib");
-  $("coll").classList.toggle("lk-pane-on", pane === "coll");
-  if (pane === "coll" && !cursor) setCursor(rowLis()[0]?.dataset.key || null);
-}
 const rowLis = () => [...document.querySelectorAll("#coll ul.rows > li")];
 function setCursor(key, scroll = true) {
   cursor = key;
   for (const li of rowLis()) li.classList.toggle("lk-cursor", li.dataset.key === key);
   if (scroll) rowLis().find(li => li.dataset.key === key)?.scrollIntoView({ block: "nearest" });
 }
+function jumpTag(by) {
+  const names = [...tagsOnShow().keys()];
+  const to = names[Math.max(0, Math.min(names.length - 1, names.indexOf(chosen) + by))];
+  if (to && to !== chosen) choose(to);
+}
 function walk(by) {
-  if (pane === "lib") {
-    const names = [...tagsOnShow().keys()];
-    const i = names.indexOf(chosen);
-    const to = names[Math.max(0, Math.min(names.length - 1, i + by))];
-    if (to && to !== chosen) choose(to);
-    return;
-  }
   const lis = rowLis();
   if (!lis.length) return;
   const i = lis.findIndex(li => li.dataset.key === cursor);
@@ -240,7 +230,6 @@ function walk(by) {
 }
 function onRow(cmd) {
   return () => {
-    if (pane !== "coll") focusPane("coll");
     const link = data.links.find(l => l.key === cursor);
     if (!link) return;
     const li = rowLis().find(x => x.dataset.key === cursor);
@@ -262,13 +251,13 @@ LinkActions.setup({
 
 LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
-  "pane-prev": () => focusPane(pane === "lib" ? "coll" : "lib"), "pane-next": () => focusPane(pane === "lib" ? "coll" : "lib"),
+  "group-prev": () => jumpTag(-1), "group-next": () => jumpTag(1),
   drop: onRow("drop"), keep: onRow("keep"), read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
   tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("new-name").focus(),
   escape: () => document.querySelector(".tagpop")?.remove(),
-});
-$("keys-line").append(...LinkKeys.hint(["prev", "next", "pane-next", "tags", "open"]));
+}, { labels: { "group-prev": "◂ tag", "group-next": "tag ▸" } });
+$("keys-line").append(...LinkKeys.hint(["prev", "next", "group-next", "tags", "open"]));
 
 drawMaker();
 reloadOnChanges(load);

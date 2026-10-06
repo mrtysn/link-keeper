@@ -1,8 +1,8 @@
 /* Explore: every link from the chosen sources in a sidebar, the chosen one in full beside it.
  *
  * The sidebar lists one stash, the reading list, or everything — stashes in the order they were
- * stashed, then the reading list's links; click any row to jump to it, or walk with W S. A D move
- * the keys between the sidebar and the detail pane, where W S scroll instead. The detail
+ * stashed, then the reading list's links; click any row to jump to it, or walk with W S, the detail
+ * following; A D jump a stash, and Space scrolls the detail. The detail
  * pane shows what is known without touching the network — its capture if the page was ever read,
  * where else it is held — and
  * two things that do: Read (loads it in a background tab and extracts it) and the live preview.
@@ -190,7 +190,7 @@ function renderDetail() {
   pane.append(el("p", { id: "msg", role: "status", textContent: said }));
 
   pane.append(knownBox(card), previewBox(card));
-  pane.append(el("p", { className: "keys" }, ...LinkKeys.hint(["prev", "next", "pane-next", "drop", "keep", "open", "read", "tags", "preview"])));
+  pane.append(el("p", { className: "keys" }, ...LinkKeys.hint(["prev", "next", "group-next", "drop", "keep", "open", "read", "tags", "preview"])));
 }
 
 function knownBox(card) {
@@ -311,7 +311,7 @@ LinkActions.setup({
     if (res.local) refilter();
     else await load();
   },
-  tags: () => { focusPane("detail"); document.querySelector("#detail .tagger input")?.focus(); },
+  tags: () => document.querySelector("#detail .tagger input")?.focus(),
 });
 
 /* --- wiring --------------------------------------------------------------------- */
@@ -331,27 +331,38 @@ $("scope").onchange = () => {
   location.search = v === "all" ? "" : `?stash=${encodeURIComponent(v)}`;
 };
 
-/* Two panes: the keys walk the sidebar, or scroll the detail. A D move between them. */
-let pane = "side";
-function focusPane(which) {
-  pane = which;
-  $("side").classList.toggle("lk-pane-on", pane === "side");
-  $("detail").classList.toggle("lk-pane-on", pane === "detail");
+/* The sidebar and the detail move together: W S walk the links, A D jump to the first link of the
+ * previous or next stash (the reading list counts as one), Space and ⇧Space scroll a long detail. */
+const groupOf = c => c.stash?.id || "list";
+function jumpGroup(by) {
+  const i = Math.max(0, visible.findIndex(c => cardKey(c) === current));
+  const here = visible[i] && groupOf(visible[i]);
+  let j = i;
+  if (by > 0) { while (j < visible.length && groupOf(visible[j]) === here) j++; }
+  else {
+    // Back to this stash's start, or, from its start, to the previous stash's.
+    while (j > 0 && groupOf(visible[j - 1]) === here) j--;
+    if (j === i && j > 0) { const prev = groupOf(visible[j - 1]); j--; while (j > 0 && groupOf(visible[j - 1]) === prev) j--; }
+  }
+  if (visible[j] && j !== i) select(cardKey(visible[j]));
 }
-const walk = by => (pane === "side" ? step(by) : $("detail").scrollBy({ top: by * $("detail").clientHeight * 0.4, behavior: "smooth" }));
+addEventListener("keydown", e => {
+  if (e.key !== " " || e.altKey || e.ctrlKey || e.metaKey || e.target.closest?.("input, textarea, select, button, a, [contenteditable]")) return;
+  e.preventDefault();
+  $("detail").scrollBy({ top: (e.shiftKey ? -1 : 1) * $("detail").clientHeight * 0.8, behavior: "smooth" });
+});
 const onCard = cmd => () => {
   const card = deck.find(c => cardKey(c) === current);
   LinkActions.key(cmd, card, document.querySelector(`#detail .lk-bar [data-cmd="${cmd === "open-other" ? "open" : cmd}"]`) || $("detail"));
 };
 LinkKeys.listen({
-  prev: () => walk(-1), next: () => walk(1),
-  "pane-prev": () => focusPane(pane === "side" ? "detail" : "side"), "pane-next": () => focusPane(pane === "side" ? "detail" : "side"),
+  prev: () => step(-1), next: () => step(1),
+  "group-prev": () => jumpGroup(-1), "group-next": () => jumpGroup(1),
   drop: onCard("drop"), keep: onCard("keep"), read: onCard("read"), open: onCard("open"), "open-other": onCard("open-other"),
   tags: onCard("tags"), list: onCard("list"), move: onCard("move"), remove: onCard("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(), preview: () => setPreview(!previewOn),
   escape: () => document.querySelector(".tagpop")?.remove(),
-});
-focusPane("side");
+}, { labels: { "group-prev": "◂ stash", "group-next": "stash ▸" } });
 
 reloadOnChanges(load);
 load();

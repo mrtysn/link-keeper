@@ -63,9 +63,8 @@
 }
 [aria-current] .rd.on { background: currentColor; }
 
-/* The row the keys act on, on pages of rows; and the pane they walk, where there are two. */
+/* The row the keys act on, on pages of rows. */
 .lk-cursor { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
-.lk-pane-on { box-shadow: inset 0 2px 0 var(--accent); }
 
 /* The key guide (link-keys.js): the left hand's keys drawn where they sit, docked in the corner.
    On a wide window the page makes room for it, so it never covers a button. */
@@ -109,11 +108,10 @@
 .kc:not(.off) { border-color: color-mix(in srgb, var(--c) 45%, var(--line)); }
 .kc.idle { opacity: .4; }
 .kc.idle span { color: var(--dim); }
-.kc.hit { animation: kc-hit .45s ease-out; }
-@keyframes kc-hit {
-  0% { background: var(--c); transform: translateY(2px); border-bottom-width: 1px; }
-  100% { background: var(--bg); transform: none; }
+/* Held: the cap sinks and takes its colour; let go, it rises and the colour fades. */
+.kc { transition: transform .18s ease-out, background-color .25s ease-out, border-bottom-width .18s ease-out, box-shadow .25s ease-out; }
+.kc.down {
+  transform: translateY(2px); border-bottom-width: 1px; transition-duration: 40ms;
+  background: color-mix(in srgb, var(--c) 16%, var(--bg)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent);
 }
-.kc.hit b, .kc.hit span { animation: kc-hit-ink .45s ease-out; }
-@keyframes kc-hit-ink { 0% { color: var(--panel); } }
-@media (prefers-reduced-motion: reduce) { .kc.hit, .kc.hit b, .kc.hit span { animation-duration: .01s; } }
+@media (prefers-reduced-motion: reduce) { .kc { transition: none; } .kc.down { transform: none; } }

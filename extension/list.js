@@ -211,13 +211,13 @@ LinkActions.setup({
 
 LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
-  "pane-prev": () => jumpSection(-1), "pane-next": () => jumpSection(1),
+  "group-prev": () => jumpSection(-1), "group-next": () => jumpSection(1),
   drop: onRow("drop"), keep: onRow("keep"), read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
   tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
   escape: () => { document.querySelector(".tagpop")?.remove(); },
-}, { labels: { "pane-prev": "◂ section", "pane-next": "section ▸" } });
-$("keys").append(...LinkKeys.hint(["prev", "next", "pane-next", "drop", "keep", "open", "tags"]));
+}, { labels: { "group-prev": "◂ section", "group-next": "section ▸" } });
+$("keys").append(...LinkKeys.hint(["prev", "next", "group-next", "drop", "keep", "open", "tags"]));
 
 /* What only this page adds to a row's ⋯ menu: opening a reading-list link in this tab, and moving a
  * stashed one up or down its stash. Everything else is the shared bar's. */

@@ -153,8 +153,8 @@ and removing every tag brings the guess back.
 - **Tags** in the top bar is the tag library, and a tag is a collection: every tag with its colour
   and how many links on show carry it, and beside it the links of the chosen one, each with the
   usual actions. Make a tag there with a name and a colour; rename, recolour, **Merge into…**
-  another, or delete one (two clicks; the links stay). `A` `D` move between the tags and the links,
-  `W` `S` walk them. It starts with presets — *to-read, to-watch, to-try, reference, inspiration,
+  another, or delete one (two clicks; the links stay). `W` `S` walk the tag's links, `A` `D` choose
+  the previous or next tag. It starts with presets — *to-read, to-watch, to-try, reference, inspiration,
   work, personal, buy, dev, ai, design, news, video, shopping, music, games* — ahead of the tags
   already in use; a deleted preset stays deleted. The palette offers tags in the library's order.
 - **Untagged** in the top bar is for tagging many links in one sitting, as swipe-sort's
@@ -174,13 +174,13 @@ come back with an import.
 List, Cards, Explore, Tags and Untagged offer one set of actions on a link, drawn the same way and answering to
 the same keys. Under the one link Cards and Explore show, every action is a button with its key; on
 a row of List or Tag, **Open**, **Keep** and **Drop** show and the rest sit under **⋯**. The keys are
-laid out for a left hand on WASD: W S walk and A D change pane, as in a game; Q E, beside them,
+laid out for a left hand on WASD: W S walk and A D jump a group, as in a game; Q E, beside them,
 judge, so walking never judges. The number row works as reddit's keyboard navigation (RES) has it.
 
 | Key | Action |
 |---|---|
-| `W` `S` (`1` `2`, `↑` `↓`) | previous / next link in the focused pane; held, they repeat |
-| `A` `D` | previous / next pane (sidebar and view); on List, the previous / next section |
+| `W` `S` (`1` `2`, `↑` `↓`) | previous / next link; a sidebar and the view beside it move together; held, they repeat |
+| `A` `D` | previous / next group: the stash on Explore and Cards, the section on List, the tag on Tags |
 | `Q` `E` (`←` `→`) | drop / keep, then on to the next link; again on a judged link clears it |
 | `4` | open — a stashed tab reopens through its stash, keeping its container and marking it restored |
 | `⇧4` | open with the other stash effect: taken out of the stash if the setting keeps it, and the reverse |
@@ -192,7 +192,8 @@ judge, so walking never judges. The number row works as reddit's keyboard naviga
 
 The **key guide** draws these keys where they sit on the keyboard, docked in the bottom-right corner
 of every page: each keycap names what it does, coloured by kind (moving, keep, drop, opening,
-editing), keys the page has no use for are faint, and the key that fires flashes. `?` shows and hides
+editing), keys the page has no use for are faint, and the key held down sinks and lights until it
+is let go. `?` shows and hides
 it, and the choice is remembered; it starts shown, except on a narrow window. On a wide window the
 page makes room for it, so it covers nothing.
 
@@ -209,8 +210,8 @@ After restoring** on the List page; `⇧4` does the other.
 
 Open *Cards* and go through every undecided link in the chosen sources as a shuffled deck. `E` (or
 right, or a drag right) keeps, `Q` drops, `S` defers to the next session (Later) and `W` steps back
-a card. The sidebar lists every stash on show and the reading list, the card's row marked; `A` `D`
-move the keys there, where `W` `S` walk it and deal each link they reach, and a click deals any row.
+a card. The sidebar lists every stash on show and the reading list, the card's row marked as the
+deck moves; `A` `D` deal the first link of the previous or next stash, and a click deals any row.
 
 A card shows what is known. A page that was read (`Ctrl+Shift+K`, or **Read** on List or Explore)
 carries its headline, text, embedded links, images and screenshot preview; a stashed tab never read
@@ -291,8 +292,8 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 **Explore** shows every link in the chosen sources in a sidebar — everything, one stash, or the
 reading list; stashes in the order they were stashed, then the reading list — with a filter and
 Undecided / Kept / Dropped chips, and the chosen link in full beside it. Click any row to jump to it,
-or walk with `W` `S`; the sidebar keeps each stash in tab-strip order. `A` `D` move the keys to the
-detail pane, where `W` `S` scroll it. The detail pane shows the
+or walk with `W` `S`, the detail following; the sidebar keeps each stash in tab-strip order. `A` `D`
+jump to the previous or next stash, and Space / ⇧Space scroll a long detail. The detail pane shows the
 link's capture if the page was ever read, whether it is on the reading list or in other stashes, and
 how many links share its site. The actions and keys are every page's (above); pressing Keep or
 Drop again clears it. A drop is a flag,

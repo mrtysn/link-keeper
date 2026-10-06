@@ -1,5 +1,5 @@
 /* Drive List, Cards, Explore and Tag in the preview with the keys every page shares (link-keys.js)
- * and check each action and its undo lands: walking, panes and sections, keep and drop, remove,
+ * and check each action and its undo lands: walking, groups and sections, keep and drop, remove,
  * move, to the reading list, the key list, and the tag field's Escape. Run by test-keys.zsh, which
  * builds and serves the preview; node test-keys.mjs <base url> runs it against one already served.
  * Prints one line per check and exits non-zero if any failed. */
@@ -56,11 +56,17 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.$eval('#key-guide [data-cmd="preview"]', e => !e.classList.contains("idle")), "guide: P is live on Explore");
   await key(p, "Shift+?"); ok(!(await p.$("#key-guide")), "guide: ? hides it");
   await key(p, "Shift+?"); ok(!!(await p.$("#key-guide")), "guide: ? shows it again");
-  await p.keyboard.press("s");
-  ok(await p.$$eval('#key-guide .kc.hit[data-cmd="next"]', l => l.length) === 2, "guide: S flashes both keys for next (S and 2)");
-  await key(p, "d"); ok(await p.$eval("#detail", e => e.classList.contains("lk-pane-on")), "explore: D moves to the detail pane");
+  await p.keyboard.down("s");
+  ok(await p.$$eval("#key-guide .kc.down", l => l.map(k => k.firstChild.textContent).join()) === "S", "guide: only the key held is down (S, not 2)");
+  await p.keyboard.up("s");
+  ok(!(await p.$("#key-guide .kc.down")), "guide: let go, it rises");
+  // A D: the first link of the next stash, then back to this one's start.
+  const group = () => p.$eval("#side button[aria-current]", b => b.closest("ul").previousElementSibling?.textContent);
+  const g0 = await group(); await key(p, "d"); const g1 = await group();
+  ok(g0 !== g1, `explore: D jumps to the next stash (${g0} → ${g1})`);
+  await key(p, "a"); ok(await group() === g0, "explore: A jumps back");
+  ok(!(await p.$(".lk-pane-on")), "explore: no panes");
   // Keeps pressed faster than they are saved all land, and none is painted back by a reload.
-  await key(p, "a");
   await p.click('.chip[data-f="open"]'); await p.waitForTimeout(200);
   const undecided = () => p.$$eval("#side li", l => l.length);
   const u0 = await undecided();
@@ -113,9 +119,9 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok((await top()) !== a, "cards: 2 = later");
   await key(p, "Meta+z"); await p.waitForTimeout(200);
   ok((await top()) === a, "cards: undo later");
-  await key(p, "a"); const before = await top();
-  await key(p, "2"); await p.waitForTimeout(200);
-  ok((await top()) !== before, "cards: in the sidebar, 2 deals the next row");
+  const before = await top();
+  await key(p, "d"); await p.waitForTimeout(200);
+  ok((await top()) !== before, "cards: D deals from the next stash in the sidebar");
   ok(!p.errs.length, "cards: no errors " + p.errs.join("; "));
   await p.close();
 }
@@ -142,10 +148,11 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const chosen = () => p.$eval("#lib [aria-current] .t", e => e.textContent);
   ok(await chosen() === "ai tools", "tags: opens on the first tag with links (" + await chosen() + ")");
   ok(await p.$$eval("#coll ul.rows > li", l => l.length) > 0, "tags: the chosen tag's links show");
-  await key(p, "w"); ok(await chosen() !== "ai tools", "tags: W walks the tags");
-  await key(p, "s"); ok(await chosen() === "ai tools", "tags: S walks back");
-  await key(p, "d"); await key(p, "s");
-  ok(!!(await p.$("#coll .lk-cursor")), "tags: D moves into the links");
+  await key(p, "d"); ok(await chosen() !== "ai tools", "tags: D picks the next tag");
+  await key(p, "a"); ok(await chosen() === "ai tools", "tags: A picks the previous one");
+  const row = () => p.$eval("#coll .lk-cursor .ttl", e => e.textContent).catch(() => null);
+  const r0 = await row(); await key(p, "s");
+  ok(r0 && (await row()) !== r0, "tags: S walks the tag's links");
   await p.fill("#new-name", "Read Later"); await p.click("#new-hues button:nth-child(3)"); await p.click("#maker button.primary");
   await p.waitForTimeout(300);
   ok(await chosen() === "read later", "tags: Create makes the tag and opens it (" + await chosen() + ")");
