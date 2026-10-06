@@ -188,7 +188,13 @@ judge, so walking never judges. The number row works as reddit's keyboard naviga
 | `T` `L` `M` | tags · to the reading list · move to another stash (a field filters the stashes) |
 | `⌘⌫` | remove from its stash, or from the reading list |
 | `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
-| `/` `?` `Esc` | filter · the key list · back out |
+| `/` `?` `Esc` | filter · the key guide · back out |
+
+The **key guide** draws these keys where they sit on the keyboard, docked in the bottom-right corner
+of every page: each keycap names what it does, coloured by kind (moving, keep, drop, opening,
+editing), keys the page has no use for are faint, and the key that fires flashes. `?` shows and hides
+it, and the choice is remembered; it starts shown, except on a narrow window. On a wide window the
+page makes room for it, so it covers nothing.
 
 Whether a link was read in shows the same way everywhere: a **read** badge (its date on hover) or a
 dashed **not read** on a row, card or Explore's header, and a page icon beside the title in the

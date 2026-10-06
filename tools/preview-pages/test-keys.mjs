@@ -51,8 +51,13 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(/Moved to/.test(await msg(p)), "explore: move (" + await msg(p) + ")");
   await key(p, "Meta+z");
   ok(/Undone: move/.test(await msg(p)), "explore: undo move (" + await msg(p) + ")");
-  await key(p, "Shift+?"); ok(!!(await p.$("#keys-help")), "explore: ? opens key list");
-  await key(p, "Shift+?"); ok(!(await p.$("#keys-help")), "explore: ? closes it");
+  ok(!!(await p.$("#key-guide")), "guide: shown on a first visit");
+  ok(await p.$eval('#key-guide [data-cmd="keep"]', e => e.textContent) === "Ekeep", "guide: E is labelled keep");
+  ok(await p.$eval('#key-guide [data-cmd="preview"]', e => !e.classList.contains("idle")), "guide: P is live on Explore");
+  await key(p, "Shift+?"); ok(!(await p.$("#key-guide")), "guide: ? hides it");
+  await key(p, "Shift+?"); ok(!!(await p.$("#key-guide")), "guide: ? shows it again");
+  await p.keyboard.press("s");
+  ok(await p.$$eval('#key-guide .kc.hit[data-cmd="next"]', l => l.length) === 2, "guide: S flashes both keys for next (S and 2)");
   await key(p, "d"); ok(await p.$eval("#detail", e => e.classList.contains("lk-pane-on")), "explore: D moves to the detail pane");
   // Keeps pressed faster than they are saved all land, and none is painted back by a reload.
   await key(p, "a");
@@ -125,6 +130,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.evaluate(() => document.activeElement === document.body), "tag: Esc leaves the field");
   await key(p, "q"); ok(/Dropped/.test(await msg(p)), "tag: Q drops (" + await msg(p) + ")");
   await key(p, "Meta+z"); ok(/Undone/.test(await msg(p)), "tag: undo");
+  ok(await p.$eval('#key-guide [data-cmd="preview"]', e => e.classList.contains("idle")), "guide: P is faint where it does nothing");
   ok(!p.errs.length, "tag: no errors " + p.errs.join("; "));
   await p.close();
 }

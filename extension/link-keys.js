@@ -82,13 +82,16 @@ const LinkKeys = (() => {
   /* Every page listens the same way: handlers maps a command to what this page does with it. A
    * command the page has no handler for stays the browser's. A held key that must not repeat is
    * swallowed, not passed on. */
-  function listen(handlers) {
+  /* labels renames a command's keycap in the guide where it does something else here. */
+  function listen(handlers, { labels: names } = {}) {
+    startGuide(Object.keys(handlers), names);
     addEventListener("keydown", e => {
       const cmd = command(e);
       if (cmd === "") { e.preventDefault(); return; }
-      if (cmd === "help" && !handlers.help) { e.preventDefault(); toggleHelp(Object.keys(handlers)); return; }
+      if (cmd === "help" && !handlers.help) { e.preventDefault(); toggleGuide(); return; }
       const run = cmd && handlers[cmd];
       if (!run) return;
+      flash(cmd);
       if (cmd === "escape" && inField(e.target)) { e.target.blur(); }
       e.preventDefault();
       run(e);
@@ -108,32 +111,81 @@ const LinkKeys = (() => {
     }
     for (const node of extra) out.push(" · ", node);
     if (out.length) out.push(" · ");
-    out.push(el("kbd", { textContent: "?" }), " all keys");
+    out.push(el("kbd", { textContent: "?" }), " key guide");
     return out;
   }
 
-  /* The key list, over the page: every command this page answers to. */
-  function toggleHelp(cmds) {
-    const open = document.getElementById("keys-help");
-    if (open) { open.remove(); return; }
-    const rows = TABLE.filter(r => cmds.includes(r.cmd) || r.cmd === "help" || r.cmd === "escape");
-    const box = el("div", { id: "keys-help", className: "keys-help" },
-      el("h2", { textContent: "Keys" }),
-      el("dl", {}, ...rows.flatMap(r => [el("dt", {}, ...r.show.flatMap((k, i) => [i ? " " : null, el("kbd", { textContent: k })]).filter(Boolean)), el("dd", { textContent: r.does })])),
-      el("p", { textContent: "WASD walks and changes pane; Q E judge; the number row walks, reads and opens as reddit's keyboard navigation does." }));
-    box.setAttribute("role", "dialog");
+  /* --- the key guide -----------------------------------------------------------------
+   * A drawn keyboard docked in the corner: the left hand's keys where they sit, each keycap naming
+   * what it does here, coloured by kind. Keys this page has no use for are faint, and a key that
+   * fires flashes. ? shows and hides it; the choice is remembered. */
+  const SHORT = {
+    prev: "up", next: "down", "pane-prev": "◂ pane", "pane-next": "pane ▸", drop: "drop", keep: "keep",
+    read: "read", open: "open", "open-other": "open other", tags: "tags", list: "to list", move: "move",
+    remove: "remove", undo: "undo", preview: "preview", filter: "filter", help: "this guide", escape: "back",
+  };
+  const KIND = {
+    prev: "go", next: "go", "pane-prev": "go", "pane-next": "go", drop: "drop", keep: "keep",
+    read: "open", open: "open", "open-other": "open", tags: "edit", list: "edit", move: "edit", remove: "edit",
+    undo: "edit", preview: "view", filter: "view", help: "view", escape: "view",
+  };
+  // The left hand's rows as they sit, and the keys away from it beneath; null caps are spacers.
+  const ROWS = [
+    [["`"], ["1", "prev"], ["2", "next"], ["3", "read"], ["4", "open"], ["5"]],
+    [["Tab", null, "wide"], ["Q", "drop"], ["W", "prev"], ["E", "keep"], ["R"], ["T", "tags"]],
+    [["Caps", null, "wider"], ["A", "pane-prev"], ["S", "next"], ["D", "pane-next"], ["F"], ["G"]],
+  ];
+  const EXTRA = [["L", "list"], ["M", "move"], ["P", "preview"], ["/", "filter"], ["⇧4", "open-other"],
+    [`${MOD}Z`, "undo"], [`${MOD}⌫`, "remove"], ["Esc", "escape"], ["?", "help"]];
+  const GUIDE_KEY = "keyGuide";
+  let active = new Set();
+  let labels = {};
+
+  const cap = ([label, cmd, size]) => {
+    const k = el("div", { className: `kc${size ? ` ${size}` : ""}${cmd ? ` k-${KIND[cmd]}` : " off"}` },
+      el("b", { textContent: label }), cmd ? el("span", { textContent: labels[cmd] || SHORT[cmd] }) : null);
+    if (cmd) {
+      k.dataset.cmd = cmd;
+      k.title = BY_CMD.get(cmd)?.does || "";
+      if (!active.has(cmd)) k.classList.add("idle");
+    }
+    return k;
+  };
+  function drawGuide() {
+    const box = el("aside", { id: "key-guide", className: "key-guide" });
     box.setAttribute("aria-label", "Keys");
-    const close = e => {
-      if (e.type === "keydown" ? e.key !== "Escape" && e.key !== "?" : box.contains(e.target)) return;
-      if (e.type === "keydown") { e.preventDefault(); e.stopPropagation(); }
-      box.remove();
-      removeEventListener("keydown", close, true);
-      removeEventListener("pointerdown", close, true);
-    };
-    addEventListener("keydown", close, true);
-    addEventListener("pointerdown", close, true);
-    document.body.append(box);
+    const close = el("button", { type: "button", className: "kg-x", textContent: "×", title: "Hide the keys (?)" });
+    close.onclick = () => showGuide(false);
+    box.append(el("div", { className: "kg-head" }, el("strong", { textContent: "Keys" }),
+      el("span", { textContent: "↑↓ walk · ←→ judge · held, only walking repeats" }), close));
+    for (const row of ROWS) box.append(el("div", { className: "kg-row" }, ...row.map(cap)));
+    box.append(el("div", { className: "kg-row kg-extra" }, ...EXTRA.map(cap)));
+    return box;
+  }
+  function showGuide(on) {
+    document.getElementById("key-guide")?.remove();
+    if (on) document.body.append(drawGuide());
+    document.body.classList.toggle("kg-on", on);
+    try { localStorage.setItem(GUIDE_KEY, on ? "on" : "off"); } catch (e) { /* storage unavailable */ }
+  }
+  const toggleGuide = () => showGuide(!document.getElementById("key-guide"));
+  function flash(cmd) {
+    for (const k of document.querySelectorAll(`#key-guide [data-cmd="${cmd}"]`)) {
+      k.classList.remove("hit");
+      void k.offsetWidth;   // restart the flash on a repeat
+      k.classList.add("hit");
+    }
+  }
+  /* First visit: shown, unless the window is too narrow to spare the corner. */
+  function startGuide(cmds, names) {
+    active = new Set([...cmds, "help", "escape"]);
+    labels = names || {};
+    let pref = null;
+    try { pref = localStorage.getItem(GUIDE_KEY); } catch (e) { /* storage unavailable */ }
+    const on = pref ? pref === "on" : innerWidth >= 720;
+    const go = () => { if (on) showGuide(true); };
+    if (document.body) go(); else addEventListener("DOMContentLoaded", go);
   }
 
-  return { command, listen, hint, showOf, toggleHelp, MOD };
+  return { command, listen, hint, showOf, toggleGuide, MOD };
 })();

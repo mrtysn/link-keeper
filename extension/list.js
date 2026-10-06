@@ -216,7 +216,7 @@ LinkKeys.listen({
   tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
   escape: () => { document.querySelector(".tagpop")?.remove(); },
-});
+}, { labels: { "pane-prev": "◂ section", "pane-next": "section ▸" } });
 $("keys").append(...LinkKeys.hint(["prev", "next", "pane-next", "drop", "keep", "open", "tags"]));
 
 /* What only this page adds to a row's ⋯ menu: opening a reading-list link in this tab, and moving a
