@@ -319,5 +319,5 @@ const LinkActions = (() => {
     return run(cmd, t);
   }
 
-  return { setup, run, push, undo, canUndo, saving, bar, key, copyOf, moveMenu, tags };
+  return { setup, run, push, undo, canUndo, saving, data: () => page.data(), bar, key, copyOf, moveMenu, tags };
 })();

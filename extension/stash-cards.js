@@ -103,17 +103,19 @@ function renderSide() {
     if (groupId !== lastGroup) {
       lastGroup = groupId;
       const shown = visible.filter(c => (c.stash ? c.stash.id : "list") === groupId).length;
-      side.append(el("h2", {}, card.stash ? stashName(card.stash) : "Reading list", el("span", { className: "n", textContent: shown })));
+      const h2 = el("h2", {}, card.stash ? stashName(card.stash) : "Reading list", el("span", { className: "n", textContent: shown }));
+      if (card.stash) Peek.mark(h2, "stash", card.stash.id);
+      side.append(h2);
       list = el("ul");
       side.append(list);
     }
     const title = titleOf(card);
-    const tagLine = card.link.tags.length ? `\n${card.link.tags.join(", ")}` : "";
-    const b = el("button", { title: (title ? `${title}\n${card.link.url}` : card.link.url) + tagLine },
+    const b = el("button", {},
       srcIcon(card.link.url),
       el("span", { className: `t${title ? "" : " plain"}`, textContent: title || shortUrl(card.link.url) }),
       readMark(card.link), el("span", { className: "m" }));
     b.dataset.key = cardKey(card);
+    Peek.mark(b, "link", card.link.key);
     if (cardKey(card) === current) b.setAttribute("aria-current", "true");
     b.onclick = () => select(cardKey(card));
     list.append(el("li", { className: card.link.verdict || "" }, b));
@@ -228,9 +230,11 @@ function knownBox(card) {
     if (deck.some(d => cardKey(d) === key)) {
       const b = el("button", { className: "link", textContent: stashName(s) });
       b.onclick = () => { ensureVisible(); select(key); };
+      Peek.mark(b, "stash", `${s.id}|${link.key}`);
       facts.append(el("li", {}, stash ? "Also stashed in " : "Stashed in ", b));
     } else {
-      facts.append(el("li", { textContent: `${stash ? "Also stashed" : "Stashed"} in ${stashName(s)}${data.stashes.some(x => x.id === s.id) ? "" : " (not on show)"}` }));
+      facts.append(el("li", {}, `${stash ? "Also stashed" : "Stashed"} in `, Peek.mark(el("span", { className: "peekable", textContent: stashName(s) }), "stash", `${s.id}|${link.key}`),
+        data.stashes.some(x => x.id === s.id) ? "" : " (not on show)"));
     }
   }
   if (kindOf(link.url) === "web") {

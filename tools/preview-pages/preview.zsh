@@ -76,7 +76,7 @@ for page in popup list cards standin stash-cards tag tags; do
       "$ext/$page.html" > "$out/$page.html"
   ln -sf "$ext/$page.js" "$out/$page.js"
 done
-for shared in icons.js links.js link-view.js link-keys.js link-actions.js tags.css actions.css; do ln -sf "$ext/$shared" "$out/$shared"; done
+for shared in icons.js links.js link-view.js link-keys.js link-actions.js peek.js tags.css actions.css; do ln -sf "$ext/$shared" "$out/$shared"; done
 ln -sf "$ext/nav.js" "$out/nav.js"
 ln -sf "$ext/nav.css" "$out/nav.css"
 ln -sf "$ext/icon.svg" "$out/icon.svg"

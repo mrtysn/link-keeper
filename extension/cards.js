@@ -261,14 +261,15 @@ function contextEl(card) {
   const link = card.link;
   const held = heldIn(link);
   const facts = [];
-  if (held.length > 1) facts.push(`Also in ${plural(held.length - 1, "other stash")}: ${held.slice(1, 3).map(h => stashName(h.stash)).join(", ")}${held.length > 3 ? ", …" : ""}`);
+  // The other stashes holding it, previewed on hover.
+  if (held.length > 1) facts.push(Peek.mark(el("span", { className: "peekable", textContent: `Also in ${plural(held.length - 1, "other stash")}: ${held.slice(1, 3).map(h => stashName(h.stash)).join(", ")}${held.length > 3 ? ", …" : ""}` }), "held", link.key));
   if (link.list && held.length) facts.push(`on the reading list — ${LIST_STATUS[link.list.status] || link.list.status}`);
   if (isWeb(link.url)) {
     const host = hostOf(link.url);
     const same = deck.slice(index).filter(c => c.link.key !== link.key && isWeb(c.url) && hostOf(c.url) === host).length;
     if (same) facts.push(`${same} more from ${host} in this deck`);
   }
-  return facts.length ? el("div", { className: "ctx", textContent: facts.join(" · ") }) : null;
+  return facts.length ? el("div", { className: "ctx" }, ...facts.flatMap((f, i) => (i ? [" · ", f] : [f]))) : null;
 }
 
 /* The sidebar: every stash on show and then the reading list, as Explore lists them, with the top
@@ -284,14 +285,16 @@ function buildSide() {
     const ul = el("ul");
     for (const r of rows) {
       const title = r.title || shortUrl(r.url);
-      const b = el("button", { title: `${title}\n${r.url}` }, srcIcon(r.url),
+      const b = el("button", {}, srcIcon(r.url),
         el("span", { className: `t${r.title ? "" : " plain"}`, textContent: title }), readMark(byKey.get(r.key) || { url: r.url }), el("span", { className: "m" }));
       b.onclick = () => dealNext(r.key);
+      Peek.mark(b, "link", r.key);
       sideRows.push({ group: id, key: r.key, b });
       ul.append(el("li", {}, b));
     }
-    side.append(el("section", { className: "grp" },
-      el("h2", { title: sub }, el("span", { className: "t", textContent: name }), el("span", { className: "n", textContent: rows.length })), ul));
+    const h2 = el("h2", { title: sub }, el("span", { className: "t", textContent: name }), el("span", { className: "n", textContent: rows.length }));
+    if (id !== "list") Peek.mark(h2, "stash", id);
+    side.append(el("section", { className: "grp" }, h2, ul));
   };
   const inShown = new Set();
   for (const s of stashes.filter(s => onShow.has(s.id))) {

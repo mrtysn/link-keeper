@@ -51,7 +51,7 @@ function rowEl(link) {
   if (text && !String(label).includes(text.slice(0, 50))) main.append(el("div", { className: "body", textContent: text }));
   const meta = el("div", { className: "meta" }, el("span", { textContent: kindOf(link.url) === "web" ? hostOf(link.url) : kindOf(link.url) === "file" ? "Local file" : "Browser page" }));
   if (link.date) meta.append(el("time", { dateTime: link.date, textContent: link.date.slice(0, 10) }));
-  for (const s of link.sources) meta.append(el("span", { className: "badge", textContent: SOURCE_NAMES[s] }));
+  for (const s of link.sources) meta.append(Peek.mark(el("span", { className: "badge", textContent: SOURCE_NAMES[s] }), "source", `${s}|${link.key}`));
   meta.append(...[verdictBadge(link), readBadge(link)].filter(Boolean));
   main.append(meta);
 

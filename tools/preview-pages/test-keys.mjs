@@ -184,6 +184,39 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "palette: no errors " + p.errs.join("; "));
   await p.close();
 }
+// Hover previews (peek.js)
+{
+  const p = await page("stash-cards.html");
+  const peek = () => p.$eval(".peek", e => e.textContent).catch(() => null);
+  // Walk until the detail names another stash.
+  for (let i = 0; i < 40 && !(await p.$('#detail [data-peek^="stash:"]')); i++) await key(p, "s");
+  await p.hover('#detail [data-peek^="stash:"]'); await p.waitForTimeout(500);
+  const t = await peek();
+  ok(!!t && /tabs?/.test(t) && /This link is tab \d+ of \d+/.test(t), "peek: a stash shows its tabs and where the link sits (" + (t || "").slice(0, 60) + ")");
+  ok(await p.$$eval(".peek .pk-rows li", l => l.length) > 0, "peek: with its tabs listed");
+  await p.hover(".peek .pk-go"); await p.waitForTimeout(400);
+  ok(!!(await peek()), "peek: stays open while the pointer is in it");
+  await key(p, "Escape"); ok(!(await peek()), "peek: Esc closes it");
+  await p.hover("#side h2[data-peek]"); await p.waitForTimeout(500);
+  ok(/Explore this stash/.test(await peek() || ""), "peek: a sidebar stash heading previews the stash");
+  await p.mouse.move(5, 5); await p.waitForTimeout(400);
+  ok(!(await peek()), "peek: leaving closes it");
+  await p.hover("#side li:nth-child(2) button"); await p.waitForTimeout(500);
+  ok(!!(await peek()), "peek: a sidebar link previews the link");
+  ok(!p.errs.length, "peek explore: no errors " + p.errs.join("; "));
+  await p.close();
+}
+{
+  const p = await page("list.html");
+  const peek = () => p.$eval(".peek", e => e.textContent).catch(() => null);
+  await p.hover('[data-peek^="site:"]'); await p.waitForTimeout(500);
+  ok(/links? on show/.test(await peek() || ""), "peek: a site chip previews its links");
+  await p.mouse.move(5, 5); await p.waitForTimeout(400);
+  await p.hover('.rows [data-peek^="tag:"]'); await p.waitForTimeout(500);
+  ok(/Open in Tags/.test(await peek() || ""), "peek: a tag chip previews the tag");
+  ok(!p.errs.length, "peek list: no errors " + p.errs.join("; "));
+  await p.close();
+}
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

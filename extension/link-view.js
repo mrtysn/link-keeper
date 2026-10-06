@@ -195,7 +195,10 @@ function tagHue(tag) {
 function tagChip(tag, guessed = false) {
   const chip = el("span", { className: `tag${guessed ? " guess" : ""}`, textContent: tag,
     title: guessed ? `Guessed from the kind of site; set a tag to replace it` : tag });
-  if (!guessed) chip.style.setProperty("--h", tagHue(tag));
+  if (!guessed) {
+    chip.style.setProperty("--h", tagHue(tag));
+    if (typeof Peek !== "undefined") Peek.mark(chip, "tag", tag);
+  }
   return chip;
 }
 function tagChips(link) {

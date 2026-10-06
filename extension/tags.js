@@ -179,6 +179,7 @@ function rowEl(link) {
   const label = labelOf(link);
   const a = el("a", { className: `ttl${label ? "" : " plain"}`, href: link.url, textContent: label || shortUrl(link.url), title: link.url });
   a.addEventListener("click", e => { e.preventDefault(); LinkActions.run("open", { link }); });
+  Peek.mark(a, "link", link.key);
   const meta = el("div", { className: "meta" },
     el("span", { textContent: kindOf(link.url) === "web" ? hostOf(link.url) : kindOf(link.url) === "file" ? "Local file" : "Browser page" }));
   if (link.date) meta.append(el("time", { dateTime: link.date, textContent: link.date.slice(0, 10) }));

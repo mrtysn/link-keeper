@@ -119,21 +119,23 @@ function whereBadges(link, ctx) {
   const out = [];
   const mixed = data.sources.size > 1;
   if (ctx) {
-    if (link.list && mixed) out.push(el("span", { className: "badge", textContent: "Reading list" }));
+    if (link.list && mixed) out.push(Peek.mark(el("span", { className: "badge", textContent: "Reading list" }), "source", `list|${link.key}`));
     const also = link.copies.filter(c => c.stash !== ctx.stash.id).map(c => stashById(c.stash)).filter(Boolean);
     if (also.length) {
       out.push(el("span", { className: "badge dup", textContent: `Also in ${also.length === 1 ? "1 other stash" : `${also.length} other stashes`}`,
         title: also.map(stashName).join("\n") }));
+      Peek.mark(out.at(-1), "held", link.key);
     }
     return out;
   }
   if (!mixed && link.copies.length < 2) return out;
-  if (link.list && mixed) out.push(el("span", { className: "badge", textContent: "Reading list" }));
+  if (link.list && mixed) out.push(Peek.mark(el("span", { className: "badge", textContent: "Reading list" }), "source", `list|${link.key}`));
   for (const source of ["tabs", "import"]) {
     const held = link.copies.map(c => stashById(c.stash)).filter(s => s?.source === source);
     if (!held.length) continue;
     out.push(el("span", { className: "badge", textContent: `${SOURCE_NAMES[source]}${held.length > 1 ? ` ×${held.length}` : ""}`,
       title: held.map(stashName).join("\n") }));
+    Peek.mark(out.at(-1), "source", `${source}|${link.key}`);
   }
   return out;
 }
@@ -567,6 +569,7 @@ function renderDomainChips() {
     const icon = host === "Local files" ? srcIcon("file:///") : host === "Browser pages" ? srcIcon("about:blank") : srcIcon(`https://${host}/`);
     const b = el("button", { className: "chip" }, icon, host, el("span", { className: "n", textContent: n }));
     b.setAttribute("aria-pressed", String(domainSel.has(host)));
+    Peek.mark(b, "site", host);
     b.onclick = () => { domainSel.has(host) ? domainSel.delete(host) : domainSel.add(host); render(); };
     return b;
   };
