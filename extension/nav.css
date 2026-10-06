@@ -1,8 +1,9 @@
 /* The bar nav.js puts across the top of every page. It runs edge to edge: a page sets --gutter to
-   its body's side padding, and the bar reaches back over it. Colours come from the page's tokens. */
+   its body's side padding, and the bar reaches back over it. A page without body padding sets
+   --nav-inset to keep the bar's contents off the window edge. Colours come from the page's tokens. */
 .app-nav {
   display: flex; flex-wrap: wrap; align-items: stretch; column-gap: 16px;
-  margin: 0 calc(-1 * var(--gutter, 0px)) var(--nav-gap, 0px); padding: 0 var(--gutter, 0px);
+  margin: 0 calc(-1 * var(--gutter, 0px)) var(--nav-gap, 0px); padding: 0 var(--nav-inset, var(--gutter, 0px));
   border-bottom: 1px solid var(--line); background: var(--bg);
   font: 14px/1.2 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
 }
