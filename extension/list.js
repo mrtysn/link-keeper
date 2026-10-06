@@ -274,7 +274,8 @@ function rowEl(link, ctx) {
     meta.append(t);
   }
   if (cap?.kind && cap.kind !== "page") meta.append(el("span", { textContent: cap.kind }));
-  if (link.list && !cap && kind === "web") meta.append(el("span", { textContent: "not read yet" }));
+  const read = readBadge(link);
+  if (read) meta.append(read);
   if (link.list?.current) meta.append(el("span", { className: "badge current", textContent: "Current" }));
   meta.append(...whereBadges(link, ctx));
   const container = ctx ? ctx.tab.container : link.copies.find(c => c.container)?.container;

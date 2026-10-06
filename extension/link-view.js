@@ -40,6 +40,26 @@ function labelOf(link) {
   return cap.title || cap.handle || link.title || null;
 }
 
+/* Whether its page was read in, shown the same on every page: a "read" badge with the date on a
+ * row or card, a page icon beside the title in a sidebar. Only web pages can be read, so only they get "not
+ * read". */
+const readAt = link => link.cap?.captured_at || null;
+const dayOf = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { dateStyle: "medium" }); };
+function readBadge(link) {
+  const at = readAt(link);
+  if (at) return el("span", { className: "lk-read", textContent: "read", title: `Read ${whenOf(at)} — its text and images are stored` });
+  if (link.cap) return el("span", { className: "lk-read", textContent: "read", title: "Its text and images are stored" });
+  return isWeb(link.url) ? el("span", { className: "lk-unread", textContent: "not read", title: "Never read — Read (3) pulls its text and images in" }) : null;
+}
+function readMark(link) {
+  const span = el("span", { className: `rd${link.cap ? " on" : ""}`, title: link.cap ? (readAt(link) ? `Read ${dayOf(readAt(link))}` : "Read") : "" });
+  if (link.cap) span.setAttribute("aria-label", "read");
+  return span;
+}
+/* A verdict as a badge, for pages whose rows have no mark of their own. */
+const verdictBadge = link => (link.verdict === "keep" ? el("span", { className: "lk-verdict keep", textContent: "✓ kept" })
+  : link.verdict === "drop" ? el("span", { className: "lk-verdict drop", textContent: "✕ dropped" }) : null);
+
 /* One state per link, shown the same everywhere: a verdict if it has one, else whether it was seen. */
 const stateOf = link => (link.verdict === "keep" ? "kept" : link.verdict === "drop" ? "dropped" : link.seen ? "seen" : "left");
 const STATE_NAMES = { left: "Not looked at yet", seen: "Seen, undecided", kept: "Kept", dropped: "Dropped" };

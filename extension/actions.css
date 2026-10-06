@@ -47,6 +47,22 @@
 @media (hover: hover) { .stashpick button:hover { background: var(--chip); } }
 .stashpick .n { color: var(--dim); font-variant-numeric: tabular-nums; }
 
+/* A link's state, the same on every page: read or not, and a verdict where a row has no mark. */
+.lk-read, .lk-unread, .lk-verdict { padding: 0 7px; border-radius: 999px; font-size: .6875rem; line-height: 1.6; white-space: nowrap; }
+.lk-read { color: var(--accent); background: var(--chip); }
+.lk-unread { color: var(--dim); border: 1px dashed var(--line); line-height: calc(1.6em - 2px); }
+.lk-verdict { background: var(--chip); font-weight: 600; }
+.lk-verdict.keep { color: var(--ok, var(--keep)); }
+.lk-verdict.drop { color: var(--bad, var(--skip)); }
+/* A page with lines of text on it: the link's text is stored. */
+.rd { width: 12px; height: 14px; }
+.rd.on {
+  background: var(--accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 14'%3E%3Cpath d='M1.5 0h6L12 4.5V12.5A1.5 1.5 0 0 1 10.5 14h-9A1.5 1.5 0 0 1 0 12.5v-11A1.5 1.5 0 0 1 1.5 0Z' fill='%23000'/%3E%3Cpath d='M2.5 6.5h7M2.5 9h7M2.5 11.5h5' stroke='%23fff' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E") center/contain no-repeat luminance;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 14'%3E%3Cpath d='M1.5 0h6L12 4.5V12.5A1.5 1.5 0 0 1 10.5 14h-9A1.5 1.5 0 0 1 0 12.5v-11A1.5 1.5 0 0 1 1.5 0Z' fill='%23fff'/%3E%3Cpath d='M2.5 6.5h7M2.5 9h7M2.5 11.5h5' stroke='%23000' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E") center/contain no-repeat luminance;
+}
+[aria-current] .rd.on { background: currentColor; }
+
 /* The row the keys act on, on pages of rows; and the pane they walk, where there are two. */
 .lk-cursor { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
 .lk-pane-on { box-shadow: inset 0 2px 0 var(--accent); }

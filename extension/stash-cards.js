@@ -112,7 +112,7 @@ function renderSide() {
     const b = el("button", { title: (title ? `${title}\n${card.link.url}` : card.link.url) + tagLine },
       srcIcon(card.link.url),
       el("span", { className: `t${title ? "" : " plain"}`, textContent: title || shortUrl(card.link.url) }),
-      el("span", { className: "m" }));
+      readMark(card.link), el("span", { className: "m" }));
     b.dataset.key = cardKey(card);
     if (cardKey(card) === current) b.setAttribute("aria-current", "true");
     b.onclick = () => select(cardKey(card));
@@ -163,7 +163,7 @@ function renderDetail() {
   pane.append(el("div", { className: "dhead" }, srcIcon(url),
     el("div", {},
       el("div", { className: "where", textContent: kind === "web" ? hostOf(url) : kind === "file" ? "Local file" : "Browser page" }),
-      el("div", { className: "when", textContent: when })),
+      el("div", { className: "when" }, `${when} `, readBadge(link))),
     el("div", { className: "pos", textContent: i === -1 ? "" : `${i + 1} / ${visible.length}` })));
 
   const title = titleOf(card);

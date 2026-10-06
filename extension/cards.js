@@ -147,9 +147,11 @@ function cardEl(card, top) {
   if (card.saved_at) bits.push(`saved ${String(card.saved_at).slice(0, 10)}`);
   if (card.kind && card.kind !== "page") bits.push(card.kind);
   if (card.code_blocks) bits.push(`${card.code_blocks} code block${card.code_blocks > 1 ? "s" : ""}`);
-  names.append(Object.assign(document.createElement("div"), {
-    className: "when", textContent: bits.join(" · "),
-  }));
+  const restored = card.link.copies.map(c => c.seen_at).filter(Boolean).sort().pop();
+  if (restored) bits.push(`restored ${dayOf(restored)}`);
+  const when = Object.assign(document.createElement("div"), { className: "when", textContent: `${bits.join(" · ")} ` });
+  when.append(...[verdictBadge(card.link), readBadge(card.link)].filter(Boolean));
+  names.append(when);
   head.append(mono, names);
   const chips = tagChips(card.link);
   if (chips) head.append(chips);
@@ -277,7 +279,7 @@ function buildSide() {
     for (const r of rows) {
       const title = r.title || shortUrl(r.url);
       const b = el("button", { title: `${title}\n${r.url}` }, srcIcon(r.url),
-        el("span", { className: `t${r.title ? "" : " plain"}`, textContent: title }), el("span", { className: "m" }));
+        el("span", { className: `t${r.title ? "" : " plain"}`, textContent: title }), readMark(byKey.get(r.key) || { url: r.url }), el("span", { className: "m" }));
       b.onclick = () => dealNext(r.key);
       sideRows.push({ group: id, key: r.key, b });
       ul.append(el("li", {}, b));

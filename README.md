@@ -181,6 +181,11 @@ laid out like reddit's keyboard navigation (RES): the left hand stays on the num
 | `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
 | `/` `?` `Esc` | filter · the key list · back out |
 
+Whether a link was read in shows the same way everywhere: a **read** badge (its date on hover) or a
+dashed **not read** on a row, card or Explore's header, and a page icon beside the title in the
+Cards and Explore sidebars. Tag rows and cards also badge a verdict, and a card says when its tab was
+last restored.
+
 Only `1` `2` repeat while held, so a held key cannot judge or remove a run of links. Keys never act
 while a field has the keyboard; `Esc` leaves it. What plain Open does to the stash is **Settings →
 After restoring** on the List page; `⇧4` does the other.
