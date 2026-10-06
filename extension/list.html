@@ -5,6 +5,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="nav.css">
 <link rel="stylesheet" href="tags.css">
+<link rel="stylesheet" href="actions.css">
 <title>Link Keeper — list</title>
 <style>
   :root {
@@ -187,18 +188,6 @@
   }
 
   .acts { display: flex; align-items: center; gap: 4px; }
-  .more { width: 28px; padding: 0; justify-content: center; font-size: 1rem; letter-spacing: .05em; }
-  .menu {
-    position: fixed; inset: auto; margin: 0; min-width: 12rem; padding: 4px;
-    background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 10px;
-    box-shadow: var(--shadow);
-  }
-  .menu button {
-    display: flex; width: 100%; min-height: 32px; padding: 6px 10px; justify-content: flex-start;
-    border: 0; border-radius: 6px; background: none;
-  }
-  @media (hover: hover) { .menu button:hover:not(:disabled) { background: var(--chip); } }
-  .menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
 
   .empty {
     padding: 64px 16px; text-align: center; color: var(--dim);
@@ -207,6 +196,8 @@
   .empty .title { margin: 0 0 4px; color: var(--ink); font-size: 1.0625rem; font-weight: 600; }
   .empty p { margin: 0; }
   .empty button { margin-top: 16px; }
+  .keys { margin: 10px 0 0; color: var(--dim); font-size: .8125rem; }
+  .rows > li { scroll-margin: 72px 0 16px; }
   kbd {
     padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
     background: var(--chip); font: .8125rem ui-sans-serif, -apple-system, sans-serif;
@@ -387,7 +378,7 @@
         <label><input type="radio" name="after-stash" value="stay"> <span>Stay where I am <span class="hint">(a new tab if the window would close)</span></span></label>
       </fieldset>
       <fieldset>
-        <legend>After restoring</legend>
+        <legend>After restoring <span class="hint">— <kbd>⇧4</kbd> does the other, once</span></legend>
         <label><input type="radio" name="after-restore" value="keep"> <span>Keep the tabs here, marked restored</span></label>
         <label><input type="radio" name="after-restore" value="remove"> <span>Take them out of the stash <span class="hint">(locked stashes keep theirs)</span></span></label>
       </fieldset>
@@ -412,6 +403,7 @@
     </div>
   </section>
 
+  <p class="keys" id="keys"></p>
   <p id="msg" role="status"></p>
   <div class="domains" id="domains" role="group" aria-label="Domains, none selected shows all"></div>
   <div class="domains" id="tagchips" role="group" aria-label="Tags, none selected shows all"></div>
@@ -419,6 +411,8 @@
 </div>
 <script src="icons.js"></script>
 <script src="link-view.js"></script>
+<script src="link-keys.js"></script>
+<script src="link-actions.js"></script>
 <script src="stash-import.js"></script>
 <script src="list.js"></script>
 </body>

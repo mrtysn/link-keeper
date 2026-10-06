@@ -1,13 +1,14 @@
 /* Explore: every link from the chosen sources in a sidebar, the chosen one in full beside it.
  *
  * The sidebar lists one stash, the reading list, or everything — stashes in the order they were
- * stashed, then the reading list's links; click any row to jump to it, or walk with ↑ ↓. The detail
+ * stashed, then the reading list's links; click any row to jump to it, or walk with 1 2. Q W move
+ * the keys between the sidebar and the detail pane, where 1 2 scroll instead. The detail
  * pane shows what is known without touching the network — its capture if the page was ever read,
  * where else it is held — and
  * two things that do: Read (loads it in a background tab and extracts it) and the live preview.
  *
- * Keep and Drop are one verdict per URL, written to every copy; pressing one again clears it.
- * Nothing here can lose a tab: a drop is removed only by "Clear dropped" on the List page.
+ * The actions and their keys are every page's (link-actions.js, link-keys.js): keep and drop are one
+ * verdict per URL, written to every copy, and pressing one again clears it.
  */
 
 const scope = new URLSearchParams(location.search).get("stash") || "all";
@@ -23,7 +24,10 @@ let filter = "all";
 let previewOn = false;
 let previewTimer = null;
 
-function say(text) { const m = $("msg"); if (m) m.textContent = text; }
+/* The message line sits in the detail pane, which every reload redraws: it keeps the last message
+ * until another link is chosen. */
+let said = "";
+function say(text) { said = text; const m = $("msg"); if (m) m.textContent = text; }
 const cardKey = c => c && (c.stash ? `${c.stash.id} ${c.tab.id}` : `list ${c.link.key}`);
 const verdictOf = c => c.link.verdict || "open";
 
@@ -120,6 +124,7 @@ function renderSide() {
 function select(key) {
   if (!key || key === current) return;
   current = key;
+  said = "";
   for (const b of document.querySelectorAll("#side button[aria-current]")) b.removeAttribute("aria-current");
   const row = document.querySelector(`#side button[data-key="${CSS.escape(key)}"]`);
   row?.setAttribute("aria-current", "true");
@@ -167,20 +172,7 @@ function renderDetail() {
     : el("h2", { className: "dtitle plain", textContent: shortUrl(url) }));
   pane.append(el("div", { className: "durl", textContent: url }));
 
-  const btn = (text, cls, hint, fn) => {
-    const b = el("button", { className: cls, textContent: text, title: hint });
-    b.onclick = fn;
-    return b;
-  };
-  const keep = btn("Keep", "keep", "Keep it, wherever it is held (k)", () => judge(card, "keep"));
-  const drop = btn("Drop", "drop", "Flag it dropped everywhere; Clear dropped on the List page removes stashed copies (d)", () => judge(card, "drop"));
-  keep.setAttribute("aria-pressed", String(link.verdict === "keep"));
-  drop.setAttribute("aria-pressed", String(link.verdict === "drop"));
-  pane.append(el("div", { className: "acts" },
-    btn("Open", "primary", stash ? "Reopen this tab now (o)" : "Open it in a new tab (o)", () => openNow(card)),
-    keep, drop,
-    canMoveToList(card) && btn("To list", "", "Move this web page to the reading list (l)", () => toList(card)),
-    isWeb(url) && btn(link.cap ? "Re-read" : "Read", "", "Load it in a background tab and extract its text and images (r)", e => readNow(card, e.currentTarget))));
+  pane.append(LinkActions.bar(card));
 
   const badges = el("div", { className: "badges" });
   if (link.verdict === "keep") badges.append(el("span", { className: "badge keep", textContent: "✓ Kept" }));
@@ -195,17 +187,11 @@ function renderDetail() {
   // Done with the field (Escape, or Enter on it empty): the arrow keys walk the sidebar again.
   tagrow.addEventListener("tagdone", () => document.activeElement?.blur());
   pane.append(tagrow);
-  pane.append(el("p", { id: "msg", role: "status" }));
+  pane.append(el("p", { id: "msg", role: "status", textContent: said }));
 
   pane.append(knownBox(card), previewBox(card));
-  pane.append(el("p", { className: "keys" }, el("kbd", { textContent: "↑" }), " ", el("kbd", { textContent: "↓" }),
-    " move · ", el("kbd", { textContent: "o" }), " open · ", el("kbd", { textContent: "k" }), " keep · ",
-    el("kbd", { textContent: "d" }), " drop · ", el("kbd", { textContent: "l" }), " to list · ",
-    el("kbd", { textContent: "r" }), " read · ", el("kbd", { textContent: "t" }), " tags · ", el("kbd", { textContent: "p" }), " preview on/off · ",
-    el("kbd", { textContent: "/" }), " filter"));
+  pane.append(el("p", { className: "keys" }, ...LinkKeys.hint(["prev", "next", "pane-next", "drop", "keep", "open", "read", "tags", "preview"])));
 }
-
-const canMoveToList = c => !!(c.stash && isWeb(c.link.url) && !c.link.list && !c.stash.locked);
 
 function knownBox(card) {
   const { link, stash } = card;
@@ -308,42 +294,23 @@ async function setPreview(on) {
 
 /* --- actions -------------------------------------------------------------------- */
 
-async function judge(card, verdict) {
-  const clearing = card.link.verdict === verdict;
-  const res = await send({ type: "judge-link", url: card.link.url, verdict: clearing ? null : verdict });
-  if (!res?.ok) return say(res?.error || "That did not work");
-  if (!clearing) step(1);
-  await load();
-  say(clearing ? "Cleared" : verdict === "keep" ? "Kept" : "Dropped — Clear dropped on the List page removes stashed copies");
-}
-
-async function openNow(card) {
-  if (!card.stash) {
-    await send({ type: "set-current", url: card.link.url });
-    await browser.tabs.create({ url: card.link.url });
-    return say("Opened in a new tab");
-  }
-  const res = await send({ type: "restore-stash", id: card.stash.id, ids: [card.tab.id] });
-  if (!res?.ok) return say(res?.error || "Unable to open it");
-  say(res.viaHelper ? "Opened through the helper" : res.standins ? `Opened as a stand-in${res.helperError ? `: ${res.helperError}` : ""}` : "Opened in a new tab");
-}
-
-async function toList(card) {
-  if (!canMoveToList(card)) return;
-  step(1);
-  const res = await send({ type: "move-stash", id: card.stash.id, ids: [card.tab.id] });
-  if (!res?.ok) return say(res?.error || "Unable to move it");
-  await load();
-  say(res.added ? "Moved to the reading list" : "Already on the reading list; taken out of the stash");
-}
-
-async function readNow(card, button) {
-  if (!isWeb(card.link.url)) return;
-  if (button) { button.disabled = true; button.textContent = "Reading…"; }
-  const res = await readLink(card.link.url);
-  await load();
-  say(res?.ok ? `Read ${res.record.title || hostOf(card.link.url)}` : res?.error || "Unable to read it");
-}
+/* After an action: a verdict moves on to the next link, as does anything that takes the link out of
+ * the row it had (to the list, a move, a removal); then everything reloads. */
+LinkActions.setup({
+  data: () => data,
+  say,
+  async after(cmd, target, res) {
+    if (res.ok === false) return;
+    const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
+    if (((cmd === "keep" || cmd === "drop") && !res.cleared) || leaves) {
+      const i = visible.findIndex(c => cardKey(c) === current);
+      const next = visible[i + 1] || visible[i - 1];
+      if (next) current = cardKey(next);
+    }
+    await load();
+  },
+  tags: () => { focusPane("detail"); document.querySelector("#detail .tagger input")?.focus(); },
+});
 
 /* --- wiring --------------------------------------------------------------------- */
 
@@ -362,22 +329,27 @@ $("scope").onchange = () => {
   location.search = v === "all" ? "" : `?stash=${encodeURIComponent(v)}`;
 };
 
-addEventListener("keydown", e => {
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.target.closest("input, select, textarea")) {
-    if (e.key === "Escape") e.target.blur();
-    return;
-  }
+/* Two panes: the keys walk the sidebar, or scroll the detail. Q W move between them. */
+let pane = "side";
+function focusPane(which) {
+  pane = which;
+  $("side").classList.toggle("lk-pane-on", pane === "side");
+  $("detail").classList.toggle("lk-pane-on", pane === "detail");
+}
+const walk = by => (pane === "side" ? step(by) : $("detail").scrollBy({ top: by * $("detail").clientHeight * 0.4, behavior: "smooth" }));
+const onCard = cmd => () => {
   const card = deck.find(c => cardKey(c) === current);
-  const acts = {
-    ArrowDown: () => step(1), ArrowUp: () => step(-1), k: () => card && judge(card, "keep"),
-    d: () => card && judge(card, "drop"), o: () => card && openNow(card), l: () => card && toList(card),
-    r: () => card && readNow(card, null), p: () => setPreview(!previewOn), "/": () => $("q").focus(),
-    t: () => document.querySelector("#detail .tagger input")?.focus(),
-  };
-  const run = acts[e.key];
-  if (run) { e.preventDefault(); run(); }
+  LinkActions.key(cmd, card, document.querySelector(`#detail .lk-bar [data-cmd="${cmd === "open-other" ? "open" : cmd}"]`) || $("detail"));
+};
+LinkKeys.listen({
+  prev: () => walk(-1), next: () => walk(1),
+  "pane-prev": () => focusPane(pane === "side" ? "detail" : "side"), "pane-next": () => focusPane(pane === "side" ? "detail" : "side"),
+  drop: onCard("drop"), keep: onCard("keep"), read: onCard("read"), open: onCard("open"), "open-other": onCard("open-other"),
+  tags: onCard("tags"), list: onCard("list"), move: onCard("move"), remove: onCard("remove"),
+  undo: () => LinkActions.undo(), filter: () => $("q").focus(), preview: () => setPreview(!previewOn),
+  escape: () => document.querySelector(".tagpop")?.remove(),
 });
+focusPane("side");
 
 reloadOnChanges(load);
 load();

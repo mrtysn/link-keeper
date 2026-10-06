@@ -5,6 +5,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="nav.css">
 <link rel="stylesheet" href="tags.css">
+<link rel="stylesheet" href="actions.css">
 <title>Link Keeper — cards</title>
 <style>
   :root {
@@ -151,8 +152,13 @@
   .actions button:hover:not(:disabled) { border-color: var(--accent); }
   /* Dim, but still legible as the three moves (Lc 35+); .4 left them at Lc 18. */
   .actions button:disabled { opacity: .65; cursor: default; }
-  .actions .no { color: var(--skip); font-weight: 600; min-width: 7rem; }
-  .actions .yes { color: var(--keep); font-weight: 600; min-width: 7rem; }
+  .actions { flex-direction: column; align-items: center; }
+  .actions .lk-bar { justify-content: center; }
+  .actions button { display: inline-flex; align-items: center; gap: .45rem; padding: .4rem .7rem; font-size: .9rem; }
+  .actions button kbd { padding: 0 .25rem; font-size: .68rem; }
+  .actions button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  #stage.lk-pane-on { box-shadow: none; }
+  #stage.lk-pane-on .card.top { border-color: var(--accent); }
   .keys { text-align: center; color: var(--dim); font-size: .8rem; margin-top: .8rem; }
   kbd { background: var(--chip); border: 1px solid var(--line); border-bottom-width: 2px;
         border-radius: .3rem; padding: .05rem .3rem; font: inherit; font-size: .76rem; }
@@ -192,21 +198,15 @@
 
   <div id="stage"></div>
 
-  <div class="actions">
-    <button class="no" id="skip">← Drop</button>
-    <button id="later">↑ Later</button>
-    <button id="undo">Undo</button>
-    <button class="yes" id="keep">Keep →</button>
-  </div>
-  <p class="keys">
-    Drag the card, or <kbd>←</kbd> drop · <kbd>→</kbd> keep · <kbd>↑</kbd> later ·
-    <kbd>o</kbd> open · <kbd>t</kbd> tags · <kbd>u</kbd> undo
-  </p>
+  <div class="actions" id="actions"></div>
+  <p class="keys" id="keys-line"></p>
   <div id="msg"></div>
 </div>
 </div>
 <script src="icons.js"></script>
 <script src="link-view.js"></script>
+<script src="link-keys.js"></script>
+<script src="link-actions.js"></script>
 <script src="cards.js"></script>
 </body>
 </html>

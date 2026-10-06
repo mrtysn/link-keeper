@@ -79,15 +79,6 @@ function matches(link, term) {
 
 const byNewest = (a, b) => String(b.date || "").localeCompare(String(a.date || ""));
 
-/* Where a stash-only link reopens from: a stash on show if it is in one, else any. */
-function copyToOpen(link) {
-  return link.copies.find(c => visibleStash(c.stash)) || link.copies[0] || null;
-}
-
-function openCopy(copy) {
-  return act({ type: "restore-stash", id: copy.stash, ids: [copy.tab] }, restoredText);
-}
-
 function titleLink(link, ctx) {
   const cap = link.cap;
   const web = isWeb(link.url);
@@ -108,15 +99,13 @@ function titleLink(link, ctx) {
     a.textContent = shortUrl(link.url);
     a.title = link.url;
   }
-  /* A stashed tab reopens through the background, which keeps its container and marks it
-   * restored; a reading-list link opens in a new tab and becomes the current entry, so a keep on
-   * that tab attaches to it. Middle-click and copy-link behave as on any link. */
+  /* A click is Open, as 4 is: a stashed tab reopens through the background, which keeps its
+   * container and marks it restored; a reading-list link opens in a new tab and becomes the current
+   * entry, so a keep on that tab attaches to it. Middle-click and copy-link behave as on any link. */
   a.addEventListener("click", e => {
     if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    if (ctx) { e.preventDefault(); openCopy({ stash: ctx.stash.id, tab: ctx.tab.id }); return; }
-    if (link.list && web) { send({ type: "set-current", url: link.url }).then(load); return; }
-    const copy = copyToOpen(link);
-    if (copy) { e.preventDefault(); openCopy(copy); }
+    e.preventDefault();
+    LinkActions.run("open", { link, ...ctx });
   });
   return a;
 }
@@ -149,49 +138,100 @@ function whereBadges(link, ctx) {
   return out;
 }
 
-function rowMenu(link, ctx) {
-  const web = isWeb(link.url);
-  const v = link.verdict;
-  const judge = verdict => act({ type: "judge-link", url: link.url, verdict: v === verdict ? null : verdict });
+/* --- keys ------------------------------------------------------------------------
+ * A cursor marks the row the keys act on: 1 2 walk it, Q W jump to the previous or next section, a
+ * click on a row puts it there. It is held by the row's identity, so a reload keeps it in place. */
+
+let rowsOnPage = [];   // [{ li, target, id }] in page order, rebuilt by each render
+let cursorId = null;
+
+function cursorRow(li, target) {
+  // A link shows once per stash, but in some groupings once per tag: the nth showing is its own row.
+  const base = `${target.stash?.id || ""} ${target.link.key}`;
+  const id = `${base} #${rowsOnPage.filter(r => r.base === base).length}`;
+  rowsOnPage.push({ li, target, id, base });
+  if (id === cursorId) li.classList.add("lk-cursor");
+  li.addEventListener("pointerdown", () => setCursor(id, false));
+}
+
+function setCursor(id, scroll = true) {
+  cursorId = id;
+  for (const r of rowsOnPage) r.li.classList.toggle("lk-cursor", r.id === id);
+  if (scroll) rowsOnPage.find(r => r.id === id)?.li.scrollIntoView({ block: "nearest" });
+}
+const cursorAt = () => rowsOnPage.findIndex(r => r.id === cursorId);
+
+function walk(by) {
+  if (!rowsOnPage.length) return;
+  const i = cursorAt();
+  const to = i === -1 ? (by > 0 ? 0 : rowsOnPage.length - 1) : Math.max(0, Math.min(rowsOnPage.length - 1, i + by));
+  setCursor(rowsOnPage[to].id);
+}
+
+function jumpSection(by) {
+  const sections = [...document.querySelectorAll("#out section.group")].filter(sec => rowsOnPage.some(r => sec.contains(r.li)));
+  if (!sections.length) return;
+  const i = cursorAt();
+  const here = i === -1 ? (by > 0 ? -1 : sections.length) : sections.indexOf(rowsOnPage[i].li.closest("section.group"));
+  const to = sections[Math.max(0, Math.min(sections.length - 1, here + by))];
+  const first = rowsOnPage.find(r => to.contains(r.li));
+  if (first) setCursor(first.id);
+}
+
+/* A key acts on the cursor's row; with no cursor yet, the first press only places it. */
+function onRow(cmd) {
+  return () => {
+    const i = cursorAt();
+    if (i === -1) return walk(1);
+    const { li, target } = rowsOnPage[i];
+    const anchor = (cmd === "tags" && li.querySelector(".tagedit")) || li.querySelector(".lk-bar .more") || li;
+    LinkActions.key(cmd, target, anchor);
+  };
+}
+
+/* After an action: a verdict moves the cursor on, as does anything that takes the row away; then
+ * the page reloads with the cursor where it now is. */
+LinkActions.setup({
+  data: () => data,
+  say,
+  tags: (t, anchor) => anchoredPopover(anchor, tagEditor(t.link, () => load())),
+  async after(cmd, target, res) {
+    if (res.ok === false) return;
+    const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
+    const i = cursorAt();
+    if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (((cmd === "keep" || cmd === "drop") && !res.cleared) || leaves)) {
+      const next = rowsOnPage[i + 1] || rowsOnPage[i - 1];
+      if (next) cursorId = next.id;
+    }
+    await load();
+    setCursor(cursorId);
+  },
+});
+
+LinkKeys.listen({
+  prev: () => walk(-1), next: () => walk(1),
+  "pane-prev": () => jumpSection(-1), "pane-next": () => jumpSection(1),
+  drop: onRow("drop"), keep: onRow("keep"), read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
+  tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
+  undo: () => LinkActions.undo(), filter: () => $("q").focus(),
+  escape: () => { document.querySelector(".tagpop")?.remove(); },
+});
+$("keys").append(...LinkKeys.hint(["prev", "next", "pane-next", "drop", "keep", "open", "tags"]));
+
+/* What only this page adds to a row's ⋯ menu: opening a reading-list link in this tab, and moving a
+ * stashed one up or down its stash. Everything else is the shared bar's. */
+function rowExtras(link, ctx) {
   const items = [];
-  if (ctx) items.push({ text: "Open", run: () => openCopy({ stash: ctx.stash.id, tab: ctx.tab.id }) });
-  else if (link.copies.length) items.push({ text: "Reopen from its stash", run: () => openCopy(copyToOpen(link)) });
-  if (link.list && web) {
+  if (link.list && isWeb(link.url)) {
     items.push({ text: "Open in this tab", run: () => send({ type: "set-current", url: link.url }).then(() => browser.tabs.update({ url: link.url })) });
-  }
-  items.push("-",
-    { text: v === "keep" ? "Clear kept" : "Keep", run: () => judge("keep") },
-    { text: v === "drop" ? "Clear dropped" : "Drop", run: () => judge("drop") });
-  if (ctx && web) {
-    items.push({ text: "Move to reading list", disabled: ctx.stash.locked, run: () => act({ type: "move-stash", id: ctx.stash.id, ids: [ctx.tab.id] },
-      r => (r.added ? "Moved to the reading list" : "Already on the reading list; taken out of the stash")) });
-  } else if (!ctx && web && !link.list) {
-    items.push({ text: "Add to reading list", run: () => act({ type: "add", urls: [{ url: link.url, title: link.title || undefined }] }, () => "Added to the reading list") });
   }
   if (ctx) {
     const { stash, index } = ctx;
-    const others = data.stashes.filter(s => s.id !== stash.id).slice(0, 8);
-    items.push("-",
-      { text: "Move up", disabled: index === 0, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index - 1]?.id) },
-      { text: "Move down", disabled: index === stash.tabs.length - 1, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index + 2]?.id || null) },
-      ...others.map(s => ({ text: `Move to ${stashName(s)}`, disabled: stash.locked, run: () => moveTab(ctx.tab.id, s.id, null) })),
-      "-",
-      { text: "Remove from this stash", className: "danger", disabled: stash.locked, title: stash.locked ? "The stash is locked" : "",
-        run: () => act({ type: "delete-stash", id: stash.id, ids: [ctx.tab.id] }) });
-  } else {
-    const removals = [];
-    for (const c of link.copies) {
-      const s = stashById(c.stash);
-      if (!s) continue;
-      removals.push({ text: `Remove from ${stashName(s)}`, className: "danger", disabled: s.locked, title: s.locked ? "The stash is locked" : "",
-        run: () => act({ type: "delete-stash", id: s.id, ids: [c.tab] }) });
-    }
-    if (link.list && !link.list.loose) {
-      removals.push({ text: "Remove from reading list", className: "danger", run: () => act({ type: "remove", urls: [link.url] }) });
-    }
-    if (removals.length) items.push("-", ...removals);
+    items.push(
+      { text: "Move up", disabled: stash.locked || index === 0, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index - 1]?.id) },
+      { text: "Move down", disabled: stash.locked || index === stash.tabs.length - 1, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index + 2]?.id || null) });
   }
-  return popoverMenu("⋯", `More actions for ${labelOf(link) || shortUrl(link.url)}`, items);
+  return items;
 }
 
 function rowEl(link, ctx) {
@@ -284,32 +324,10 @@ function rowEl(link, ctx) {
   }
   li.append(main);
 
-  /* Read it without leaving this page: opens the link out of sight in your own session, extracts,
-   * closes it. */
-  const acts = el("div", { className: "acts" });
-  if (kind === "web" && isWeb(link.url)) {
-    const readLabel = cap ? "Re-read" : "Read";
-    const grab = el("button", { className: "small", textContent: readLabel, title: "Open it in the background, read it, close it" });
-    grab.onclick = async () => {
-      grab.disabled = true;
-      grab.textContent = "Reading…";
-      const res = await readLink(link.url);
-      if (res?.ok) {
-        const r = res.record;
-        const extra = [r.links?.length ? plural(r.links.length, "link") : null,
-          r.reply_links?.length ? `${r.reply_links.length} from replies` : null].filter(Boolean).join(", ");
-        say(`Read ${r.title || hostOf(link.url)}${extra ? ` — ${extra}` : ""}`);
-      } else {
-        say(res?.error || "Unable to read it");
-        grab.disabled = false;
-        grab.textContent = readLabel;
-      }
-      load();
-    };
-    acts.append(grab);
-  }
-  acts.append(...rowMenu(link, ctx));
-  li.append(acts);
+  // The same actions as every page, compact: Open, Keep, Drop, the rest under ⋯.
+  const target = { link, ...ctx };
+  li.append(LinkActions.bar(target, { compact: true, extra: rowExtras(link, ctx) }));
+  cursorRow(li, target);
 
   if (ctx) dragRow(li, link, ctx);
   return li;
@@ -613,6 +631,7 @@ function clearFilters() {
 /* --- render ------------------------------------------------------------------------------- */
 
 function render() {
+  rowsOnPage = [];
   renderDomainChips();
   renderTagChips();
   renderSettings();

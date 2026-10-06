@@ -22,7 +22,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `native/` | the helper that reopens stashed local-file tabs — `native/install.zsh` registers it with Firefox |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, List, Cards and Explore in any browser with a fake extension API and real capture text<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, List, Cards and Explore in any browser with a fake extension API and real capture text<br>`preview-pages/test-keys.zsh` — drive List, Cards, Explore and Tag in that preview with the shared keys and check each action and its undo<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -161,10 +161,36 @@ Firefox gives extensions no access to bookmark tags, so tags live in the add-on'
 (`linkTags`), and travel in both exports — each stashed tab and each capture carries its tags — and
 come back with an import.
 
+### Acting on a link — the same on every page
+
+List, Cards, Explore and Tag offer one set of actions on a link, drawn the same way and answering to
+the same keys. Under the one link Cards and Explore show, every action is a button with its key; on
+a row of List or Tag, **Open**, **Keep** and **Drop** show and the rest sit under **⋯**. The keys are
+laid out like reddit's keyboard navigation (RES): the left hand stays on the number row and Q W A S.
+
+| Key | Action |
+|---|---|
+| `1` `2` (`↑` `↓`) | previous / next link in the focused pane; held, they repeat |
+| `Q` `W` | previous / next pane (sidebar and view); on List, the previous / next section |
+| `A` `S` (`←` `→`) | drop / keep, then on to the next link; again on a judged link clears it |
+| `4` | open — a stashed tab reopens through its stash, keeping its container and marking it restored |
+| `⇧4` | open with the other stash effect: taken out of the stash if the setting keeps it, and the reverse |
+| `3` | read it in: load it in a background tab and extract its text and images |
+| `T` `L` `M` | tags · to the reading list · move to another stash (a field filters the stashes) |
+| `⌘⌫` | remove from its stash, or from the reading list |
+| `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
+| `/` `?` `Esc` | filter · the key list · back out |
+
+Only `1` `2` repeat while held, so a held key cannot judge or remove a run of links. Keys never act
+while a field has the keyboard; `Esc` leaves it. What plain Open does to the stash is **Settings →
+After restoring** on the List page; `⇧4` does the other.
+
 ### Cards — judging
 
-Open *Cards* and go through every undecided link in the chosen sources as a shuffled deck. Right
-keeps, left drops, up defers to the next session. `o` opens, `u` undoes.
+Open *Cards* and go through every undecided link in the chosen sources as a shuffled deck. `S` (or
+right, or a drag right) keeps, `A` drops, `2` defers to the next session (Later) and `1` steps back
+a card. The sidebar lists every stash on show and the reading list, the card's row marked; `Q` `W`
+move the keys there, where `1` `2` walk it and deal each link they reach, and a click deals any row.
 
 A card shows what is known. A page that was read (`Ctrl+Shift+K`, or **Read** on List or Explore)
 carries its headline, text, embedded links, images and screenshot preview; a stashed tab never read
@@ -231,7 +257,7 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 - **Star** keeps a stash at the top. **Lock** makes it unable to lose a tab: no delete, no remove,
   no move to the list or dragging out, and restoring always keeps it.
 - Drag a row to reorder it or drop it into another stash (ahead of or after the row it lands on, or
-  last on a stash's heading); the row's **⋯** menu does the same from the keyboard. A stash emptied
+  last on a stash's heading); the row's **⋯** menu moves it up, down or to another stash. A stash emptied
   this way goes.
 - **Export → Stashes** downloads every stash as JSON. **Import…** reads it back, and also OneTab's
   *Export URLs* text, a TidyTab export, CSV with a `url` column (optionally `title`, `group`,
@@ -245,10 +271,11 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 **Explore** shows every link in the chosen sources in a sidebar — everything, one stash, or the
 reading list; stashes in the order they were stashed, then the reading list — with a filter and
 Undecided / Kept / Dropped chips, and the chosen link in full beside it. Click any row to jump to it,
-or walk with `↑` `↓`; the sidebar keeps each stash in tab-strip order. The detail pane shows the
+or walk with `1` `2`; the sidebar keeps each stash in tab-strip order. `Q` `W` move the keys to the
+detail pane, where `1` `2` scroll it. The detail pane shows the
 link's capture if the page was ever read, whether it is on the reading list or in other stashes, and
-how many links share its site. **Open**, **Keep**, **Drop**, **To list** and
-**Read** act on it (`o` `k` `d` `l` `r`); pressing Keep or Drop again clears it. A drop is a flag,
+how many links share its site. The actions and keys are every page's (above); pressing Keep or
+Drop again clears it. A drop is a flag,
 struck through in the list; **Clear dropped…** on the List page removes dropped stashed tabs, after a
 confirm.
 

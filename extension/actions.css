@@ -1,0 +1,68 @@
+/* The action bar, its ⋯ menu, the stash picker, the key list and the keyboard cursor — shared by
+   List, Cards, Explore and Tag (link-actions.js and link-keys.js draw them). Colours come from the
+   page's tokens; Cards names its verdict colours --keep and --skip, the others --ok and --bad. */
+
+.lk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lk-bar.compact { flex-wrap: nowrap; gap: 4px; }
+.lk-bar button { gap: 7px; }
+.lk-bar button kbd {
+  min-width: 1.2em; padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+  background: var(--chip); color: var(--dim); font: 600 .6875rem/1.4 ui-sans-serif, -apple-system, sans-serif; text-align: center;
+}
+/* On a row, repeated down the page, Open is an outline: one filled button per row is too loud. */
+.lk-bar.compact button.primary { background: none; border-color: var(--line); color: var(--accent); }
+.lk-bar .brk { flex-basis: 100%; height: 0; }
+.lk-bar button.primary kbd { background: none; border-color: currentColor; color: inherit; opacity: .8; }
+.lk-bar button.keep { color: var(--ok, var(--keep)); font-weight: 600; }
+.lk-bar button.drop { color: var(--bad, var(--skip)); font-weight: 600; }
+.lk-bar button.keep[aria-pressed="true"] { background: var(--keep-bg, transparent); border-color: var(--ok, var(--keep)); }
+.lk-bar button.drop[aria-pressed="true"] { background: var(--drop-bg, var(--skip-bg, transparent)); border-color: var(--bad, var(--skip)); }
+.lk-bar button.danger { color: var(--bad, var(--skip)); }
+
+.more { width: 28px; padding: 0; justify-content: center; font-size: 1rem; letter-spacing: .05em; }
+.menu {
+  position: fixed; inset: auto; margin: 0; min-width: 12rem; padding: 4px;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.menu button {
+  display: flex; width: 100%; min-height: 32px; padding: 6px 10px; justify-content: flex-start;
+  border: 0; border-radius: 6px; background: none; white-space: pre;
+  font: inherit; font-size: .875rem; color: inherit; text-align: left; cursor: pointer;
+}
+.menu button:disabled { opacity: .5; cursor: default; }
+.menu button.danger { color: var(--bad, var(--skip)); }
+@media (hover: hover) { .menu button:hover:not(:disabled) { background: var(--chip); } }
+.menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+
+/* Move to a stash: a field, then the stashes that match it. */
+.mover { display: grid; gap: 6px; width: min(22rem, calc(100vw - 32px)); }
+.mover input { width: 100%; }
+.stashpick { display: grid; max-height: 18rem; overflow-y: auto; }
+.stashpick button {
+  display: flex; gap: 8px; width: 100%; min-height: 30px; padding: 4px 8px; justify-content: space-between;
+  border: 0; border-radius: 6px; background: none; color: var(--ink); font: inherit; font-size: .8125rem; text-align: left; cursor: pointer;
+}
+.stashpick button:first-child { background: var(--chip); }
+@media (hover: hover) { .stashpick button:hover { background: var(--chip); } }
+.stashpick .n { color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* The row the keys act on, on pages of rows; and the pane they walk, where there are two. */
+.lk-cursor { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+.lk-pane-on { box-shadow: inset 0 2px 0 var(--accent); }
+
+.keys-help {
+  position: fixed; z-index: 100; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(30rem, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; padding: 18px 20px;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  font-size: .875rem;
+}
+.keys-help h2 { margin: 0 0 10px; font-size: 1rem; }
+.keys-help dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.keys-help dt { white-space: nowrap; }
+.keys-help dd { margin: 0; color: var(--dim); }
+.keys-help p { margin: 12px 0 0; color: var(--dim); font-size: .8125rem; }
+.keys-help kbd {
+  padding: 0 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+  background: var(--chip); font: .75rem ui-sans-serif, -apple-system, sans-serif;
+}

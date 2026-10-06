@@ -6,6 +6,10 @@
  *
  * Keep and drop are one verdict per URL, written to every copy — capture, reading-list entry and
  * each stash. Neither deletes anything: a drop is a flag, so a change of mind costs one click.
+ *
+ * The actions under the card and their keys are every page's (link-actions.js, link-keys.js). Two
+ * panes: on the deck, 2 deals the next card without a verdict (Later) and 1 steps back; Q W move
+ * the keys to the sidebar, where 1 2 walk the stashes and deal each link they reach.
  */
 
 const THRESHOLD = 105;
@@ -13,7 +17,6 @@ const THRESHOLD = 105;
 let deck = [];
 let index = 0;
 let tally = { keep: 0, drop: 0 };
-const undo = [];
 
 function say(text) { $("msg").textContent = text; }
 
@@ -93,24 +96,35 @@ function renderTagPick(links) {
 }
 
 let known = 0;
+let data = null;
 let stashes = [], onShow = new Set(), sources = new Set(), allLinks = [], byKey = new Map();
-const judged = new Map();
+
+function takeData(d) {
+  data = d;
+  known = d.links.length;
+  stashes = d.all.stashes;
+  allLinks = d.all.links;
+  byKey = new Map(d.all.links.map(l => [l.key, l]));
+  sources = d.sources;
+  onShow = new Set(d.stashes.map(s => s.id));
+  tally = { keep: d.links.filter(l => l.verdict === "keep").length, drop: d.links.filter(l => l.verdict === "drop").length };
+  renderTagPick(d.links);
+}
+
+/* A new deal: every undecided link, shuffled. */
 async function load() {
-  const { links, all, stashes: shown, sources: on } = await loadLinks();
-  known = links.length;
-  stashes = all.stashes;
-  allLinks = all.links;
-  byKey = new Map(all.links.map(l => [l.key, l]));
-  sources = on;
-  judged.clear();
-  onShow = new Set(shown.map(s => s.id));
-  tally = { keep: links.filter(l => l.verdict === "keep").length, drop: links.filter(l => l.verdict === "drop").length };
-  renderTagPick(links);
-  deck = shuffle(links.filter(l => !l.verdict && inDeal(l)).map(toCard));
+  takeData(await loadLinks());
+  deck = shuffle(data.links.filter(l => !l.verdict && inDeal(l)).map(toCard));
   index = 0;
-  undo.length = 0;
   buildSide();
   render();
+}
+
+/* After an action: the data again, with the deck in hand kept — each card takes its link's state. */
+async function refresh() {
+  takeData(await loadLinks());
+  deck = deck.map(c => (byKey.has(c.link.key) ? toCard(byKey.get(c.link.key)) : c));
+  buildSide();
 }
 
 function cardEl(card, top) {
@@ -209,6 +223,11 @@ function cardEl(card, top) {
   open.target = "_blank";
   open.rel = "noopener noreferrer";
   open.textContent = "Open ↗";
+  open.addEventListener("click", e => {
+    if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    LinkActions.run("open", { link: card.link });
+  });
   foot.append(open, Object.assign(document.createElement("span"), {
     className: "siblings", textContent: shortUrl(card.url).slice(0, 60),
   }));
@@ -243,9 +262,6 @@ function contextEl(card) {
   }
   return facts.length ? el("div", { className: "ctx", textContent: facts.join(" · ") }) : null;
 }
-
-/* What a link stands at now: this session's verdicts first, as the dataset is not reloaded. */
-const verdictNow = link => (judged.has(link.url) ? judged.get(link.url) : link.verdict);
 
 /* The sidebar: every stash on show and then the reading list, as Explore lists them, with the top
  * card marked in its home stash. Built once per deal; each new card only moves the marks. Any row
@@ -288,7 +304,7 @@ function renderSide() {
   let mark = null;
   for (const r of sideRows) {
     const link = byKey.get(r.key);
-    r.b.parentElement.className = (link && verdictNow(link)) || "";
+    r.b.parentElement.className = link?.verdict || "";
     const here = !!card && r.key === card.link.key && r.group === home;
     r.b.toggleAttribute("aria-current", here);
     if (here) mark = r.b;
@@ -322,8 +338,7 @@ function render() {
   $("t-kept").textContent = tally.keep;
   $("t-skipped").textContent = tally.drop;
   $("t-left").textContent = left;
-  $("undo").disabled = undo.length === 0;
-  for (const id of ["skip", "later", "keep"]) $(id).disabled = left === 0;
+  renderActions();
 
   renderSide();
   const stage = $("stage");
@@ -354,43 +369,135 @@ function render() {
 
 /* --- verdicts --- */
 
-async function commit(card, verdict, el, xdir = 0, ydir = 0) {
-  undo.push({ url: card.url, verdict });
-  if (verdict) {
-    tally[verdict]++;
-    judged.set(card.url, verdict);
-    await send({ type: "judge-link", url: card.url, verdict });
-  }
-  index++;
-  if (el) {
-    el.style.transition = "transform .28s ease-out, opacity .28s ease-out";
-    el.style.transform =
-      `translate(${xdir * 620}px, ${ydir * 620 + (ydir ? 0 : 40)}px) rotate(${xdir * 22}deg)`;
-    el.style.opacity = "0";
-    setTimeout(render, 190);
-  } else {
-    render();
-  }
+/* The top card leaves: right for keep, left for drop, up for Later. */
+let flying = false;
+function fly(xdir, ydir = 0) {
+  const top = $("stage").querySelector(".card.top");
+  if (!top) return;
+  flying = true;
+  top.style.transition = "transform .28s ease-out, opacity .28s ease-out";
+  top.style.transform = `translate(${xdir * 620}px, ${ydir * 620 + (ydir ? 0 : 40)}px) rotate(${xdir * 22}deg)`;
+  top.style.opacity = "0";
 }
 
+/* Keep or drop the top card, from a key, a button or a drag. On a card already judged that way it
+ * clears the verdict instead, and the card stays. */
 function decide(verdict) {
   const card = deck[index];
   if (!card) return;
-  const dir = verdict === "keep" ? 1 : verdict === "drop" ? -1 : 0;
-  commit(card, verdict, $("stage").querySelector(".card.top"), dir, verdict ? 0 : -1);
+  if (card.link.verdict !== verdict) fly(verdict === "keep" ? 1 : -1);
+  LinkActions.run(verdict, { link: card.link }, { mark: { index } });
 }
 
-async function undoLast() {
-  const last = undo.pop();
-  if (!last) return;
-  index = Math.max(0, index - 1);
-  if (last.verdict) {
-    tally[last.verdict] = Math.max(0, tally[last.verdict] - 1);
-    judged.set(last.url, null);
-    await send({ type: "judge-link", url: last.url, verdict: null });
-  }
-  render();
+/* Later: the next card, no verdict recorded; it comes back next session. Undo brings it back. */
+function later() {
+  const card = deck[index];
+  if (!card) return;
+  fly(0, -1);
+  LinkActions.push({ label: "Later", cmd: "later", target: { link: card.link }, mark: { index }, run: async () => ({ ok: true }) });
+  index++;
+  setTimeout(() => { flying = false; render(); }, 190);
 }
+
+function back() {
+  if (index > 0) { index--; render(); }
+}
+
+LinkActions.setup({
+  data: () => data,
+  say,
+  tags: () => openTags(),
+  async after(cmd, target, res) {
+    const wait = flying ? new Promise(ok => setTimeout(ok, 190)) : null;
+    flying = false;
+    if (res.ok === false) { await wait; render(); return; }
+    const onTop = deck[index]?.link.key === target?.link.key;
+    const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
+    if (cmd !== "undo" && onTop && (((cmd === "keep" || cmd === "drop") && !res.cleared) || leaves)) index++;
+    await Promise.all([refresh(), wait]);
+    if (cmd === "undo" && res.mark && target) {
+      // Back on top, where it was dealt.
+      index = Math.min(res.mark.index, deck.length);
+      if (deck[index]?.link.key !== target.link.key) {
+        const at = deck.findIndex((c, j) => j > index && c.link.key === target.link.key);
+        deck.splice(index, 0, at === -1 ? toCard(byKey.get(target.link.key) || target.link) : deck.splice(at, 1)[0]);
+      }
+    }
+    render();
+  },
+});
+
+function openTags() {
+  const top = $("stage").querySelector(".card.top");
+  if (!deck[index] || !top) return;
+  const pop = anchoredPopover(top.querySelector(".head"), tagEditor(deck[index].link, () => {
+    // Redraw the card under the popover with its new tags; the popover stays.
+    const head = $("stage").querySelector(".card.top .head");
+    head?.querySelector(".tags")?.remove();
+    const chips = tagChips(deck[index].link);
+    if (chips && head) head.append(chips);
+  }));
+  pop.classList.add("cards-tagpop");
+}
+
+/* Under the card: the shared actions, its keep and drop flying the card as a key does, then the
+ * deck's own two — Later and Undo. */
+function renderActions() {
+  const box = $("actions");
+  box.textContent = "";
+  const card = deck[index];
+  const laterB = el("button", { type: "button", title: "Next card, no verdict; it comes back next session (2)", disabled: !card }, "Later", el("kbd", { textContent: "2" }));
+  laterB.onclick = later;
+  const undoB = el("button", { type: "button", title: `Undo the last action (${LinkKeys.showOf("undo")})`, disabled: !LinkActions.canUndo() }, "Undo", el("kbd", { textContent: LinkKeys.showOf("undo") }));
+  undoB.onclick = () => LinkActions.undo();
+  if (!card) { box.append(el("div", { className: "lk-bar" }, undoB)); return; }
+  // Two rows: the deck's moves — open, keep, drop, later, undo — then the rest.
+  const bar = LinkActions.bar({ link: card.link });
+  for (const v of ["keep", "drop"]) {
+    const b = bar.querySelector(`[data-cmd="${v}"]`);
+    b.onclick = e => { e.stopPropagation(); decide(v); };
+  }
+  bar.querySelector('[data-cmd="drop"]').after(laterB, undoB, el("span", { className: "brk" }));
+  box.append(bar);
+}
+
+/* --- keys --- */
+
+let pane = "deck";
+function focusPane(which) {
+  pane = which;
+  $("side").classList.toggle("lk-pane-on", pane === "side");
+  $("stage").classList.toggle("lk-pane-on", pane === "deck");
+}
+
+/* 1 2 in the sidebar: the row above or below the marked one is dealt next. */
+function sideWalk(by) {
+  const at = sideRows.findIndex(r => r.b.hasAttribute("aria-current"));
+  const here = deck[index]?.link.key;
+  for (let i = (at === -1 ? (by > 0 ? -1 : sideRows.length) : at) + by; i >= 0 && i < sideRows.length; i += by) {
+    if (sideRows[i].key !== here) return dealNext(sideRows[i].key);
+  }
+}
+
+const onTop = cmd => () => {
+  const card = deck[index];
+  if (!card) return;
+  LinkActions.key(cmd, { link: card.link }, $("actions").querySelector(`[data-cmd="${cmd === "open-other" ? "open" : cmd}"]`) || $("stage"));
+};
+
+LinkKeys.listen({
+  prev: () => (pane === "side" ? sideWalk(-1) : back()),
+  next: () => (pane === "side" ? sideWalk(1) : later()),
+  "pane-prev": () => focusPane(pane === "side" ? "deck" : "side"),
+  "pane-next": () => focusPane(pane === "side" ? "deck" : "side"),
+  drop: () => decide("drop"), keep: () => decide("keep"),
+  read: onTop("read"), open: onTop("open"), "open-other": onTop("open-other"),
+  tags: () => openTags(), list: onTop("list"), move: onTop("move"), remove: onTop("remove"),
+  undo: () => LinkActions.undo(),
+  escape: () => document.querySelector(".tagpop")?.remove(),
+});
+$("keys-line").append("Drag the card, or ", ...LinkKeys.hint(["drop", "keep", "next", "prev", "pane-next", "open", "tags"]));
+focusPane("deck");
 
 /* --- drag --- */
 
@@ -420,9 +527,9 @@ function arm(el, card) {
     dragging = false;
     el.style.transition = "transform .28s ease-out, opacity .28s ease-out";
     if (Math.abs(dx) >= THRESHOLD) {
-      commit(card, dx > 0 ? "keep" : "drop", el, dx > 0 ? 1 : -1);
+      decide(dx > 0 ? "keep" : "drop");
     } else if (dy < -THRESHOLD) {
-      commit(card, null, el, 0, -1);   // later: no verdict recorded, comes back next session
+      later();
     } else {
       el.style.transform = "";
       el.querySelectorAll(".stamp").forEach(s => (s.style.opacity = 0));
@@ -434,37 +541,6 @@ function arm(el, card) {
     el.style.transform = "";
   });
 }
-
-$("keep").onclick = () => decide("keep");
-$("skip").onclick = () => decide("drop");
-$("later").onclick = () => decide(null);
-$("undo").onclick = undoLast;
-
-document.addEventListener("keydown", e => {
-  if (e.target.matches?.("input, textarea, select")) return;
-  const k = e.key.toLowerCase();
-  if (e.key === "ArrowRight" || k === "k") { e.preventDefault(); decide("keep"); }
-  else if (e.key === "ArrowLeft" || k === "d") { e.preventDefault(); decide("drop"); }
-  else if (e.key === "ArrowUp" || k === "s") { e.preventDefault(); decide(null); }
-  else if (k === "u" || (k === "z" && (e.metaKey || e.ctrlKey))) { e.preventDefault(); undoLast(); }
-  else if (k === "t") {
-    const top = $("stage").querySelector(".card.top");
-    if (!deck[index] || !top) return;
-    e.preventDefault();
-    const pop = anchoredPopover(top.querySelector(".head"), tagEditor(deck[index].link, () => {
-      // Redraw the card under the popover with its new tags; the popover stays.
-      const card = $("stage").querySelector(".card.top .head");
-      card?.querySelector(".tags")?.remove();
-      const chips = tagChips(deck[index].link);
-      if (chips && card) card.append(chips);
-    }));
-    pop.classList.add("cards-tagpop");
-  }
-  else if (k === "o") {
-    const card = deck[index];
-    if (card) window.open(card.url, "_blank", "noopener");
-  }
-});
 
 $("deal-tag").onchange = () => {
   dealTag = $("deal-tag").value;

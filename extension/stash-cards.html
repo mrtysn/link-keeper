@@ -5,6 +5,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="nav.css">
 <link rel="stylesheet" href="tags.css">
+<link rel="stylesheet" href="actions.css">
 <title>Link Keeper — explore</title>
 <style>
   :root {
@@ -109,7 +110,7 @@
   }
   .dtitle.plain { font: 1.05rem/1.5 ui-monospace, Menlo, monospace; }
   .durl { font: .8125rem/1.5 ui-monospace, Menlo, monospace; color: var(--dim); overflow-wrap: anywhere; user-select: all; }
-  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  #detail .lk-bar { margin-top: 14px; }
   .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
   .badge { padding: 1px 9px; border-radius: 999px; background: var(--chip); font-size: .75rem; line-height: 1.6; }
   .badge.keep { color: var(--ok); background: var(--keep-bg); font-weight: 600; }
@@ -173,6 +174,8 @@
 </div>
 <script src="icons.js"></script>
 <script src="link-view.js"></script>
+<script src="link-keys.js"></script>
+<script src="link-actions.js"></script>
 <script src="stash-cards.js"></script>
 </body>
 </html>

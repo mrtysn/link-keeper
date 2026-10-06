@@ -236,7 +236,8 @@ function suggestField(input, exclude = () => []) {
 
 /* The editor for one link's tags. Guesses start as dimmed chips; the first change saves what is
  * shown, so a guess that is kept becomes a tag, and removing every tag brings the guesses back.
- * Enter on the empty field or Escape is "done": the box fires "tagdone". onSaved(tags) follows a
+ * Enter on the empty field or Escape is "done": the box fires "tagdone", its detail saying which
+ * ({ escape: true } for Escape). onSaved(tags) follows a
  * save; link.tags is updated in place. */
 function tagEditor(link, onSaved) {
   const start = shownTags(link);
@@ -290,7 +291,7 @@ function tagEditor(link, onSaved) {
       tags.pop();
       save();
     } else if (e.key === "Escape") {
-      box.dispatchEvent(new CustomEvent("tagdone", { bubbles: true }));
+      box.dispatchEvent(new CustomEvent("tagdone", { bubbles: true, detail: { escape: true } }));
     }
   });
   // Keys typed here are text, not the page's shortcuts.
