@@ -203,6 +203,15 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!(await peek()), "peek: leaving closes it");
   await p.hover("#side li:nth-child(2) button"); await p.waitForTimeout(500);
   ok(!!(await peek()), "peek: a sidebar link previews the link");
+  // A long stash: every tab listed, scrolled to the chosen one.
+  await p.mouse.move(2, 2); await p.waitForTimeout(300);
+  await p.evaluate(() => [...document.querySelectorAll("#side h2[data-peek]")].at(-1).nextElementSibling.lastElementChild.querySelector("button").click());
+  await p.waitForTimeout(300);
+  const heads = await p.$$("#side h2[data-peek]");
+  await heads[heads.length - 1].hover(); await p.waitForTimeout(500);
+  const sc = await p.evaluate(() => { const l = document.querySelector(".peek .pk-rows"), h = l?.querySelector("li.here"); return { n: l?.children.length, seen: !!h && h.offsetTop >= l.scrollTop && h.offsetTop + h.offsetHeight <= l.scrollTop + l.clientHeight, scrolls: l && l.scrollHeight > l.clientHeight }; });
+  ok(sc.n === 28 && sc.scrolls, `peek: a stash lists every tab, scrolling (${sc.n})`);
+  ok(sc.seen, "peek: and opens scrolled to the chosen link");
   ok(!p.errs.length, "peek explore: no errors " + p.errs.join("; "));
   await p.close();
 }

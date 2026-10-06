@@ -194,7 +194,7 @@ function tagHue(tag) {
 }
 function tagChip(tag, guessed = false) {
   const chip = el("span", { className: `tag${guessed ? " guess" : ""}`, textContent: tag,
-    title: guessed ? `Suggested from the kind of site; add a tag to replace it` : tag });
+    title: guessed ? "Suggested from the site" : tag });
   if (!guessed) {
     chip.style.setProperty("--h", tagHue(tag));
     if (typeof Peek !== "undefined") Peek.mark(chip, "tag", tag);
@@ -326,7 +326,7 @@ function tagEditor(link, onSaved) {
   input.addEventListener("input", drawPalette);
 
   const mark = () => {
-    status.textContent = guessed ? "suggested from the site; editing them makes them this link's own tags" : "";
+    status.textContent = guessed ? "Suggested from the site" : "";
     status.classList.remove("bad");
   };
   const draw = () => {
