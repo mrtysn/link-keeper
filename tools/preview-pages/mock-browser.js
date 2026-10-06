@@ -83,6 +83,34 @@
     ];
   }
 
+  /* The stored state the actions change — stashes, reading-list items and captures — built once from
+   * the mock rows, then edited as the background would, so an action and its undo can be watched. */
+  let state = null;
+  let nextId = 1000;
+  function stored() {
+    if (state) return state;
+    const rows = [...M.dump.items, ...M.dump.loose];
+    state = {
+      sessions: mockSessions(),
+      items: M.dump.items.map(r => ({ url: r.url, status: r.status, added_at: r.added_at, saved_at: toIso(r.saved_at), title: r.title, note: r.note })),
+      captures: rows.filter(r => r.cap).map(r => ({
+        url: r.url, title: r.cap.title, author: r.cap.handle ? { handle: r.cap.handle } : undefined, text: r.cap.text, kind: r.cap.kind,
+        links: r.cap.links, reply_links: r.cap.reply_links, images: r.cap.images, verdict: r.cap.verdict || undefined,
+        captured_at: "2026-09-20T10:00:00Z",
+      })),
+    };
+    return state;
+  }
+  const findStash = id => stored().sessions.find(s => s.id === id);
+  function takeTabs(id, ids) {
+    const s = findStash(id);
+    if (!s || s.locked) return [];
+    const taken = s.tabs.filter(t => ids.includes(t.id));
+    s.tabs = s.tabs.filter(t => !ids.includes(t.id));
+    if (!s.tabs.length) stored().sessions = stored().sessions.filter(x => x !== s);
+    return taken;
+  }
+
   window.browser = {
     runtime: {
       getURL: p => `${location.origin}/${p}`,
@@ -94,7 +122,7 @@
             return status;
           }
           case "sessions":
-            return { sessions: mockSessions() };
+            return { sessions: structuredClone(stored().sessions) };
           case "link-counts": {
             const { links, stashes } = await window.browser.runtime.sendMessage({ type: "links" });
             const chosen = store.viewSources || ["tabs", "import", "list"];
@@ -104,19 +132,14 @@
             return { total: shown.length, undecided: shown.filter(l => !l.verdict).length, sources, stashes: stashes.length, chosen };
           }
           case "links": {
-            // The stored shapes joinLinks reads, rebuilt from the mock's pre-joined rows.
-            const rows = [...M.dump.items, ...M.dump.loose];
-            const items = M.dump.items.map(r => ({ url: r.url, status: r.status, added_at: r.added_at, saved_at: toIso(r.saved_at), title: r.title, note: r.note }));
-            const captures = rows.filter(r => r.cap).map(r => ({
-              url: r.url, title: r.cap.title, author: r.cap.handle ? { handle: r.cap.handle } : undefined, text: r.cap.text, kind: r.cap.kind,
-              links: r.cap.links, reply_links: r.cap.reply_links, images: r.cap.images, verdict: r.cap.verdict || undefined,
-              captured_at: "2026-09-20T10:00:00Z",
-            }));
+            // The stored shapes joinLinks reads.
+            const { items, captures } = structuredClone(stored());
+            const sessions = structuredClone(stored().sessions);
             if (!tagsSeeded) {
               tagsSeeded = true;
               M.dump.items.slice(0, 9).forEach((r, i) => { mockTags[keyOf(r.url)] = [["ai tools", "game dev"], ["ai tools"], ["game dev", "to try"]][i % 3]; });
             }
-            return joinLinks({ items, captures, sessions: mockSessions(), tags: mockTags,
+            return joinLinks({ items, captures, sessions, tags: mockTags,
               currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
           }
           case "set-tags": {
@@ -132,6 +155,78 @@
               for (const fn of bookmarkListeners.onCreated || []) fn(`imp${i}`, { id: `imp${i}`, url: t.url });
             }
             return { ok: true, stashes: msg.stashes.length, tabs: tabs.length };
+          }
+          case "judge-link": {
+            const key = keyOf(msg.url), v = msg.verdict, st = stored();
+            for (const c of st.captures) if (keyOf(c.url) === key) v ? (c.verdict = v) : delete c.verdict;
+            for (const i of st.items) {
+              if (keyOf(i.url) !== key) continue;
+              if (v === "keep") i.status = "kept"; else if (v === "drop") i.status = "skipped"; else if (i.status === "kept" || i.status === "skipped") i.status = "seen";
+            }
+            for (const s of st.sessions) for (const t of s.tabs) if (keyOf(t.url) === key) v ? Object.assign(t, { verdict: v, judged_at: new Date().toISOString() }) : (delete t.verdict, delete t.judged_at);
+            return { ok: true };
+          }
+          case "restore-stash": {
+            const remove = !!msg.flip;   // the mock's setting is "keep"
+            if (remove) takeTabs(msg.id, msg.ids);
+            else for (const t of findStash(msg.id)?.tabs || []) if (msg.ids.includes(t.id)) t.seen_at = new Date().toISOString();
+            return { ok: true, restored: msg.ids.length, removed: remove, viaHelper: 0, standins: 0 };
+          }
+          case "delete-stash": {
+            const s = findStash(msg.id);
+            if (s?.locked) return { ok: false, error: "that stash is locked; unlock it first" };
+            return { ok: true, removed: takeTabs(msg.id, msg.ids).length };
+          }
+          case "move-stash": {
+            const s = findStash(msg.id);
+            if (s?.locked) return { ok: false, error: "that stash is locked" };
+            const taken = takeTabs(msg.id, msg.ids).filter(t => /^https?:/.test(t.url));
+            const have = new Set(stored().items.map(i => keyOf(i.url)));
+            const fresh = taken.filter(t => !have.has(keyOf(t.url)));
+            stored().items.push(...fresh.map(t => ({ url: t.url, title: t.title, status: "pending", added_at: new Date().toISOString(), saved_at: s.created_at })));
+            return { ok: true, added: fresh.length, moved: taken.length };
+          }
+          case "move-stashed": {
+            const to = findStash(msg.to);
+            if (!to) return { ok: false, error: "that stash is gone" };
+            for (const id of msg.ids) {
+              const from = stored().sessions.find(s => s.tabs.some(t => t.id === id));
+              if (!from) continue;
+              if (from.locked && from !== to) return { ok: false, error: "that stash is locked" };
+              const tab = from.tabs.find(t => t.id === id);
+              from.tabs = from.tabs.filter(t => t !== tab);
+              const at = msg.before ? to.tabs.findIndex(t => t.id === msg.before) : -1;
+              to.tabs.splice(at < 0 ? to.tabs.length : at, 0, tab);
+              if (!from.tabs.length && from !== to) stored().sessions = stored().sessions.filter(x => x !== from);
+            }
+            return { ok: true, moved: msg.ids.length };
+          }
+          case "put-back": {
+            let s = findStash(msg.stash.id);
+            if (!s) {
+              s = { ...msg.stash, id: `s${++nextId}`, tabs: [] };
+              stored().sessions.unshift(s);
+            }
+            const ids = [];
+            for (const t of [...msg.tabs].sort((a, b) => a.index - b.index)) {
+              const tab = { ...t, id: `bm${++nextId}` };
+              delete tab.index;
+              s.tabs.splice(Math.min(t.index ?? s.tabs.length, s.tabs.length), 0, tab);
+              ids.push(tab.id);
+            }
+            return { ok: true, id: s.id, ids };
+          }
+          case "remove": {
+            const drop = new Set(msg.urls.map(keyOf));
+            const removed = stored().items.filter(i => drop.has(keyOf(i.url)));
+            stored().items = stored().items.filter(i => !drop.has(keyOf(i.url)));
+            return { ok: true, removed: drop.size, items: removed };
+          }
+          case "restore-items": {
+            const have = new Set(stored().items.map(i => keyOf(i.url)));
+            const back = (msg.items || []).filter(i => !have.has(keyOf(i.url)));
+            stored().items.push(...back);
+            return { ok: true, restored: back.length };
           }
           case "stash-settings":
             return { settings: { afterStash: "show", afterRestore: "keep", exclude: ["mail.google.com", "calendar.google.com"] } };

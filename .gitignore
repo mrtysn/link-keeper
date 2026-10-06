@@ -25,3 +25,6 @@ android/build/
 
 # Page preview build output; holds captured text.
 tools/preview-pages/out/
+
+# Playwright for tools/preview-pages/test-keys.zsh, installed on first run.
+tools/preview-pages/.deps/
