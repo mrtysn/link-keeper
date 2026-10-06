@@ -248,10 +248,10 @@ async function saveThumb(filename, dataUrl) {
 }
 
 async function fullPageShot(tab, slug) {
-  if (!browser.downloads) throw new Error("no downloads permission — reload the extension");
+  if (!browser.downloads) throw new Error("no downloads permission; reload the extension");
   if (!browser.tabs.captureVisibleTab) {
     throw new Error(await hasSiteAccess()
-      ? "captureVisibleTab missing even with site access — reload the extension"
+      ? "captureVisibleTab missing even with site access; reload the extension"
       : "needs access to all sites; grant it from the popup once");
   }
 
@@ -396,7 +396,7 @@ async function captureUrl(url, note = "") {
     try {
       record = await readTab(tab.id);
     } catch (e) {
-      return { ok: false, error: `no access to that site — grant it and retry (${e.message || e})` };
+      return { ok: false, error: `no access to that site; grant it and retry (${e.message || e})` };
     }
     if (!record) return { ok: false, error: "nothing extractable on that page" };
 
@@ -513,7 +513,7 @@ function summarise(r) {
     return who + (body.length > 90 ? body.slice(0, 90) + "…" : body);
   }
   return (r.author?.handle && r.title && !r.title.includes(r.author.handle)
-    ? `${r.author.handle} — ${r.title}`
+    ? `${r.author.handle}: ${r.title}`
     : r.title || r.url);
 }
 
@@ -1341,7 +1341,7 @@ browser.commands.onCommand.addListener(async name => {
 
 const MENU = [
   { id: "menu-keep", title: "Keep this page", contexts: ["page", "selection", "image"] },
-  { id: "menu-shot", title: "Keep this page + full-page screenshot", contexts: ["page", "selection", "image"] },
+  { id: "menu-shot", title: "Keep this page with a full-page screenshot", contexts: ["page", "selection", "image"] },
   { id: "menu-next", title: "Next link in the list", contexts: ["page", "selection", "image"] },
   { id: "menu-skip", title: "Skip this one and go to the next", contexts: ["page", "selection", "image"] },
   { id: "menu-queue", title: "Add this page to the list", contexts: ["page", "selection", "image"] },

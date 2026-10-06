@@ -74,7 +74,7 @@ function renderScope() {
   // Counted as the sidebar lists them: a URL in two stashes is a row in each.
   const listN = data.sources.has("list") ? data.links.filter(l => l.list && !l.copies.some(c => data.stashes.some(s => s.id === c.stash))).length : 0;
   const stashedN = data.stashes.reduce((n, s) => n + s.tabs.length, 0);
-  sel.append(el("option", { value: "all", textContent: `Everything on show (${stashedN + listN})` }));
+  sel.append(el("option", { value: "all", textContent: `Everything shown (${stashedN + listN})` }));
   for (const s of data.stashes) sel.append(el("option", { value: s.id, textContent: `${stashName(s)} (${s.tabs.length})` }));
   if (data.sources.has("list")) sel.append(el("option", { value: "list", textContent: `Reading list (${listN})` }));
   sel.value = [...sel.options].some(o => o.value === scope) ? scope : "all";
@@ -94,7 +94,7 @@ function renderSide() {
   const side = $("side");
   side.textContent = "";
   if (!visible.length) {
-    side.append(el("p", { className: "side-empty", textContent: deck.length ? "Nothing matches." : "Nothing on show." }));
+    side.append(el("p", { className: "side-empty", textContent: deck.length ? "Nothing matches." : "Nothing shown." }));
     return;
   }
   let list = null, lastGroup = null;
@@ -104,7 +104,7 @@ function renderSide() {
       lastGroup = groupId;
       const shown = visible.filter(c => (c.stash ? c.stash.id : "list") === groupId).length;
       const h2 = el("h2", {}, card.stash ? stashName(card.stash) : "Reading list", el("span", { className: "n", textContent: shown }));
-      if (card.stash) Peek.mark(h2, "stash", card.stash.id);
+      if (card.stash) h2.dataset.stash = card.stash.id;
       side.append(h2);
       list = el("ul");
       side.append(list);
@@ -121,6 +121,16 @@ function renderSide() {
     list.append(el("li", { className: card.link.verdict || "" }, b));
   }
   side.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+  markHeads();
+}
+
+/* A stash heading previews its stash, opened on the chosen link when it is one of its tabs. */
+function markHeads() {
+  const chosen = visible.find(c => cardKey(c) === current);
+  for (const h2 of document.querySelectorAll("#side h2[data-stash]")) {
+    const id = h2.dataset.stash;
+    Peek.mark(h2, "stash", chosen?.stash?.id === id ? `${id}|${chosen.link.key}` : id);
+  }
 }
 
 function select(key) {
@@ -131,6 +141,7 @@ function select(key) {
   const row = document.querySelector(`#side button[data-key="${CSS.escape(key)}"]`);
   row?.setAttribute("aria-current", "true");
   row?.scrollIntoView({ block: "nearest" });
+  markHeads();
   renderDetail();
 }
 
@@ -197,7 +208,7 @@ function renderDetail() {
 
 function knownBox(card) {
   const { link, stash } = card;
-  const box = el("section", { className: "box" }, el("h3", { textContent: "What is known" }));
+  const box = el("section", { className: "box" }, el("h3", { textContent: "Page content" }));
   const c = link.cap;
   if (c) {
     if (c.text) {
@@ -220,8 +231,8 @@ function knownBox(card) {
 
   const facts = el("ul", { className: "facts" });
   if (c?.captured_at) facts.append(el("li", { textContent: `Read ${whenOf(c.captured_at)}` }));
-  else if (isWeb(link.url)) facts.append(el("li", { textContent: "Never read — Read pulls its text and images in." }));
-  if (link.list) facts.append(el("li", { textContent: `On the reading list — ${LIST_STATUS[link.list.status] || link.list.status}` }));
+  else if (isWeb(link.url)) facts.append(el("li", { textContent: "Not read yet. Read saves its text and images." }));
+  if (link.list) facts.append(el("li", { textContent: `On the reading list: ${LIST_STATUS[link.list.status] || link.list.status}` }));
   for (const copy of link.copies) {
     if (stash && copy.stash === stash.id) continue;
     const s = data.all.stashes.find(x => x.id === copy.stash);
@@ -234,7 +245,7 @@ function knownBox(card) {
       facts.append(el("li", {}, stash ? "Also stashed in " : "Stashed in ", b));
     } else {
       facts.append(el("li", {}, `${stash ? "Also stashed" : "Stashed"} in `, Peek.mark(el("span", { className: "peekable", textContent: stashName(s) }), "stash", `${s.id}|${link.key}`),
-        data.stashes.some(x => x.id === s.id) ? "" : " (not on show)"));
+        data.stashes.some(x => x.id === s.id) ? "" : " (not shown)"));
     }
   }
   if (kindOf(link.url) === "web") {
@@ -268,7 +279,7 @@ function previewBox({ link }) {
   toggle.onchange = () => setPreview(toggle.checked);
   box.append(el("div", { className: "pvbar" }, el("label", {}, toggle, "Show the page here")));
   if (!previewOn) {
-    box.append(el("p", { className: "pvnote", textContent: "Off. Each preview is a real page load, logged out; turn it on to load the page after half a second on a link." }));
+    box.append(el("p", { className: "pvnote", textContent: "Off. Each preview loads the real page, logged out. Turn it on to load a page half a second after you select its link." }));
     return box;
   }
   if (!isWeb(url)) {
@@ -280,7 +291,7 @@ function previewBox({ link }) {
   const frame = el("iframe", { id: "pv-frame", title: `Preview of ${labelOf(link) || url}`, referrerPolicy: "no-referrer" });
   // No allow-top-navigation: a framed page cannot navigate this one away.
   frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
-  box.append(frame, el("p", { className: "pvnote", textContent: "Logged out — Firefox keeps a framed page's cookies apart. Blank? The site refused anyway; Open it instead." }));
+  box.append(frame, el("p", { className: "pvnote", textContent: "You are logged out here, because Firefox keeps cookies for framed pages separate. If the preview is blank, the site refused to be shown; use Open instead." }));
   previewTimer = setTimeout(() => { frame.src = url; }, DWELL_MS);
   return box;
 }

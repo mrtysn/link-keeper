@@ -210,7 +210,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const p = await page("list.html");
   const peek = () => p.$eval(".peek", e => e.textContent).catch(() => null);
   await p.hover('[data-peek^="site:"]'); await p.waitForTimeout(500);
-  ok(/links? on show/.test(await peek() || ""), "peek: a site chip previews its links");
+  ok(/links? shown/.test(await peek() || ""), "peek: a site chip previews its links");
   await p.mouse.move(5, 5); await p.waitForTimeout(400);
   await p.hover('.rows [data-peek^="tag:"]'); await p.waitForTimeout(500);
   ok(/Open in Tags/.test(await peek() || ""), "peek: a tag chip previews the tag");

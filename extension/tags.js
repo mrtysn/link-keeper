@@ -26,7 +26,7 @@ function tagsOnShow() {
 function hueRow(current, onPick) {
   const row = el("div", { className: "hues", role: "group" });
   row.setAttribute("aria-label", "Colour");
-  const auto = el("button", { type: "button", className: "auto", title: "Its own colour, from its name" });
+  const auto = el("button", { type: "button", className: "auto", title: "A colour chosen from its name" });
   auto.setAttribute("aria-pressed", String(current == null));
   auto.onclick = () => onPick(null);
   row.append(auto);
@@ -55,7 +55,7 @@ $("maker").addEventListener("submit", async e => {
   newHue = null;
   drawMaker();
   chosen = res.tag;
-  say(`Made ${res.tag}; put it on a link with T`);
+  say(`Made ${res.tag}. Press T on a link to add it.`);
   await load();
 });
 // Keys typed into the form are text.
@@ -69,7 +69,7 @@ function renderLib(by) {
   lib.append(el("h2", { textContent: `${by.size} tags` }));
   const ul = el("ul");
   for (const [t, links] of by) {
-    const b = el("button", { type: "button", className: links.length ? "" : "empty-tag", title: `${t}: ${plural(links.length, "link")} on show` },
+    const b = el("button", { type: "button", className: links.length ? "" : "empty-tag", title: `${t}: ${plural(links.length, "link")} shown` },
       el("span", { className: "dot" }), el("span", { className: "t", textContent: t }), el("span", { className: "n", textContent: links.length }));
     b.style.setProperty("--h", tagHue(t));
     if (t === chosen) b.setAttribute("aria-current", "true");
@@ -94,7 +94,7 @@ function renderColl(by) {
   coll.textContent = "";
   if (!chosen || !by.has(chosen)) {
     coll.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: "Pick a tag" }),
-      el("p", { textContent: "Its links show here. Make a new one above." })));
+      el("p", { textContent: "Its links appear here. You can also make a new tag above." })));
     return;
   }
   const links = by.get(chosen).slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
@@ -123,7 +123,7 @@ function renderColl(by) {
     input.select();
   };
 
-  const merge = el("select", { title: "Move every link of this tag onto another, and remove this one" },
+  const merge = el("select", { title: "Move all links with this tag to another tag and delete this one" },
     el("option", { value: "", textContent: "Merge into…" }), ...others.map(t => el("option", { value: t, textContent: t })));
   merge.setAttribute("aria-label", `Merge ${chosen} into another tag`);
   merge.onchange = async () => {
@@ -169,7 +169,7 @@ function renderColl(by) {
 
   if (!links.length) {
     coll.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: "No links yet" }),
-      el("p", { textContent: data.all.links.some(l => l.tags?.includes(chosen)) ? "Its links are in sources not on show." : "Press T on a link anywhere and pick it." })));
+      el("p", { textContent: data.all.links.some(l => l.tags?.includes(chosen)) ? "Its links are in sources that are hidden." : "Press T on any link and pick this tag." })));
     return;
   }
   coll.append(el("ul", { className: "rows" }, ...links.map(rowEl)));
@@ -198,7 +198,7 @@ function render() {
   if (chosen && !by.has(chosen)) chosen = null;
   if (!chosen) chosen = [...by].find(([, l]) => l.length)?.[0] || [...by.keys()][0] || null;
   const used = [...by.values()].filter(l => l.length).length;
-  $("sub").textContent = `${plural(by.size, "tag")}, ${used} on links on show · a tag is a collection: pick one to see its links`;
+  $("sub").textContent = `${plural(by.size, "tag")}, ${used} used on links shown · pick a tag to see its links`;
   renderLib(by);
   renderColl(by);
   if (!rowLis().some(li => li.dataset.key === cursor)) setCursor(rowLis()[0]?.dataset.key || null, false);

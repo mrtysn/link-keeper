@@ -78,13 +78,13 @@ function rowEl(link) {
 
 function paintCounts() {
   const n = f => data.links.filter(FILTERS[f]).length;
-  const names = { untagged: "Untagged", guessed: "With a guess", blank: "No guess", all: "All" };
+  const names = { untagged: "Untagged", guessed: "Suggested", blank: "No suggestion", all: "All" };
   for (const chip of document.querySelectorAll(".chip[data-f]")) {
     chip.replaceChildren(`${names[chip.dataset.f]} `, el("span", { className: "n", textContent: n(chip.dataset.f) }));
     chip.setAttribute("aria-pressed", String(chip.dataset.f === filter));
   }
   const untagged = n("untagged");
-  $("sub").textContent = `${plural(untagged, "link")} without a tag of their own, of ${data.links.length} on show` +
+  $("sub").textContent = `${plural(untagged, "link")} without a tag of their own, of ${data.links.length} shown` +
     (done.size ? ` · ${done.size} tagged here` : "");
 }
 
@@ -99,7 +99,7 @@ function render() {
   }
   if (!rows.length) {
     out.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: filter === "untagged" ? "Everything is tagged" : "Nothing here" }),
-      el("p", { textContent: filter === "untagged" ? "Every link on show has a tag of its own." : "No link on show matches." })));
+      el("p", { textContent: filter === "untagged" ? "Every link shown has a tag of its own." : "No link shown matches." })));
     return;
   }
   out.append(el("ul", { className: "tagrows" }, ...rows.slice(0, shown).map(rowEl)));

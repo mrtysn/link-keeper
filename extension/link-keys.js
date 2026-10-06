@@ -32,9 +32,9 @@ const LinkKeys = (() => {
     { cmd: "group-next", show: ["D"], does: "next group: stash, section or tag" },
     { cmd: "drop", show: ["Q", "←"], does: "drop, then next" },
     { cmd: "keep", show: ["E", "→"], does: "keep, then next" },
-    { cmd: "read", show: ["3"], does: "read it in" },
+    { cmd: "read", show: ["3"], does: "read page" },
     { cmd: "open", show: ["4"], does: "open" },
-    { cmd: "open-other", show: ["⇧4"], does: "open, with the other stash effect" },
+    { cmd: "open-other", show: ["⇧4"], does: "open, other restore" },
     { cmd: "tags", show: ["T"], does: "tags" },
     { cmd: "list", show: ["L"], does: "to the reading list" },
     { cmd: "move", show: ["M"], does: "move to a stash" },
@@ -123,7 +123,7 @@ const LinkKeys = (() => {
   const SHORT = {
     prev: "up", next: "down", "group-prev": "◂ group", "group-next": "group ▸", drop: "drop", keep: "keep",
     read: "read", open: "open", "open-other": "open other", tags: "tags", list: "to list", move: "move",
-    remove: "remove", undo: "undo", preview: "preview", filter: "filter", help: "this guide", escape: "back",
+    remove: "remove", undo: "undo", preview: "preview", filter: "filter", help: "keys", escape: "back",
   };
   const KIND = {
     prev: "go", next: "go", "group-prev": "go", "group-next": "go", drop: "drop", keep: "keep",
@@ -167,7 +167,7 @@ const LinkKeys = (() => {
     const close = el("button", { type: "button", className: "kg-x", textContent: "×", title: "Hide the keys (?)" });
     close.onclick = () => showGuide(false);
     box.append(el("div", { className: "kg-head" }, el("strong", { textContent: "Keys" }),
-      el("span", { textContent: "↑↓ walk · ←→ judge · held, only walking repeats" }), close));
+      el("span", { textContent: "↑↓ move · ←→ keep or drop · held, only moving repeats" }), close));
     for (const row of ROWS) box.append(el("div", { className: "kg-row" }, ...row.map(cap)));
     box.append(el("div", { className: "kg-row kg-extra" }, ...EXTRA.map(cap)));
     return box;

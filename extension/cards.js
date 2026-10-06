@@ -32,7 +32,7 @@ function headline(card) {
   const body = (card.text || "").replace(/\s+/g, " ").trim();
   if (card.title && !/^@?\S+ on X$|^X post$/.test(card.title)) {
     return card.handle && !card.title.includes(card.handle)
-      ? `${card.handle} — ${card.title}`
+      ? `${card.handle}: ${card.title}`
       : card.title;
   }
   if (body) {
@@ -263,7 +263,7 @@ function contextEl(card) {
   const facts = [];
   // The other stashes holding it, previewed on hover.
   if (held.length > 1) facts.push(Peek.mark(el("span", { className: "peekable", textContent: `Also in ${plural(held.length - 1, "other stash")}: ${held.slice(1, 3).map(h => stashName(h.stash)).join(", ")}${held.length > 3 ? ", …" : ""}` }), "held", link.key));
-  if (link.list && held.length) facts.push(`on the reading list — ${LIST_STATUS[link.list.status] || link.list.status}`);
+  if (link.list && held.length) facts.push(`on the reading list: ${LIST_STATUS[link.list.status] || link.list.status}`);
   if (isWeb(link.url)) {
     const host = hostOf(link.url);
     const same = deck.slice(index).filter(c => c.link.key !== link.key && isWeb(c.url) && hostOf(c.url) === host).length;
@@ -357,7 +357,7 @@ function render() {
 
   if (left <= 0) {
     const [head, rest] = total
-      ? ["Deck finished.", "Everything undecided in the chosen sources has been through the deck. "]
+      ? ["Deck finished.", "All undecided links in the chosen sources have been shown. "]
       : known
         ? ["Nothing undecided.", "Every link in the chosen sources already has a verdict. "]
         : ["Nothing to judge.", "Choose a source with links in it in the bar at the top, or stash some tabs. "];

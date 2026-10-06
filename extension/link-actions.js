@@ -80,7 +80,7 @@ const LinkActions = (() => {
       const r = res.record;
       const extra = [r.links?.length ? plural(r.links.length, "link") : null,
         r.reply_links?.length ? `${r.reply_links.length} from replies` : null].filter(Boolean).join(", ");
-      return { ok: true, say: `Read ${r.title || hostOf(t.link.url)}${extra ? ` — ${extra}` : ""}` };
+      return { ok: true, say: `Read ${r.title || hostOf(t.link.url)}${extra ? ` (${extra})` : ""}` };
     },
 
     async list(t) {
@@ -260,16 +260,16 @@ const LinkActions = (() => {
       b.addEventListener("pointerdown", e => e.stopPropagation());   // not the start of a drag
       return b;
     };
-    const keep = btn("keep", "Keep", "keep", link.verdict === "keep" ? "Clear kept" : "Keep it, wherever it is held");
-    const drop = btn("drop", "Drop", "drop", link.verdict === "drop" ? "Clear dropped" : "Flag it dropped, wherever it is held");
+    const keep = btn("keep", "Keep", "keep", link.verdict === "keep" ? "Clear kept" : "Mark it kept everywhere it is saved");
+    const drop = btn("drop", "Drop", "drop", link.verdict === "drop" ? "Clear dropped" : "Mark it dropped everywhere it is saved");
     keep.setAttribute("aria-pressed", String(link.verdict === "keep"));
     drop.setAttribute("aria-pressed", String(link.verdict === "drop"));
     const copy = copyOf(t);
-    const open = btn("open", "Open", "primary", copy ? `Reopen this tab; ${LinkKeys.showOf("open-other")} for the other stash effect` : "Open it in a new tab");
+    const open = btn("open", "Open", "primary", copy ? `Reopen this tab; ${LinkKeys.showOf("open-other")} uses the other restore option` : "Open it in a new tab");
     const out = el("div", { className: `lk-bar${compact ? " compact" : ""}` }, open, keep, drop);
 
     const rest = [
-      web && { cmd: "read", text: link.cap ? "Re-read" : "Read", title: "Load it in a background tab and extract its text and images" },
+      web && { cmd: "read", text: link.cap ? "Re-read" : "Read", title: "Load it in a background tab and save its text and images" },
       { cmd: "tags", text: "Tags", title: "Edit its tags", picker: a => tags(t, a) },
       canList(t) && { cmd: "list", text: "To list", title: "Move it out of its stash onto the reading list" },
       canMove(t) && { cmd: "move", text: "Move…", title: "Move it to another stash", picker: a => moveMenu(t, a) },

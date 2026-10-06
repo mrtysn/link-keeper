@@ -36,7 +36,7 @@ function labelOf(link) {
   if (!cap) return link.title || null;
   const body = (cap.text || "").replace(/\s+/g, " ").trim();
   if (isTextPost(cap)) return (cap.handle ? `${cap.handle}: ` : "") + body;
-  if (cap.handle && cap.title && !cap.title.includes(cap.handle)) return `${cap.handle} — ${cap.title}`;
+  if (cap.handle && cap.title && !cap.title.includes(cap.handle)) return `${cap.handle}: ${cap.title}`;
   return cap.title || cap.handle || link.title || null;
 }
 
@@ -47,9 +47,9 @@ const readAt = link => link.cap?.captured_at || null;
 const dayOf = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { dateStyle: "medium" }); };
 function readBadge(link) {
   const at = readAt(link);
-  if (at) return el("span", { className: "lk-read", textContent: "read", title: `Read ${whenOf(at)} — its text and images are stored` });
+  if (at) return el("span", { className: "lk-read", textContent: "read", title: `Read ${whenOf(at)}. Its text and images are stored.` });
   if (link.cap) return el("span", { className: "lk-read", textContent: "read", title: "Its text and images are stored" });
-  return isWeb(link.url) ? el("span", { className: "lk-unread", textContent: "not read", title: "Never read — Read (3) pulls its text and images in" }) : null;
+  return isWeb(link.url) ? el("span", { className: "lk-unread", textContent: "not read", title: "Not read yet. Press 3 to save its text and images." }) : null;
 }
 function readMark(link) {
   const span = el("span", { className: `rd${link.cap ? " on" : ""}`, title: link.cap ? (readAt(link) ? `Read ${dayOf(readAt(link))}` : "Read") : "" });
@@ -142,7 +142,7 @@ function restoredText(r) {
   if (r.standins) parts.push(`${r.standins} as stand-ins`);
   if (r.removed) parts.push("taken out of the stash");
   const fix = /not installed/.test(r.helperError || "") ? "; run native/install.zsh in the link-keeper repo once" : "";
-  return parts.join(" · ") + (r.helperError ? ` — local files came back as stand-ins: ${r.helperError}${fix}` : "");
+  return parts.join(" · ") + (r.helperError ? `; local files opened as stand-ins: ${r.helperError}${fix}` : "");
 }
 
 /* Reads a web page in a background tab, asking for that site first — from the click, since a
@@ -194,7 +194,7 @@ function tagHue(tag) {
 }
 function tagChip(tag, guessed = false) {
   const chip = el("span", { className: `tag${guessed ? " guess" : ""}`, textContent: tag,
-    title: guessed ? `Guessed from the kind of site; set a tag to replace it` : tag });
+    title: guessed ? `Suggested from the kind of site; add a tag to replace it` : tag });
   if (!guessed) {
     chip.style.setProperty("--h", tagHue(tag));
     if (typeof Peek !== "undefined") Peek.mark(chip, "tag", tag);
@@ -326,7 +326,7 @@ function tagEditor(link, onSaved) {
   input.addEventListener("input", drawPalette);
 
   const mark = () => {
-    status.textContent = guessed ? "guessed from the site — any change makes them yours" : "";
+    status.textContent = guessed ? "suggested from the site; editing them makes them this link's own tags" : "";
     status.classList.remove("bad");
   };
   const draw = () => {
@@ -344,7 +344,7 @@ function tagEditor(link, onSaved) {
   async function save() {
     const res = await send({ type: "set-tags", url: link.url, tags });
     if (!res?.ok) {
-      status.textContent = `not saved — ${res?.error || "no answer"}`;
+      status.textContent = `not saved: ${res?.error || "no answer"}`;
       status.classList.add("bad");
       return;
     }

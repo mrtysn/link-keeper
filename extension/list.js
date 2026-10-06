@@ -343,7 +343,7 @@ function safeRow(link, ctx) {
     return rowEl(link, ctx);
   } catch (e) {
     console.error("row failed", link.url, e);
-    return el("li", {}, el("span"), el("span"), el("div", { className: "main", textContent: `${shortUrl(link.url)} — could not render: ${e.message}` }));
+    return el("li", {}, el("span"), el("span"), el("div", { className: "main", textContent: `Could not show ${shortUrl(link.url)}: ${e.message}` }));
   }
 }
 
@@ -681,7 +681,7 @@ function render() {
     const clear = el("button", { textContent: "Clear filters" });
     clear.onclick = clearFilters;
     out.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: "No matches" }),
-      el("p", { textContent: "Nothing on show matches the filter." }), clear));
+      el("p", { textContent: "Nothing shown matches the filter." }), clear));
     return;
   }
 
@@ -701,7 +701,7 @@ function renderTagManager() {
   list.textContent = "";
   const counts = new Map();
   for (const l of data.all.links) for (const t of l.tags) counts.set(t, (counts.get(t) || 0) + 1);
-  if (!counts.size) list.append(el("li", { className: "none", textContent: "None yet. ✎ on any row adds one." }));
+  if (!counts.size) list.append(el("li", { className: "none", textContent: "None yet. Use ✎ on a row to add one." }));
   for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
     const name = el("button", { className: "link", title: "Rename; a name already in use merges the two" }, tagChip(t));
     name.onclick = () => {
@@ -806,7 +806,7 @@ function renderDuplicates() {
 
   const box = $("dups-list");
   box.textContent = "";
-  if (!sets.length) box.append(el("p", { className: "none", textContent: "No link is held twice among the sources on show." }));
+  if (!sets.length) box.append(el("p", { className: "none", textContent: "No link appears twice in the sources shown." }));
   for (const { link, copies } of sets) {
     const title = labelOf(link);
     const card = el("div", { className: "dup-card" },
@@ -964,7 +964,7 @@ function importDone(text) {
 }
 
 const captureSummary = res => `${res.added} new, ${res.enriched} filled in, ${res.skipped} already known` +
-  `${res.marked ? `, ${res.marked} taken off the queue` : ""} — ${res.total} captures held`;
+  `${res.marked ? `, ${res.marked} taken off the queue` : ""}; ${res.total} captures in all`;
 
 /* Writing a few hundred bookmarks takes seconds, so the panel counts them as Firefox reports each
  * one, then stays open with the result instead of vanishing. */
@@ -979,7 +979,7 @@ $("import-go").onclick = async () => {
     // Re-adding a link with a date fills the date in; one already dated is left as it is.
     const res = await send({ type: "add", urls: listEntries() });
     importDone(`Added ${plural(res.added, "link")} to the reading list` + (res.updated ? `, ${res.updated} dated` : "") +
-      (res.skipped ? `, ${res.skipped} already on it` : "") + ` — ${res.total} on the list`);
+      (res.skipped ? `, ${res.skipped} already on it` : "") + `; ${res.total} on the list`);
     return load();
   }
   const total = parsed.stashes.reduce((sum, s) => sum + s.tabs.length, 0);
@@ -1039,11 +1039,11 @@ async function takePendingRefresh() {
   const bits = [];
   if (records.length) {
     const out = await send({ type: "import-captures", records });
-    bits.push(`${records.length} read — ${out.added} new, ${out.enriched} filled in${out.marked ? `, ${out.marked} off the queue` : ""}`);
+    bits.push(`${records.length} read: ${out.added} new, ${out.enriched} filled in${out.marked ? `, ${out.marked} off the queue` : ""}`);
   }
   if (queue.length) {
     const out = await send({ type: "add", urls: queue });
-    bits.push(`${queue.length} needing a browser — ${out.added} queued${out.skipped ? `, ${out.skipped} already there` : ""}`);
+    bits.push(`${queue.length} needing a browser: ${out.added} queued${out.skipped ? `, ${out.skipped} already there` : ""}`);
   }
   openPanel("import-panel");
   $("import-msg").className = "ok";

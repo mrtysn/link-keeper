@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="nav.css">
 <link rel="stylesheet" href="tags.css">
 <link rel="stylesheet" href="actions.css">
-<title>Link Keeper — untagged</title>
+<title>Link Keeper: untagged</title>
 <style>
   :root {
     /* Measured in WCAG 2 and APCA on every ground these pages use. WCAG overrates light text on a
@@ -168,12 +168,12 @@
     <input id="q" type="search" placeholder="Filter by title, URL or text…" autocomplete="off" spellcheck="false">
     <div class="seg" role="group" aria-label="Which links">
       <button class="chip" data-f="untagged" aria-pressed="true" title="Links with no tag of their own">Untagged</button>
-      <button class="chip" data-f="guessed" aria-pressed="false" title="Untagged, with a guess from the kind of site shown dashed">With a guess</button>
-      <button class="chip" data-f="blank" aria-pressed="false" title="Untagged, and no guess either">No guess</button>
-      <button class="chip" data-f="all" aria-pressed="false" title="Every link, tagged or not">All</button>
+      <button class="chip" data-f="guessed" aria-pressed="false" title="Untagged links that have a suggested tag, shown dashed">Suggested</button>
+      <button class="chip" data-f="blank" aria-pressed="false" title="Untagged links with no suggested tag">No suggestion</button>
+      <button class="chip" data-f="all" aria-pressed="false" title="All links, tagged or not">All</button>
     </div>
   </div>
-  <p class="keys">Type a tag and press <kbd>Enter</kbd>; <kbd>Enter</kbd> on an empty field goes to the next link, <kbd>Esc</kbd> leaves the field. Dashed chips are guesses from the kind of site — any change makes them yours. Tagged links stay put with a ✓ until you change the filter.</p>
+  <p class="keys">Type a tag and press <kbd>Enter</kbd>; <kbd>Enter</kbd> on an empty field goes to the next link, <kbd>Esc</kbd> leaves the field. Dashed tags are suggested from the kind of site. Editing a link's tags turns the suggested ones into its own. Tagged links stay in the list with a ✓ until you change the filter.</p>
   <p class="keys" id="keys-line"></p>
 
   <p id="msg" role="status"></p>

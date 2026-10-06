@@ -18,7 +18,8 @@
 
 const Peek = (() => {
   const kinds = new Map();
-  const OPEN_AFTER = 350, CLOSE_AFTER = 160, ROWS = 10;
+  // A list in a card scrolls; past ROWS it stops drawing, so a site of thousands stays quick.
+  const OPEN_AFTER = 350, CLOSE_AFTER = 160, ROWS = 500;
   let card = null, anchor = null, openTimer = null, closeTimer = null;
 
   const kind = (name, render) => kinds.set(name, render);
@@ -54,6 +55,9 @@ const Peek = (() => {
     card.addEventListener("pointerleave", soonClose);
     document.body.append(card);
     place(a.getBoundingClientRect());
+    // A list opens on the link it was asked about, in the middle of what shows.
+    const list = card.querySelector(".pk-rows"), here = list?.querySelector("li.here");
+    if (here) list.scrollTop = here.offsetTop - (list.clientHeight - here.offsetHeight) / 2;
   }
 
   /* Beside a narrow thing on the left (a sidebar row), else under it, or over it if there is no room. */
@@ -158,8 +162,8 @@ const Peek = (() => {
     const chip = el("span", { className: "tag", textContent: tag });
     chip.style.setProperty("--h", tagHue(tag));
     return el("div", {},
-      el("div", { className: "pk-head" }, chip, el("span", { textContent: `${plural(links.length, "link")} on show` })),
-      links.length ? linkRows(links) : el("p", { className: "pk-note", textContent: "No link on show has it." }),
+      el("div", { className: "pk-head" }, chip, el("span", { textContent: `${plural(links.length, "link")} shown` })),
+      links.length ? linkRows(links) : el("p", { className: "pk-note", textContent: "No link shown has this tag." }),
       go(`tags.html?tag=${encodeURIComponent(tag)}`, "Open in Tags →"));
   });
 
@@ -187,7 +191,7 @@ const Peek = (() => {
     if (!links.length) return null;
     const n = v => links.filter(l => (l.verdict || null) === v).length;
     return el("div", {},
-      head(host, `${plural(links.length, "link")} on show · ${n("keep")} kept · ${n("drop")} dropped · ${n(null)} undecided`),
+      head(host, `${plural(links.length, "link")} shown · ${n("keep")} kept · ${n("drop")} dropped · ${n(null)} undecided`),
       linkRows(links));
   });
 

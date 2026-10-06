@@ -44,7 +44,7 @@ function label(r) {
   if (body && (!r.title || /^@?\S+ on X$|^X post$/.test(r.title))) {
     return (r.handle ? `${r.handle}: ` : "") + (body.length > 90 ? body.slice(0, 90) + "…" : body);
   }
-  if (r.handle && r.title && !r.title.includes(r.handle)) return `${r.handle} — ${r.title}`;
+  if (r.handle && r.title && !r.title.includes(r.handle)) return `${r.handle}: ${r.title}`;
   return r.title || r.handle || short(r.url);
 }
 
@@ -98,7 +98,7 @@ for (const b of document.querySelectorAll("#stash-menu [data-scope]")) {
 }
 
 async function keep(withShot = false) {
-  say(withShot ? "reading page, then shooting it…" : "reading page…");
+  say(withShot ? "reading page, then taking the screenshot…" : "reading page…");
   const res = await send({ type: "capture-active", note: $("note").value.trim(), withShot });
   if (res?.ok) {
     const r = res.record;
@@ -132,7 +132,7 @@ $("keep-shot").onclick = async () => {
   } catch (e) {
     return say(`could not request permission: ${e.message}`, "bad");
   }
-  if (!granted) return say("reading pixels needs site access — declined", "bad");
+  if (!granted) return say("the screenshot needs site access; you declined", "bad");
   keep(true);
 };
 
@@ -189,7 +189,7 @@ async function refresh() {
     url.title = s.next;
   } else {
     $("now-lbl").textContent = "";
-    url.textContent = s.total ? "Nothing left to go through" : "Empty — + List adds this page";
+    url.textContent = s.total ? "Nothing left to go through" : "Empty. + List adds this page";
     url.classList.add("done");
     url.title = "";
   }
