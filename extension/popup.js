@@ -1,9 +1,10 @@
-/* The toolbar popup: a way into the three viewers, what to do with this tab, and the reading list's
- * next link. Everything else — adding links in bulk, exports, settings — lives on the List page.
+/* The toolbar popup: the page you are on. Whether it is held already — in which stashes, on the
+ * reading list, captured or not — its tags with the palette, and the actions on it: capture it,
+ * remove one copy of it, or save it (to the reading list, or by stashing the tab). Below, Stash for
+ * the window and links to the viewers. Everything in bulk lives on the pages.
+ *
+ * Remove acts on one copy only: with several, its menu names each and you pick one.
  */
-
-const $ = id => document.getElementById(id);
-const send = msg => browser.runtime.sendMessage(msg);
 
 /* A popup is destroyed the moment it closes, so a note half-typed and the result of the last
  * action would vanish with it. Both are mirrored into storage and restored on open — the message
@@ -21,6 +22,7 @@ function say(text, cls = "") {
   $("msg").textContent = text;
   $("msg").className = cls;
   $("copy-msg").hidden = !text;
+  $("undo").hidden = !LinkActions.canUndo();
   Object.assign(ui, { msg: text, msgClass: cls });
   saveUi();
 }
@@ -35,77 +37,110 @@ $("copy-msg").onclick = async () => {
   setTimeout(() => ($("copy-msg").textContent = "Copy"), 1200);
 };
 
-const short = url => String(url).replace(/^https?:\/\/(www\.)?/, "");
-const fmt = n => Number(n).toLocaleString();
+$("ver").textContent = `v${browser.runtime.getManifest().version}`;
 
-/* A plain tweet's title is only its handle, so its text is what identifies it. */
-function label(r) {
-  const body = (r.text || "").replace(/\s+/g, " ").trim();
-  if (body && (!r.title || /^@?\S+ on X$|^X post$/.test(r.title))) {
-    return (r.handle ? `${r.handle}: ` : "") + (body.length > 90 ? body.slice(0, 90) + "…" : body);
-  }
-  if (r.handle && r.title && !r.title.includes(r.handle)) return `${r.handle}: ${r.title}`;
-  return r.title || r.handle || short(r.url);
+/* --- the page you are on ------------------------------------------------------------- */
+
+let tab = null;
+let info = { link: null, stashes: [] };
+
+// Removing and its undo go through the pages' own actions, over just this link's stashes.
+LinkActions.setup({
+  data: () => ({ stashes: info.stashes, all: { stashes: info.stashes } }),
+  say: text => say(text, "ok"),
+  after: () => load(),
+});
+
+async function load() {
+  [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  const { tagDefs } = await browser.storage.local.get("tagDefs");
+  setTagLibrary(tagDefs);
+  info = isWeb(tab?.url || "") ? await send({ type: "page-info", url: tab.url }) : { link: null, stashes: [] };
+  render();
 }
 
-/* --- the viewers ------------------------------------------------------------------- */
+/* Where it is held: each stash by name, and the reading list. */
+function copies() {
+  const link = info.link;
+  if (!link) return [];
+  const out = link.copies.map(c => {
+    const stash = info.stashes.find(s => s.id === c.stash);
+    const t = stash?.tabs.find(x => x.id === c.tab);
+    return stash && t ? { name: stashName(stash), locked: stash.locked, target: { link, stash, tab: t } } : null;
+  }).filter(Boolean);
+  if (link.list && !link.list.loose) out.push({ name: "the reading list", list: true, target: { link } });
+  return out;
+}
 
-const SOURCES = [["tabs", "Stashed tabs"], ["import", "Imports"], ["list", "Reading list"]];
+function render() {
+  const web = isWeb(tab?.url || "");
+  const link = info.link;
+  $("page-icon").replaceWith(Object.assign(srcIcon(tab?.url || "about:blank"), { id: "page-icon" }));
+  $("page-title").textContent = (link && labelOf(link)) || tab?.title || "This tab";
+  $("page-host").textContent = web ? hostOf(tab.url) : "a browser page";
 
-async function counts() {
-  const c = await send({ type: "link-counts" });
-  $("n-links").textContent = fmt(c.total);
-  $("n-untagged").textContent = fmt(c.untagged);
-  $("n-stashes").textContent = fmt(c.stashes);
-  $("n-stashes-word").textContent = c.stashes === 1 ? "stash" : "stashes";
-  // Each source toggles, as in the pages' top bar; the viewers follow.
-  const box = $("sources");
+  const where = $("where");
+  where.textContent = "";
+  const held = copies();
+  if (!web) where.append("Browser pages cannot be saved; Stash still takes the tabs around it.");
+  else if (!link) where.append("Not saved yet");
+  else {
+    where.append(held.length ? "In" : "Captured, on no list or stash");
+    for (const c of held) where.append(el("span", { className: "place", textContent: c.name === "the reading list" ? "Reading list" : c.name }));
+    const badge = readBadge(link);
+    if (badge) where.append(badge);
+  }
+
+  // Tags: only a link that is held has a place to show them.
+  const box = $("tagbox");
   box.textContent = "";
-  for (const [id, name] of SOURCES) {
-    const on = c.chosen.includes(id);
-    const b = Object.assign(document.createElement("button"), {
-      className: on ? "" : "off", textContent: `${name} ${fmt(c.sources[id])}`,
-      title: on ? `Showing ${name.toLowerCase()} in the viewers; click to hide` : `Hidden from the viewers; click to show`,
-    });
-    b.setAttribute("aria-pressed", String(on));
-    b.onclick = async () => {
-      const next = on ? c.chosen.filter(s => s !== id) : [...c.chosen, id];
-      await browser.storage.local.set({ viewSources: SOURCES.map(([s]) => s).filter(s => next.includes(s)) });
-      counts();
-    };
-    box.append(b);
+  if (link) {
+    const editor = tagEditor(link, () => {});
+    box.append(editor);
+    if (!document.activeElement || document.activeElement === document.body) editor.querySelector("input").focus();
   }
+
+  $("capture-split").hidden = !web;
+  $("keep").firstChild.textContent = link?.cap ? "Capture again " : "Capture ";
+  $("queue").hidden = !web || !!link?.list;
+  $("stash-tab").hidden = !web || link?.copies.length > 0;
+  const remove = $("remove");
+  remove.hidden = !held.length;
+  const removable = held.filter(c => !c.locked);
+  remove.disabled = !removable.length;
+  remove.textContent = held.length > 1 ? "Remove ▾" : "Remove";
+  remove.title = !removable.length ? "Its stash is locked"
+    : held.length > 1 ? "Take it out of one place; pick which" : `Take it out of ${held[0]?.name}`;
+  $("undo").hidden = !LinkActions.canUndo();
 }
 
-for (const [id, type] of [["open-list", "open-list"], ["open-cards", "open-cards"], ["open-explore", "open-explore"]]) {
-  $(id).onclick = async () => {
-    await send({ type });
-    window.close();
-  };
-}
+/* Remove: one copy. With one place it goes at once; with several, the menu names each. */
+$("remove").onclick = () => {
+  const held = copies();
+  if (held.length === 1) return removeCopy(held[0]);
+  const menu = $("remove-menu");
+  menu.textContent = "";
+  for (const c of held) {
+    const b = el("button", { type: "button", className: "danger", textContent: `From ${c.name}`, disabled: !!c.locked,
+      title: c.locked ? "That stash is locked" : "" });
+    b.onclick = () => { menu.hidePopover(); removeCopy(c); };
+    menu.append(b);
+  }
+  menu.showPopover();
+};
+const removeCopy = c => LinkActions.run("remove", c.target, c.list ? { fromList: true } : {});
+$("undo").onclick = () => LinkActions.undo();
 
-/* --- this tab ---------------------------------------------------------------------- */
+/* --- capture ------------------------------------------------------------------------- */
 
-/* The stash shows its stashes as the tabs close, so the popup has nothing left to show. */
-async function stash(scope) {
-  const res = await send({ type: "stash", scope });
-  if (res.ok) window.close();
-  else say(res.error, "bad");
-}
-$("stash").onclick = () => stash("auto");
-for (const b of document.querySelectorAll("#stash-menu [data-scope]")) {
-  b.onclick = () => { $("stash-menu").hidePopover(); stash(b.dataset.scope); };
-}
-
-async function keep(withShot = false) {
+async function capture(withShot = false) {
   say(withShot ? "capturing the page, then the screenshot…" : "capturing the page…");
   const res = await send({ type: "capture-active", note: $("note").value.trim(), withShot });
   if (res?.ok) {
     const r = res.record;
     const inner = r.links?.length ? ` (+${r.links.length} link${r.links.length > 1 ? "s" : ""})` : "";
-    // Truncate the title, never the diagnostic — the reason a screenshot failed is the whole
-    // point of showing anything at all.
-    const head = `captured: ${label({ title: r.title, handle: r.author?.handle, url: r.url, text: r.text })}${inner}`.slice(0, 140);
+    // The page's title is above; the message says what happened, and why a screenshot failed.
+    const head = `captured${inner}`;
     if (r.screenshot) {
       const s = r.screenshot;
       say(`${head}\npng ${s.width}×${s.height}${s.tiles ? ` from ${s.tiles} tiles` : ""} → ${s.filename}`, "ok");
@@ -116,11 +151,11 @@ async function keep(withShot = false) {
     }
     showNote(false);
   } else {
-    say(res?.error || "could not keep that page", "bad");
+    say(res?.error || "could not capture that page", "bad");
   }
-  refresh();
+  load();
 }
-$("keep").onclick = () => keep(false);
+$("keep").onclick = () => capture(false);
 
 /* permissions.request needs a real user gesture, so the grant happens here rather than in the
  * background where the capture runs. Already-granted returns true immediately. */
@@ -133,10 +168,10 @@ $("keep-shot").onclick = async () => {
     return say(`could not request permission: ${e.message}`, "bad");
   }
   if (!granted) return say("the screenshot needs site access; you declined", "bad");
-  keep(true);
+  capture(true);
 };
 
-/* The note field shows only when asked for; it goes with the next Keep, and Enter keeps. */
+/* The note field shows only when asked for; it goes with the next capture, and Enter captures. */
 function showNote(on) {
   $("note-row").hidden = !on;
   if (!on) $("note").value = "";
@@ -147,70 +182,49 @@ function showNote(on) {
 $("keep-note").onclick = () => { $("keep-menu").hidePopover(); showNote(true); };
 $("note").addEventListener("input", () => { ui.note = $("note").value; saveUi(); });
 $("note").addEventListener("keydown", e => {
-  if (e.key === "Enter") { e.preventDefault(); keep(false); }
+  if (e.key === "Enter") { e.preventDefault(); capture(false); }
   if (e.key === "Escape") { e.preventDefault(); showNote(false); }
 });
+
+/* --- saving it ----------------------------------------------------------------------- */
 
 $("queue").onclick = async () => {
   const res = await send({ type: "queue-active", note: $("note").value.trim() });
   say(res.ok ? (res.added ? "added to the reading list" : "already on the reading list") : (res.error || "could not add"), res.added ? "ok" : "");
-  refresh();
+  load();
 };
 
+/* The stash shows its stashes as the tabs close, so the popup has nothing left to show. */
+async function stash(scope) {
+  const res = await send({ type: "stash", scope });
+  if (res.ok) window.close();
+  else say(res.error, "bad");
+}
+$("stash-tab").onclick = () => stash("tab");
+$("stash").onclick = () => stash("auto");
+for (const b of document.querySelectorAll("#stash-menu [data-scope]")) {
+  b.onclick = () => { $("stash-menu").hidePopover(); stash(b.dataset.scope); };
+}
+
 /* Menus open beside their arrow, flipped up if they would run off the popup. */
-for (const [menu, arrow] of [["stash-menu", "stash-more"], ["keep-menu", "keep-more"]]) {
+for (const [menu, anchor] of [["stash-menu", "stash-more"], ["keep-menu", "keep-more"], ["remove-menu", "remove"]]) {
   $(menu).addEventListener("toggle", e => {
     if (e.newState !== "open") return;
-    const r = $(arrow).getBoundingClientRect(), m = $(menu);
+    const r = $(anchor).getBoundingClientRect(), m = $(menu);
     const below = r.bottom + 4 + m.offsetHeight <= innerHeight;
     m.style.top = `${below ? r.bottom + 4 : Math.max(4, r.top - 4 - m.offsetHeight)}px`;
     m.style.left = `${Math.max(4, Math.min(r.right - m.offsetWidth, innerWidth - m.offsetWidth - 4))}px`;
   });
 }
 
-/* --- the reading list ------------------------------------------------------------------ */
+/* --- the viewers --------------------------------------------------------------------- */
 
-async function refresh() {
-  const s = await send({ type: "status" });
-  const { pending = 0 } = s.counts;
-  $("left").textContent = s.total ? `${fmt(pending)} left of ${fmt(s.total)}` : "";
-
-  // What you are on if it came from the list, otherwise what is coming next.
-  const onPage = !!s.current?.isOpen;
-  const url = $("now-url");
-  url.classList.remove("done");
-  if (onPage) {
-    $("now-lbl").textContent = "on now";
-    url.textContent = short(s.current.url);
-    url.title = s.current.url;
-  } else if (s.next) {
-    $("now-lbl").textContent = "next";
-    url.textContent = short(s.next);
-    url.title = s.next;
-  } else {
-    $("now-lbl").textContent = "";
-    url.textContent = s.total ? "Nothing left to go through" : "Empty. + List adds this page";
-    url.classList.add("done");
-    url.title = "";
-  }
-  // One filled action: Keep while a list item is open in this tab, Next otherwise.
-  $("keep").classList.toggle("primary", onPage);
-  $("next").classList.toggle("primary", !onPage && !!s.next);
-  $("next").disabled = !s.next;
-  $("skip").disabled = !onPage && !s.next;
+for (const b of document.querySelectorAll(".viewers [data-open]")) {
+  b.onclick = async () => {
+    await send({ type: b.dataset.open });
+    window.close();
+  };
 }
-
-$("next").onclick = async () => {
-  const res = await send({ type: "next" });
-  say(res.ok ? `${res.remaining} left after this` : res.error, res.ok ? "" : "bad");
-  refresh();
-};
-
-$("skip").onclick = async () => {
-  const res = await send({ type: "skip" });
-  say(res.ok ? `skipped · ${res.remaining} left` : res.error, res.ok ? "" : "bad");
-  refresh();
-};
 
 /* Restore what the last popup session had in flight. */
 browser.storage.local.get(UI_KEY).then(got => {
@@ -226,6 +240,4 @@ browser.storage.local.get(UI_KEY).then(got => {
   }
 }).catch(() => {});
 
-counts();
-refresh();
-setInterval(refresh, 1500);
+load();

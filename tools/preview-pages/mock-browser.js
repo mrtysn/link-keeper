@@ -24,7 +24,7 @@
       ? {
         note: "",
         noting: params.has("note"),
-        msg: M.msg,
+        msg: "captured (+3 links)\npng 1346×32000 from 31 tiles → link-keeper/x-preview.png",
         msgClass: "ok",
       }
       : undefined,
@@ -155,6 +155,12 @@
             }
             return joinLinks({ items, captures, sessions, tags: mockTags,
               currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
+          }
+          // The popup's page: the link as the pages see it, and the stashes holding it.
+          case "page-info": {
+            const { links, stashes } = await window.browser.runtime.sendMessage({ type: "links" });
+            const link = links.find(l => l.key === keyOf(msg.url)) || null;
+            return { link, stashes: link ? stashes.filter(s => link.copies.some(c => c.stash === s.id)) : [] };
           }
           case "set-tags": {
             const tags = [...new Set((msg.tags || []).map(t => String(t).toLowerCase().trim()).filter(Boolean))];
@@ -298,6 +304,19 @@
       removeListener(fn) { bookmarkListeners[k]?.delete(fn); },
     }])),
     permissions: { request: async () => true, contains: async () => true },
-    tabs: { update: async () => {}, create: async () => {} },
+    tabs: {
+      update: async () => {}, create: async () => {},
+      // The popup's active tab: ?tab=new for a page held nowhere, ?tab=about for a browser page,
+      // ?tab=<url> for that one; otherwise a link held in two stashes.
+      query: async () => {
+        const want = params.get("tab");
+        if (want === "new") return [{ id: 1, url: "https://new.example/an-article", title: "An article not saved yet" }];
+        if (want === "about") return [{ id: 1, url: "about:preferences", title: "Settings" }];
+        if (want) return [{ id: 1, url: want, title: want }];
+        const { links } = await window.browser.runtime.sendMessage({ type: "links" });
+        const two = links.find(l => l.copies.length > 1) || links[0];
+        return [{ id: 1, url: two.url, title: two.title || two.url }];
+      },
+    },
   };
 })();

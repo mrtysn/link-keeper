@@ -908,6 +908,21 @@ await check("site icons: saved from tabs as they are stashed, as data when reada
   assert.equal(Object.keys(store.favicons).length, 2, "tabs without an icon add nothing");
 });
 
+await check("page-info: the page you are on, with each stash that holds it, or nothing", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [
+    { id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://p.example/1" }, { url: "https://other.example/" }] },
+    { id: "b", created_at: "2026-09-29T00:00:00Z", tabs: [{ url: "https://p.example/1" }] },
+  ];
+  store.items = [{ url: "https://p.example/1", status: "pending" }];
+  await load(browser);
+  const info = plain(await browser.handle({ type: "page-info", url: "https://p.example/1" }));
+  assert.deepEqual(info.link.copies.length, 2);
+  assert.deepEqual(info.stashes.map(s => s.tabs.length).sort(), [1, 2], "each holding stash, whole");
+  assert.deepEqual(!!info.link.list, true, "and its reading-list entry");
+  assert.deepEqual(plain(await browser.handle({ type: "page-info", url: "https://nowhere.example/" })), { link: null, stashes: [] });
+});
+
 await check("tags travel in exports and come back with imports", async () => {
   const { browser, store } = makeBrowser([]);
   store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://t.example/1" }] }];

@@ -56,26 +56,12 @@
       },
       "description": "Capture this page's text, images and links"
     },
-    "next-link": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+J",
-        "mac": "MacCtrl+Shift+J"
-      },
-      "description": "Go to the next link in the list"
-    },
     "queue-page": {
       "suggested_key": {
         "default": "Ctrl+Shift+U",
         "mac": "MacCtrl+Shift+U"
       },
       "description": "Add this page to the list"
-    },
-    "skip-link": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+X",
-        "mac": "MacCtrl+Shift+X"
-      },
-      "description": "Skip this link and go to the next"
     },
     "stash-tabs": {
       "suggested_key": {

@@ -815,6 +815,17 @@ async function showPage(page, windowId, suffix = "") {
   return tab;
 }
 
+/* What the popup knows about the page you are on: the link as the pages see it (its tags, its
+ * capture, its reading-list entry), and each stash holding a copy, whole, so the popup can remove
+ * one copy and put it back. link is null when the URL is held nowhere. */
+async function pageInfo(url) {
+  if (!url) return { link: null, stashes: [] };
+  const { links, stashes } = await getLinks();
+  const link = links.find(l => l.key === keyOf(url)) || null;
+  const held = link ? stashes.filter(s => link.copies.some(c => c.stash === s.id)) : [];
+  return { link, stashes: held };
+}
+
 /* What the popup shows on its view buttons, counted in the background so the popup never holds
  * the whole dataset: links per source, and how many in the chosen sources have no tags yet. */
 async function linkCounts() {
@@ -1393,14 +1404,7 @@ async function toggleExcluded(host) {
 
 browser.commands.onCommand.addListener(async name => {
   if (name === "capture-page") await notify(describe(await captureActive()));
-  else if (name === "next-link") {
-    const res = await openNext();
-    await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
-  } else if (name === "skip-link") {
-    await markCurrent("skipped");
-    const res = await openNext();
-    await notify(res.ok ? `skipped · ${res.remaining} left` : `failed: ${res.error}`);
-  } else if (name === "stash-tabs") {
+  else if (name === "stash-tabs") {
     await notifyStash(await stashTabs());
   } else if (name === "stash-this-tab") {
     await notifyStash(await stashTabs({ scope: "tab" }));
@@ -1603,6 +1607,13 @@ browser.runtime.onMessage.addListener(async msg => {
     case "open-explore":
       await showPage("stash-cards.html", (await browser.windows.getLastFocused()).id);
       return { ok: true };
+
+    case "open-tags":
+      await showPage("tags.html", (await browser.windows.getLastFocused()).id);
+      return { ok: true };
+
+    case "page-info":
+      return pageInfo(String(msg.url || ""));
 
     case "link-counts":
       return linkCounts();

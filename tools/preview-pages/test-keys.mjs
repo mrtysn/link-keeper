@@ -259,6 +259,33 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "peek list: no errors " + p.errs.join("; "));
   await p.close();
 }
+// The popup: the page you are on, its tags, one copy removed and put back
+{
+  const p = await page("popup.html");
+  const places = () => p.$$eval("#where .place", l => l.map(e => e.textContent));
+  const before = await places();
+  ok(before.length >= 2, `popup: says where the page is held (${before.join(", ")})`);
+  ok(await p.evaluate(() => !!document.activeElement.closest("#tagbox .tagger")), "popup: opens with the tag field ready");
+  const first = await p.$eval("#tagbox .palette .tag.pick", e => e.textContent.replace(/^\d/, ""));
+  await key(p, "1");
+  ok((await p.$eval("#tagbox .chips", e => e.textContent)).includes(first), `popup: 1 tags the page ${first}`);
+  await p.click("#remove"); await p.waitForTimeout(150);
+  const items = await p.$$eval("#remove-menu button", l => l.map(b => b.textContent));
+  ok(items.length === before.length, `popup: Remove names each place to pick one (${items.join(" · ")})`);
+  await p.click("#remove-menu button:not([disabled])"); await p.waitForTimeout(400);
+  ok((await places()).length === before.length - 1, `popup: removing takes out that one copy (${await p.$eval("#msg", e => e.textContent)})`);
+  ok(await p.$eval("#undo", e => !e.hidden), "popup: with Undo offered");
+  await p.click("#undo"); await p.waitForTimeout(400);
+  ok((await places()).length === before.length, "popup: Undo puts it back");
+  ok(!p.errs.length, "popup: no errors " + p.errs.join("; "));
+  await p.close();
+}
+{
+  const p = await page("popup.html?tab=new");
+  ok(/Not saved yet/.test(await p.$eval("#where", e => e.textContent)), "popup: a new page says it is not saved");
+  ok(await p.$eval("#queue", e => !e.hidden) && await p.$eval("#stash-tab", e => !e.hidden) && await p.$eval("#remove", e => e.hidden), "popup: and offers + List and Stash tab, no Remove");
+  await p.close();
+}
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

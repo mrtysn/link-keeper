@@ -289,22 +289,20 @@ await check("Tags: the ✎ editor on a List row saves a tag for the URL, every p
   await browser.tabs.remove(tab.id);
 });
 
-await check("the popup: three viewers with live counts, This tab's split buttons, and the reading list's next link", async () => {
+await check("the popup: this page, Stash ▾ for the window, and the viewers as links", async () => {
   await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
   const tab = await browser.tabs.create({ url: browser.runtime.getURL("popup.html"), active: true });
   await wait(1200);
   const view = browser.extension.getViews({ type: "tab" }).find(v => v.location.pathname === "/popup.html");
   const d = view.document;
-  const c = await linkCounts();
-  eq(d.getElementById("n-links").textContent, c.total.toLocaleString(), "List shows the links on show");
-  eq(d.getElementById("n-untagged").textContent, c.untagged.toLocaleString(), "Cards shows how many links have no tags");
-  eq([...d.querySelectorAll("#sources button")].length, 3, "one toggle per source");
-  eq([...d.querySelectorAll("#stash-menu [data-scope]")].map(b => b.dataset.scope), ["window", "tab", "left", "right", "others", "all-windows"], "the scopes sit behind the arrow");
-  yes(d.getElementById("keep-shot") && d.getElementById("keep-note"), "Keep's arrow offers a screenshot and a note");
-  eq(d.querySelector("details"), null, "no drawers left");
-  d.getElementById("keep-note").click();
-  await wait(100);
-  eq(d.getElementById("note-row").hidden, false, "the note field shows when asked for");
+  // Opened as a tab, the popup's own page is the one it is on: a browser page.
+  yes(/cannot be saved/.test(d.getElementById("where").textContent), `a browser page says so: ${d.getElementById("where").textContent}`);
+  eq([...d.querySelectorAll(".viewers [data-open]")].map(b => b.textContent), ["List", "Cards", "Explore", "Tags"], "the viewers as links");
+  eq([...d.querySelectorAll("#stash-menu [data-scope]")].map(b => b.dataset.scope), ["window", "left", "right", "others", "all-windows"], "the scopes sit behind the arrow");
+  yes(d.getElementById("keep-shot") && d.getElementById("keep-note"), "Capture's arrow offers a screenshot and a note");
+  eq(d.getElementById("next"), null, "no reading-list walker");
+  const info = await pageInfo("http://127.0.0.1:9/page-0");
+  eq(info.link === null || typeof info.link === "object", true, "page-info answers for any URL");
   await browser.tabs.remove(tab.id);
 });
 

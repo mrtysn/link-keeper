@@ -14,9 +14,10 @@
 # Pages: frame.html shows three popup states side by side; popup.html, list.html, cards.html,
 # stash-cards.html and tags.html open alone.
 # Query flags on either page:
-#   msg      restore a message, as if a keep just happened
-#   note     the popup's note field open, as after "Keep with a note…"
-#   onpage   a list item is open in the current tab
+#   msg      restore a message, as if a capture just happened
+#   note     the popup's note field open, as after "Capture with a note…"
+#   tab=new|about|<url>   the popup's page: not saved, a browser page, or that URL (default: one
+#            held in two stashes)
 #   light    drop the dark-scheme rules to show the light palette
 #   empty    nothing stashed
 #   settings, import, dups   list.html with that panel open

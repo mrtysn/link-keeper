@@ -89,35 +89,29 @@ Three keys, and you never leave the tab you are in.
 
 | Key | What it does |
 |---|---|
-| `Ctrl+Shift+J` | load the next link from the list in the current tab |
 | `Ctrl+Shift+K` | capture this page: save its text, images and links |
-| `Ctrl+Shift+U` | add the page you are on to the list |
-| `Ctrl+Shift+X` | skip this one — an explicit rejection — and advance |
+| `Ctrl+Shift+U` | add the page you are on to the reading list |
 | `Ctrl+Shift+S` | stash tabs — see [Stashing tabs](#stashing-tabs) (`Alt+Shift+S` off macOS, where Firefox's screenshot owns the other) |
 
 Every one of these is also a **popup button** and a **right-click menu** item, so the keyboard
 is optional. Right-clicking a *link* offers "Add this link to Link Keeper" — queueing something
 without visiting it, which the keyboard cannot do.
 
-So the loop is: `Ctrl+Shift+J`, read it, `Ctrl+Shift+K` to capture it if it is worth coming back
-to, `Ctrl+Shift+J` again. Stop whenever. The list remembers where you were, across restarts.
-
 On macOS these are bound with `MacCtrl`, so they are the literal **Control** key — not Command.
 `"Ctrl"` in a WebExtension `suggested_key` means Command on macOS, and `Cmd+Shift+J` is
 Firefox's own Browser Console, so Control is both freer and less surprising. Rebind any of them
 in `about:addons` → gear → *Manage Extension Shortcuts*.
 
-Loading or capturing a link marks it **seen** (opened), which takes it off the reading list's queue.
-**Skip** in the popup marks it `skipped` and moves on.
+Opening or capturing a reading-list link marks it **seen** (opened).
 
-The **popup** is a way in, not a workspace. On top, the three viewers — **List**, **Cards** and
-**Explore** — each with a live count (links shown, how many are untagged, stashes); under them, a toggle per
-source, the same as the pages' top bar, with how many links each holds. Then **This tab**: **Stash**
-(its ▾ holds the scopes), **Capture** (its ▾ captures with a full-page screenshot, or with a note) and
-**+ List**. Last, the reading list's next link with **Next** and **Skip**. One action is filled at a
-time: **Capture** while a list item is open in the tab, **Next** otherwise. The viewer buttons switch to
-the viewer's tab if one is open, rather than opening another. Adding links in bulk, exports and
-settings live on the List page.
+The **popup** is about the page you are on. It says whether you hold it already — in which stashes,
+on the reading list, captured or not — and, if you do, shows its tags with the palette, the field
+ready, so `1`–`9` or typing tags it then and there. Then what to do with it: **Capture** (its ▾
+captures with a full-page screenshot, or with a note), **Remove** — one copy; held in several places,
+its menu names each and you pick one, with **Undo** after — and, for a page not saved yet, **+ List**
+and **Stash tab**. Below, **Stash window** (its ▾ holds the other scopes), and a line of links to
+List, Cards, Explore and Tags, each switching to the viewer's tab if one is open. Adding links in
+bulk, exports and settings live on the List page.
 
 ### Viewers and sources
 
