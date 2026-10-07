@@ -764,6 +764,18 @@ const DATA_PATCHES = [
       return { reset };
     },
   },
+  {
+    // The owner's own LinkedIn profile is a page they keep open, not one to read: filter it out,
+    // as the right-click item would. Other people's profiles stay in the pile.
+    id: "2026-10-07-filter-own-linkedin",
+    async run() {
+      const rule = "linkedin.com/in/mert-yasin";
+      const rules = await getFilterRules();
+      if (rules.includes(rule)) return { skipped: "already a rule" };
+      const res = await setFilterRules([...rules, rule]);
+      return { added: rule, matched: res.matched };
+    },
+  },
 ];
 
 let patching = null;
