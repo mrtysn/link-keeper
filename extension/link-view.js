@@ -276,7 +276,7 @@ function suggestField(input, exclude = () => []) {
  * shown, so a guess that is kept becomes a tag, and removing every tag brings the guesses back.
  * Under the field, a palette of every tag toggles them with a click, or 1–9 on an empty field.
  * Enter on the empty field or Escape is "done": the box fires "tagdone", its detail saying which
- * ({ escape: true } for Escape). onSaved(tags) follows a
+ * ({ next: true } for Enter, which pages take as "on to the next link"; { escape: true } for Escape). onSaved(tags) follows a
  * save; link.tags is updated in place. */
 function tagEditor(link, onSaved) {
   const start = shownTags(link);
@@ -377,7 +377,7 @@ function tagEditor(link, onSaved) {
       e.preventDefault();
       const t = input.value.toLowerCase().replace(/\s+/g, " ").trim();
       input.value = "";
-      if (!t) { box.dispatchEvent(new CustomEvent("tagdone", { bubbles: true })); return; }
+      if (!t) { box.dispatchEvent(new CustomEvent("tagdone", { bubbles: true, detail: { next: true } })); return; }
       if (!tags.includes(t) || guessed) { if (!tags.includes(t)) tags.push(t); save(); } else drawPalette();
     } else if (e.key === "Backspace" && !input.value && tags.length) {
       tags.pop();

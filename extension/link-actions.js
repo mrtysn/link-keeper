@@ -16,6 +16,8 @@
  *                            "revert" when a verdict failed to save. r.local: the page's data
  *                            already holds the change, so redraw it rather than reload
  *   tags(target, anchor)   — optional: open the page's own tag editor instead of a popover
+ *   tagNext()              — optional: Enter on an empty tag field moves to the next link and opens
+ *                            its editor, so links are tagged one after another on any page
  */
 
 const LinkActions = (() => {
@@ -23,6 +25,8 @@ const LinkActions = (() => {
   const undos = [];
 
   const setup = p => Object.assign(page, p);
+  // Enter on an empty tag field: the next link, its editor open — after the closing popover has gone.
+  addEventListener("tagdone", e => { if (e.detail?.next && page.tagNext) setTimeout(() => page.tagNext(), 0); });
 
   /* The copy acted on: the one the page shows, else the first stash on show holding it, else any. */
   function copyOf(t) {

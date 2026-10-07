@@ -130,19 +130,38 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "cards: no errors " + p.errs.join("; "));
   await p.close();
 }
-// Tag
+// Tagging one link after another, from any page: Explore's Untagged chip, T, Enter on an empty field
 {
-  const p = await page("tag.html");
-  await key(p, "2");
-  ok(!!(await p.$(".lk-cursor")), "tag: 2 places the cursor");
+  const p = await page("stash-cards.html");
+  await p.click('.chip[data-f="untagged"]'); await p.waitForTimeout(200);
+  const n0 = await p.$$eval("#side li", l => l.length);
+  ok(n0 > 0, `untagged: the chip narrows Explore to links with no tags (${n0})`);
+  const cur = () => p.$eval("#side button[aria-current]", e => e.textContent);
+  const first = await cur();
   await key(p, "t");
-  ok(await p.evaluate(() => !!document.activeElement.closest(".lk-cursor .tagger")), "tag: T focuses the row's tag field");
+  ok(await p.evaluate(() => !!document.activeElement.closest("#detail .tagger")), "untagged: T opens the tag field");
+  await p.keyboard.type("batch tag"); await key(p, "Enter");
+  ok((await p.$eval("#detail .tagger .chips", e => e.textContent)).includes("batch tag"), "untagged: Enter saves the tag");
+  await key(p, "Enter"); await p.waitForTimeout(200);
+  ok((await cur()) !== first, "untagged: Enter on the empty field moves to the next link");
+  ok(await p.evaluate(() => !!document.activeElement.closest("#detail .tagger")), "untagged: with its tag field open");
   await key(p, "Escape");
-  ok(await p.evaluate(() => document.activeElement === document.body), "tag: Esc leaves the field");
-  await key(p, "q"); ok(/Dropped/.test(await msg(p)), "tag: Q drops (" + await msg(p) + ")");
-  await key(p, "Meta+z"); ok(/Undone/.test(await msg(p)), "tag: undo");
+  ok(await p.evaluate(() => !document.activeElement.closest(".tagger")), "untagged: Esc stops");
+  ok(!p.errs.length, "untagged: no errors " + p.errs.join("; "));
+  await p.close();
+}
+{
+  const p = await page("list.html");
   ok(await p.$eval('#key-guide [data-cmd="preview"]', e => e.classList.contains("idle")), "guide: P is faint where it does nothing");
-  ok(!p.errs.length, "tag: no errors " + p.errs.join("; "));
+  ok(!(await p.$('.app-pages a[href="tag.html"]')), "nav: no Untagged page");
+  // List's editor is a popover: Enter on it empty closes it and opens the next row's.
+  const cur = () => p.$eval(".lk-cursor .ttl", e => e.textContent).catch(() => null);
+  await key(p, "s"); const r0 = await cur();
+  await key(p, "t");
+  ok(!!(await p.$(".tagpop .tagger input")), "untagged: T opens List's tag popover");
+  await key(p, "Enter"); await p.waitForTimeout(250);
+  ok((await cur()) !== r0 && !!(await p.$(".tagpop .tagger input")), "untagged: Enter on it empty opens the next row's");
+  ok(await p.evaluate(() => !!document.activeElement.closest(".tagpop")), "untagged: with the keyboard in it");
   await p.close();
 }
 // Tags: the library, a tag's links, and the editor's palette

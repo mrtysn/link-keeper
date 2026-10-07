@@ -16,7 +16,6 @@
     ["cards.html", "Cards", "Judge what is undecided as a shuffled card deck"],
     ["stash-cards.html", "Explore", "Every link in a sidebar, the chosen one in full with a live preview"],
     ["tags.html", "Tags", "Every tag, each a collection: make, rename, merge and recolour them, and see their links"],
-    ["tag.html", "Untagged", "Tag the links that have no tag of their own, one after another"],
   ];
   const SOURCES = [
     ["tabs", "Stashed tabs", "Stashes made from your open tabs"],

@@ -571,7 +571,8 @@ const STASH_SETTINGS = { afterStash: "show", afterRestore: "keep", exclude: [] }
  * reopened from the toolbar at any time. */
 const listPage = () => browser.runtime.getURL("list.html");
 const stashView = () => `${listPage()}?group=stash`;
-const VIEWER_PAGES = ["list.html", "sessions.html", "cards.html", "stash-cards.html", "tag.html"];
+// tag.html was the Untagged page until 5.34; a tab of it still open is a viewer, not a link.
+const VIEWER_PAGES = ["list.html", "sessions.html", "cards.html", "stash-cards.html", "tags.html", "tag.html"];
 const isViewerPage = url => VIEWER_PAGES.some(p => !!url?.startsWith(browser.runtime.getURL(p)));
 const hostOfUrl = url => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } };
 /* Firefox stores a bookmark's URL in its parsed form — host lowercased, spaces and non-ASCII

@@ -418,6 +418,7 @@ LinkActions.setup({
   data: () => data,
   say,
   tags: () => openTags(),
+  tagNext: () => { later(); setTimeout(openTags, 260); },
   async after(cmd, target, res) {
     const wait = flying ? new Promise(ok => setTimeout(ok, 190)) : null;
     flying = false;

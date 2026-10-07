@@ -63,6 +63,7 @@ function applyFilter() {
   visible = deck.filter(c => {
     const v = c.link.verdict;
     if (filter === "open" && v) return false;
+    if (filter === "untagged" && c.link.tags.length) return false;
     if ((filter === "keep" || filter === "drop") && v !== filter) return false;
     return !term || `${titleOf(c) || ""} ${c.link.url} ${c.link.cap?.text || ""} ${shownTags(c.link).tags.join(" ")}`.toLowerCase().includes(term);
   });
@@ -79,10 +80,10 @@ function renderScope() {
   if (data.sources.has("list")) sel.append(el("option", { value: "list", textContent: `Reading list (${listN})` }));
   sel.value = [...sel.options].some(o => o.value === scope) ? scope : "all";
 
-  const counts = { all: deck.length, open: 0, keep: 0, drop: 0 };
+  const counts = { all: deck.length, open: 0, keep: 0, drop: 0, untagged: deck.filter(c => !c.link.tags.length).length };
   for (const c of deck) counts[verdictOf(c)]++;
   for (const chip of document.querySelectorAll(".chip")) {
-    const label = { all: "All", open: "Undecided", keep: "Kept", drop: "Dropped" }[chip.dataset.f];
+    const label = { all: "All", open: "Undecided", keep: "Kept", drop: "Dropped", untagged: "Untagged" }[chip.dataset.f];
     chip.replaceChildren(`${label} `, el("span", { className: "n", textContent: counts[chip.dataset.f] }));
     chip.setAttribute("aria-pressed", String(chip.dataset.f === filter));
   }
@@ -327,6 +328,7 @@ LinkActions.setup({
     else await load();
   },
   tags: () => document.querySelector("#detail .tagger input")?.focus(),
+  tagNext: () => { step(1); document.querySelector("#detail .tagger input")?.focus(); },
 });
 
 /* --- wiring --------------------------------------------------------------------- */

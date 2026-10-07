@@ -197,6 +197,7 @@ LinkActions.setup({
   data: () => data,
   say,
   tags: (t, anchor) => anchoredPopover(anchor, tagEditor(t.link, () => load())),
+  tagNext: () => { walk(1); onRow("tags")(); },
   async after(cmd, target, res) {
     if (res.ok === false) return;
     const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));

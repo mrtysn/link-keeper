@@ -241,6 +241,7 @@ function onRow(cmd) {
 LinkActions.setup({
   data: () => data,
   say,
+  tagNext: () => { walk(1); onRow("tags")(); },
   async after(cmd, target, res) {
     if (res.ok === false) return;
     const leaves = (((cmd === "keep" || cmd === "drop") && !res.cleared) || ["list", "move", "remove"].includes(cmd));

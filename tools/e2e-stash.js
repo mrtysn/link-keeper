@@ -166,7 +166,7 @@ await check("List, Cards and Explore load in Firefox with the bar, the sources a
   };
   const list = await open("list.html?group=stash");
   const d = list.doc;
-  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["List", "Cards", "Explore", "Tag"], "viewers in the bar");
+  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["List", "Cards", "Explore", "Tags"], "viewers in the bar");
   eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "List", "List is marked");
   eq([...d.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["true", "true", "true"], "every source on at first");
   yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
@@ -424,27 +424,26 @@ await check("data patches run once and are recorded; a fingerprint not found her
   eq((await browser.storage.local.get("dataPatches")).dataPatches["2026-09-29-mark-onetab-import"].at, rec.at, "stored");
 });
 
-await check("Tag page: untagged links with their editor open; Enter saves, Enter on empty moves to the next", async () => {
+await check("tagging one link after another in Explore: Untagged chip, Enter saves, Enter on empty moves to the next", async () => {
   await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
-  const tab = await browser.tabs.create({ url: browser.runtime.getURL("tag.html"), active: true });
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html"), active: true });
   await wait(1500);
-  const view = viewOf("tag.html"), d = view.document;
-  eq(d.querySelector('.app-pages a[aria-current="page"]')?.textContent, "Tag", "Tag is in the bar, marked");
+  const view = viewOf("stash-cards.html"), d = view.document;
+  d.querySelector('.chip[data-f="untagged"]').click();
+  await wait(200);
   const untagged = (await getLinks()).links.filter(l => !l.tags.length).length;
-  eq(d.querySelectorAll("ul.tagrows > li").length, Math.min(40, untagged), "one row per untagged link, 40 at a time");
-  const [first, second] = d.querySelectorAll("ul.tagrows > li");
-  const url0 = first.querySelector(".ttl").title;
-  const input = first.querySelector(".tagger input");
-  input.focus();
-  input.value = "tagged on the tag page";
-  input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  yes(d.querySelectorAll("#side li").length > 0 && untagged > 0, "the chip shows the untagged links");
+  const first = d.querySelector("#side button[aria-current]").dataset.key;
+  const input = () => d.querySelector("#detail .tagger input");
+  input().focus();
+  input().value = "tagged in explore";
+  input().dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   await wait(600);
-  yes((await getLinks()).links.find(l => l.url === url0)?.tags.includes("tagged on the tag page"), "saved for that link");
-  yes(first.classList.contains("done"), "the row stays, marked done");
-  eq(d.querySelectorAll("ul.tagrows > li").length, Math.min(40, untagged), "nothing jumped");
-  input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  await wait(100);
-  eq(d.activeElement, second.querySelector(".tagger input"), "Enter on the empty field moves to the next link");
+  yes((await getLinks()).links.some(l => l.tags.includes("tagged in explore")), "saved for that link");
+  input().dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await wait(300);
+  yes(d.querySelector("#side button[aria-current]").dataset.key !== first, "Enter on the empty field moves to the next link");
+  eq(d.activeElement, input(), "with its tag field open");
   await browser.tabs.remove(tab.id);
 });
 
