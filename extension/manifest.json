@@ -55,7 +55,7 @@
         "default": "Ctrl+Shift+K",
         "mac": "MacCtrl+Shift+K"
       },
-      "description": "Keep this page"
+      "description": "Capture this page's text, images and links"
     },
     "next-link": {
       "suggested_key": {

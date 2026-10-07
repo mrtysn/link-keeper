@@ -102,8 +102,8 @@ async function markCurrent(status) {
   }
 }
 
-/* Open the next pending link in the tab you are in. Opening counts as seen; capturing is
- * what upgrades it to kept. */
+/* Open the next pending link in the tab you are in. Opening or capturing it counts as seen;
+ * only a keep makes it kept. */
 async function openNext() {
   const items = await getItems();
   const target = [...items].sort(byNewest).find(i => i.status === "pending");
@@ -413,12 +413,12 @@ async function captureUrl(url, note = "") {
     const key = keyOf(record.url);
     await setCaptures([...captures.filter(r => keyOf(r.url) !== key), record]);
 
-    // It has been read, so it leaves the queue.
+    // It has been captured, so it leaves the queue as opened; keeping it is a separate press.
     const items = await getItems();
     const item = items.find(i => keyOf(i.url) === keyOf(url) || keyOf(i.url) === key);
-    if (item && item.status !== "kept") {
-      item.status = "kept";
-      item.kept_at = new Date().toISOString();
+    if (item && item.status === "pending") {
+      item.status = "seen";
+      item.seen_at = new Date().toISOString();
       await setItems(items);
     }
     return { ok: true, record };
@@ -471,12 +471,12 @@ async function captureActive(note = "", withShot = false) {
     await browser.storage.local.set({ pendingShot: null });
   }
 
-  // A capture arriving while a worklist item is open is that item's verdict. The URL is
-  // matched loosely because x.com rewrites /i/status/<id> to /<handle>/status/<id> on load.
+  // A capture arriving while a worklist item is open takes it off the queue as opened, not kept.
+  // The URL is matched loosely because x.com rewrites /i/status/<id> to /<handle>/status/<id> on load.
   const current = await getCurrent();
   if (current && (keyOf(record.url) === current.key || keyOf(tab.url || "") === current.key)) {
     record.from_worklist = current.url;
-    await markCurrent("kept");
+    await markCurrent("seen");
   }
 
   const captures = await getCaptures();
@@ -739,6 +739,28 @@ const DATA_PATCHES = [
         }
       });
       return { marked: hits.length };
+    },
+  },
+  {
+    // Until 5.32 capturing a page marked its reading-list entry kept. A keep pressed on a captured
+    // link also writes the verdict onto the capture, so an entry kept while its capture holds no
+    // keep was kept only by capturing; it goes back to opened. Entries with no capture are untouched.
+    id: "2026-10-07-capture-is-not-keep",
+    async run() {
+      const caps = new Map((await getCaptures()).map(c => [keyOf(c.url), c]));
+      const items = await getItems();
+      let reset = 0;
+      for (const i of items) {
+        const c = caps.get(keyOf(i.url));
+        if (i.status === "kept" && c && c.verdict !== "keep") {
+          i.status = "seen";
+          i.seen_at ||= i.kept_at || new Date().toISOString();
+          delete i.kept_at;
+          reset++;
+        }
+      }
+      if (reset) await setItems(items);
+      return { reset };
     },
   },
 ];
@@ -1723,15 +1745,15 @@ browser.runtime.onMessage.addListener(async msg => {
       }
       await setCaptures(captures);
 
-      // A capture means the link has been read, so the worklist should stop offering it. Without
-      // this, Next walks you to links you already hold the full text for.
+      // A captured link leaves the worklist as opened, so Next stops walking you to links you
+      // already hold the full text for. Keeping it is still yours to do.
       const items = await getItems();
       const haveCapture = new Set(captures.map(c => keyOf(c.url)));
       let marked = 0;
       for (const item of items) {
         if (item.status === "pending" && haveCapture.has(keyOf(item.url))) {
-          item.status = "kept";
-          item.kept_at = new Date().toISOString();
+          item.status = "seen";
+          item.seen_at = new Date().toISOString();
           marked++;
         }
       }

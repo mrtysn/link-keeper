@@ -40,20 +40,20 @@ function labelOf(link) {
   return cap.title || cap.handle || link.title || null;
 }
 
-/* Whether its page was read in, shown the same on every page: a "read" badge with the date on a
+/* Whether its page was captured, shown the same on every page: a "captured" badge with the date on a
  * row or card, a page icon beside the title in a sidebar. Only web pages can be read, so only they get "not
  * read". */
 const readAt = link => link.cap?.captured_at || null;
 const dayOf = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { dateStyle: "medium" }); };
 function readBadge(link) {
   const at = readAt(link);
-  if (at) return el("span", { className: "lk-read", textContent: "read", title: `Read ${whenOf(at)}. Its text and images are stored.` });
-  if (link.cap) return el("span", { className: "lk-read", textContent: "read", title: "Its text and images are stored" });
-  return isWeb(link.url) ? el("span", { className: "lk-unread", textContent: "not read", title: "Not read yet. Press 3 to save its text and images." }) : null;
+  if (at) return el("span", { className: "lk-read", textContent: "captured", title: `Captured ${whenOf(at)}: its text, images and links are saved` });
+  if (link.cap) return el("span", { className: "lk-read", textContent: "captured", title: "Its text, images and links are saved" });
+  return isWeb(link.url) ? el("span", { className: "lk-unread", textContent: "not captured", title: "Press 3 to capture its text, images and links" }) : null;
 }
 function readMark(link) {
-  const span = el("span", { className: `rd${link.cap ? " on" : ""}`, title: link.cap ? (readAt(link) ? `Read ${dayOf(readAt(link))}` : "Read") : "" });
-  if (link.cap) span.setAttribute("aria-label", "read");
+  const span = el("span", { className: `rd${link.cap ? " on" : ""}`, title: link.cap ? (readAt(link) ? `Captured ${dayOf(readAt(link))}` : "Captured") : "" });
+  if (link.cap) span.setAttribute("aria-label", "captured");
   return span;
 }
 /* A verdict as a badge, for pages whose rows have no mark of their own. */

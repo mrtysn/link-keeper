@@ -230,8 +230,8 @@ function knownBox(card) {
   }
 
   const facts = el("ul", { className: "facts" });
-  if (c?.captured_at) facts.append(el("li", { textContent: `Read ${whenOf(c.captured_at)}` }));
-  else if (isWeb(link.url)) facts.append(el("li", { textContent: "Not read yet. Read saves its text and images." }));
+  if (c?.captured_at) facts.append(el("li", { textContent: `Captured ${whenOf(c.captured_at)}` }));
+  else if (isWeb(link.url)) facts.append(el("li", { textContent: "Not captured yet. Capture saves its text and images." }));
   if (link.list) facts.append(el("li", { textContent: `On the reading list: ${LIST_STATUS[link.list.status] || link.list.status}` }));
   for (const copy of link.copies) {
     if (stash && copy.stash === stash.id) continue;

@@ -98,14 +98,14 @@ for (const b of document.querySelectorAll("#stash-menu [data-scope]")) {
 }
 
 async function keep(withShot = false) {
-  say(withShot ? "reading page, then taking the screenshot…" : "reading page…");
+  say(withShot ? "capturing the page, then the screenshot…" : "capturing the page…");
   const res = await send({ type: "capture-active", note: $("note").value.trim(), withShot });
   if (res?.ok) {
     const r = res.record;
     const inner = r.links?.length ? ` (+${r.links.length} link${r.links.length > 1 ? "s" : ""})` : "";
     // Truncate the title, never the diagnostic — the reason a screenshot failed is the whole
     // point of showing anything at all.
-    const head = `kept: ${label({ title: r.title, handle: r.author?.handle, url: r.url, text: r.text })}${inner}`.slice(0, 140);
+    const head = `captured: ${label({ title: r.title, handle: r.author?.handle, url: r.url, text: r.text })}${inner}`.slice(0, 140);
     if (r.screenshot) {
       const s = r.screenshot;
       say(`${head}\npng ${s.width}×${s.height}${s.tiles ? ` from ${s.tiles} tiles` : ""} → ${s.filename}`, "ok");

@@ -869,6 +869,34 @@ await check("tag library: presets first, every tag in use joins it, made, recolo
   assert.ok(!lib().includes("to-read"), "and the presets are not written back");
 });
 
+await check("capturing a link is not keeping it: the queue moves on, every check mark clears, old data is put right", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://s.example/1" }] }];
+  store.items = [{ url: "https://q.example/1", status: "pending" }];
+  await load(browser);
+  const links = async () => plain(await browser.handle({ type: "links" })).links;
+  const by = (l, u) => l.find(x => x.url === u);
+  await browser.handle({ type: "import-captures", records: [{ url: "https://q.example/1", text: "x" }, { url: "https://s.example/1", text: "y" }] });
+  let l = await links();
+  assert.equal(by(l, "https://q.example/1").list.status, "seen", "a captured list entry leaves the queue as opened");
+  assert.equal(by(l, "https://q.example/1").verdict, null, "and is not kept");
+  assert.equal(by(l, "https://s.example/1").verdict, null, "a captured stashed link is not kept either");
+  await browser.handle({ type: "judge-link", url: "https://s.example/1", verdict: "keep" });
+  assert.equal(by(await links(), "https://s.example/1").verdict, "keep");
+  await browser.handle({ type: "judge-link", url: "https://s.example/1", verdict: null });
+  assert.equal(by(await links(), "https://s.example/1").verdict, null, "and a keep on it clears");
+
+  // Before 5.32: kept by capturing alone goes back; a pressed keep, or a keep with no capture, stays.
+  const old = makeBrowser([]);
+  old.store.items = [{ url: "https://a.example/", status: "kept", kept_at: "2026-09-01T00:00:00Z" },
+    { url: "https://b.example/", status: "kept" }, { url: "https://c.example/", status: "kept" }];
+  old.store.captures = [{ url: "https://a.example/", text: "x" }, { url: "https://b.example/", text: "y", verdict: "keep" }];
+  const bg = await load(old.browser);
+  await bg.applyDataPatches();
+  assert.deepEqual(old.store.items.map(i => i.status), ["seen", "kept", "kept"]);
+  assert.equal(old.store.dataPatches["2026-10-07-capture-is-not-keep"].reset, 1);
+});
+
 await check("tags travel in exports and come back with imports", async () => {
   const { browser, store } = makeBrowser([]);
   store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://t.example/1" }] }];

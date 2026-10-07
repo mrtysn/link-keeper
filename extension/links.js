@@ -135,7 +135,8 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     if (listed.has(keyOf(c.url))) continue;
     const link = linkFor(c.url, c.title);
     if (link.list) continue;
-    link.list = { status: "kept", added_at: c.captured_at || null, saved_at: isoDate(c.posted), note: c.note || null, current: false, loose: true };
+    // Captured, never queued: done with as a queue item, but not judged — keep is a separate press.
+    link.list = { status: "seen", added_at: c.captured_at || null, saved_at: isoDate(c.posted), note: c.note || null, current: false, loose: true };
     addSource(link, "list");
   }
 

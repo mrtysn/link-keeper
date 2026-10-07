@@ -74,13 +74,13 @@ const LinkActions = (() => {
     async drop(t) { return judge(t, "drop"); },
 
     async read(t) {
-      if (!isWeb(t.link.url)) return { ok: false, say: "Only web pages can be read" };
+      if (!isWeb(t.link.url)) return { ok: false, say: "Only web pages can be captured" };
       const res = await readLink(t.link.url);
-      if (!res?.ok) return fail(res, "Unable to read it");
+      if (!res?.ok) return fail(res, "Unable to capture it");
       const r = res.record;
       const extra = [r.links?.length ? plural(r.links.length, "link") : null,
         r.reply_links?.length ? `${r.reply_links.length} from replies` : null].filter(Boolean).join(", ");
-      return { ok: true, say: `Read ${r.title || hostOf(t.link.url)}${extra ? ` (${extra})` : ""}` };
+      return { ok: true, say: `Captured ${r.title || hostOf(t.link.url)}${extra ? ` (${extra})` : ""}` };
     },
 
     async list(t) {
@@ -269,7 +269,7 @@ const LinkActions = (() => {
     const out = el("div", { className: `lk-bar${compact ? " compact" : ""}` }, open, keep, drop);
 
     const rest = [
-      web && { cmd: "read", text: link.cap ? "Re-read" : "Read", title: "Load it in a background tab and save its text and images" },
+      web && { cmd: "read", text: link.cap ? "Capture again" : "Capture", title: "Load it in a background tab and save its text, images and links" },
       { cmd: "tags", text: "Tags", title: "Edit its tags", picker: a => tags(t, a) },
       canList(t) && { cmd: "list", text: "To list", title: "Move it out of its stash onto the reading list" },
       canMove(t) && { cmd: "move", text: "Move…", title: "Move it to another stash", picker: a => moveMenu(t, a) },

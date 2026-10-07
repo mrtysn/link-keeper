@@ -32,7 +32,7 @@ const LinkKeys = (() => {
     { cmd: "group-next", show: ["D"], does: "next group: stash, section or tag" },
     { cmd: "drop", show: ["Q", "←"], does: "drop, then next" },
     { cmd: "keep", show: ["E", "→"], does: "keep, then next" },
-    { cmd: "read", show: ["3"], does: "read page" },
+    { cmd: "read", show: ["3"], does: "capture its text and images" },
     { cmd: "open", show: ["4"], does: "open" },
     { cmd: "open-other", show: ["⇧4"], does: "open, other restore" },
     { cmd: "tags", show: ["T"], does: "tags" },
@@ -122,7 +122,7 @@ const LinkKeys = (() => {
    * down sinks, lit, until it is let go. ? shows and hides it; the choice is remembered. */
   const SHORT = {
     prev: "up", next: "down", "group-prev": "◂ group", "group-next": "group ▸", drop: "drop", keep: "keep",
-    read: "read", open: "open", "open-other": "open other", tags: "tags", list: "to list", move: "move",
+    read: "capture", open: "open", "open-other": "open other", tags: "tags", list: "to list", move: "move",
     remove: "remove", undo: "undo", preview: "preview", filter: "filter", help: "keys", escape: "back",
   };
   const KIND = {

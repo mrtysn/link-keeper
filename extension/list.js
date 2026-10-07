@@ -1092,7 +1092,7 @@ function download(name, type, body) {
         items.map(r => JSON.stringify(r).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")).join("\n") + "\n");
       say(`Exported ${items.length === 1 ? "1 entry" : `${items.length} entries`} to Downloads`);
     } },
-    { text: "Captures (JSONL)", title: "Every page read, one JSON object per line", run: async () => {
+    { text: "Captures (JSONL)", title: "Every captured page, one JSON object per line", run: async () => {
       const { captures } = await send({ type: "export" });
       if (!captures.length) return say("Nothing captured yet");
       download("link-captures.jsonl", "application/x-ndjson",

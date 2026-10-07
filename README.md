@@ -90,7 +90,7 @@ Three keys, and you never leave the tab you are in.
 | Key | What it does |
 |---|---|
 | `Ctrl+Shift+J` | load the next link from the list in the current tab |
-| `Ctrl+Shift+K` | keep this page — read it and store the capture |
+| `Ctrl+Shift+K` | capture this page: save its text, images and links |
 | `Ctrl+Shift+U` | add the page you are on to the list |
 | `Ctrl+Shift+X` | skip this one — an explicit rejection — and advance |
 | `Ctrl+Shift+S` | stash tabs — see [Stashing tabs](#stashing-tabs) (`Alt+Shift+S` off macOS, where Firefox's screenshot owns the other) |
@@ -99,23 +99,24 @@ Every one of these is also a **popup button** and a **right-click menu** item, s
 is optional. Right-clicking a *link* offers "Add this link to Link Keeper" — queueing something
 without visiting it, which the keyboard cannot do.
 
-So the loop is: `Ctrl+Shift+J`, read it, `Ctrl+Shift+K` if it is worth keeping, `Ctrl+Shift+J`
-again. Stop whenever. The list remembers where you were, across restarts.
+So the loop is: `Ctrl+Shift+J`, read it, `Ctrl+Shift+K` to capture it if it is worth coming back
+to, `Ctrl+Shift+J` again. Stop whenever. The list remembers where you were, across restarts.
 
 On macOS these are bound with `MacCtrl`, so they are the literal **Control** key — not Command.
 `"Ctrl"` in a WebExtension `suggested_key` means Command on macOS, and `Cmd+Shift+J` is
 Firefox's own Browser Console, so Control is both freer and less surprising. Rebind any of them
 in `about:addons` → gear → *Manage Extension Shortcuts*.
 
-Loading a link marks it **seen**. Keeping it marks it **kept**. **Skip** marks it `skipped`, which
-is a deliberate rejection rather than "opened it, moved on" — the list filters the two separately.
+Loading or capturing a link marks it **seen**. Only a keep marks it **kept**: capturing saves the
+page, it does not judge it. **Skip** marks it `skipped`, which is a deliberate rejection rather than
+"opened it, moved on" — the list filters the two separately.
 
 The **popup** is a way in, not a workspace. On top, the three viewers — **List**, **Cards** and
 **Explore** — each with a live count (links on show, left to judge, stashes); under them, a toggle per
 source, the same as the pages' top bar, with how many links each holds. Then **This tab**: **Stash**
-(its ▾ holds the scopes), **Keep** (its ▾ keeps with a full-page screenshot, or with a note) and
+(its ▾ holds the scopes), **Capture** (its ▾ captures with a full-page screenshot, or with a note) and
 **+ List**. Last, the reading list's next link with **Next** and **Skip**. One action is filled at a
-time: **Keep** while a list item is open in the tab, **Next** otherwise. The viewer buttons switch to
+time: **Capture** while a list item is open in the tab, **Next** otherwise. The viewer buttons switch to
 the viewer's tab if one is open, rather than opening another. Adding links in bulk, exports and
 settings live on the List page.
 
@@ -184,7 +185,7 @@ judge, so walking never judges. The number row works as reddit's keyboard naviga
 | `Q` `E` (`←` `→`) | drop / keep, then on to the next link; again on a judged link clears it |
 | `4` | open — a stashed tab reopens through its stash, keeping its container and marking it restored |
 | `⇧4` | open with the other stash effect: taken out of the stash if the setting keeps it, and the reverse |
-| `3` | read it in: load it in a background tab and extract its text and images |
+| `3` | capture: load it in a background tab and save its text, images and links |
 | `T` `L` `M` | tags · to the reading list · move to another stash (a field filters the stashes) |
 | `⌘⌫` | remove from its stash, or from the reading list |
 | `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
@@ -205,8 +206,8 @@ List (its links and verdicts), and a source badge (where the link sits in the re
 stash). Escape, a click elsewhere or leaving closes it. One module draws them all (`peek.js`): a page
 marks an element with `Peek.mark(node, kind, id)`, and a new kind is one `Peek.kind()` renderer.
 
-Whether a link was read in shows the same way everywhere: a **read** badge (its date on hover) or a
-dashed **not read** on a row, card or Explore's header, and a page icon beside the title in the
+Whether a link was captured shows the same way everywhere: a **captured** badge (its date on hover)
+or a dashed **not captured** on a row, card or Explore's header, and a page icon beside the title in the
 Cards and Explore sidebars. Tag rows and cards also badge a verdict, and a card says when its tab was
 last restored.
 
@@ -221,8 +222,8 @@ right, or a drag right) keeps, `Q` drops, `S` defers to the next session (Later)
 a card. The sidebar lists every stash on show and the reading list, the card's row marked as the
 deck moves; `A` `D` deal the first link of the previous or next stash, and a click deals any row.
 
-A card shows what is known. A page that was read (`Ctrl+Shift+K`, or **Read** on List or Explore)
-carries its headline, text, embedded links, images and screenshot preview; a stashed tab never read
+A card shows what is known. A captured page (`Ctrl+Shift+K`, or **Capture** on any page, key `3`)
+carries its headline, text, embedded links, images and screenshot preview; a stashed tab never captured
 shows only its tab title and address — `x.com/i/status/2086188444317819246` tells you nothing, so
 reading first makes a card judgeable.
 
@@ -504,8 +505,8 @@ thing scraping does that fetching cannot.
 A reply from the post's own author is marked `self` and sorted first, because that is where an author
 parks the link. In the list and the deck those chips are outlined in green and prefixed `↩`.
 
-x.com renders replies lazily, so a plain **Keep** sees only what has scrolled into view. **Keep +
-shot** walks the entire page to stitch its screenshot and therefore sees far more of them — worth
+x.com renders replies lazily, so a plain **Capture** sees only what has scrolled into view. **Capture
+with a screenshot** walks the entire page to stitch its screenshot and therefore sees far more of them — worth
 using on anything flagged `needs_replies`.
 
 ### Getting the data out
