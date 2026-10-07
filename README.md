@@ -202,6 +202,15 @@ is kept as data when it can be read, else as its address, which the page shows l
 site with none saved yet shows a drawn icon: six common sites have one in `icons.js`, the rest a
 letter.
 
+**Filtered out.** Some pages are tools, not reading: an inbox, a home feed, Drive's home, your own
+profile. They are still stashed with the rest, but a rule in **Settings → Filtered out** tags them
+**filtered-out**, and Links and Cards keep them out of the pile and its counts; the **Filtered out**
+chip on Links shows them again, and Tags lists them like any tag. A rule is one site's main page —
+`reddit.com` is Reddit's front page and never a post; `*` stands for anything, as in
+`mail.google.com/mail/u/*/#inbox`, which is the inbox but not an email under it. Saving applies the
+rules to everything held, and new links are matched as they arrive; a rule taken away untags what
+it tagged. Right-click a page → **Filter out this page** adds it.
+
 **Hover previews.** Anything that names something held elsewhere previews it after a moment's
 hover, in a card you can move into and click: a stash (its name, when it was stashed, its tabs, and
 where this link sits among them), the other stashes holding a link, a tag (its newest links), a
@@ -315,7 +324,9 @@ by default with the pane, and then hovering a title previews the link), and **St
 hides the buttons on stash headings. `?stash=<id>` opens one stash alone, with an **Only … ×**
 banner to show everything again; a stash's hover preview links there.
 
-The **live preview** (`P`, inside the detail pane) shows the page itself, half a second after you land on a tab. Most sites
+The **live preview**, inside the detail pane, shows the page itself, half a second after you land on a
+link: **Off** as each link opens, **This link** (`P`) for the link you are on only, or **Keep on** for
+every link until turned off — the one setting remembered. Most sites
 forbid being framed, so for frames opened from Link Keeper's own pages only, a `declarativeNetRequest`
 rule removes `X-Frame-Options` and the `Content-Security-Policy` header from the response (all-sites
 access is asked on the first preview). Removing them through `webRequest` does nothing: Firefox

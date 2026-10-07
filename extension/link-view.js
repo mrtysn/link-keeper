@@ -67,7 +67,17 @@ const SOURCE_NAMES = { tabs: "Stashed", import: "Imported", list: "Reading list"
 
 /* The dataset, cut down to the chosen sources: a link shows if any source holding it is chosen, a
  * stash if its own source is. byKey finds a link from a stash tab's key. */
-async function loadLinks() {
+/* Links tagged filtered-out — a site's main page, by the rules in Settings (background.js) — stay
+ * out of the main pile unless the page is asked to show them. The choice is per browser. */
+const FILTER_TAG = "filtered-out";
+const FilteredOut = {
+  shown() { try { return localStorage.getItem("showFiltered") === "1"; } catch (e) { return false; } },
+  set(on) { try { localStorage.setItem("showFiltered", on ? "1" : "0"); } catch (e) { /* storage blocked */ } },
+};
+
+/* keepFiltered: the Tags page shows the filtered-out tag's links like any tag's. hidden is the keys
+ * left out, for pages that draw from a stash's tabs directly; count is how many links were. */
+async function loadLinks({ keepFiltered = false } = {}) {
   const [data, chosen, { tagDefs, favicons }] = await Promise.all([send({ type: "links" }), window.LinkSources.ready, browser.storage.local.get(["tagDefs", "favicons"])]);
   setTagLibrary(tagDefs);
   SITE_ICONS.clear();
@@ -77,10 +87,15 @@ async function loadLinks() {
   for (const l of data.links) for (const s of l.sources) counts[s]++;
   window.LinkSources.setCounts(counts);
   const on = new Set(sources);
-  const links = data.links.filter(l => l.sources.some(s => on.has(s)));
+  const onShow = data.links.filter(l => l.sources.some(s => on.has(s)));
+  const filtered = onShow.filter(l => l.tags.includes(FILTER_TAG));
+  const hide = !keepFiltered && !FilteredOut.shown();
+  const hidden = new Set(hide ? filtered.map(l => l.key) : []);
+  const links = hide ? onShow.filter(l => !hidden.has(l.key)) : onShow;
   const stashes = data.stashes.filter(s => on.has(s.source));
   setTagVocab(data.links);
-  return { links, stashes, all: data, sources: on, byKey: new Map(data.links.map(l => [l.key, l])) };
+  return { links, stashes, all: data, sources: on, byKey: new Map(data.links.map(l => [l.key, l])),
+    filtered: { count: filtered.length, hidden } };
 }
 
 /* Stashes are bookmarks, so a change can come from Firefox's own library as well as from here; a

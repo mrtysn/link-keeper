@@ -158,6 +158,23 @@
             return joinLinks({ items, captures, sessions, tags: mockTags,
               currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
           }
+          // Filtered out, as the background keeps it: rules on a page's address, tagging what matches.
+          case "filter-rules": return { rules: store.filterRules || [] };
+          case "set-filter-rules": {
+            const form = u => { try { const x = new URL(u); return `${x.hostname.replace(/^www\./, "")}${x.hash ? x.pathname : x.pathname.replace(/\/+$/, "")}${x.hash}`; } catch (e) { return ""; } };
+            const rules = (msg.rules || []).map(r => r.trim().replace(/^https?:\/\//, "").replace(/^www\./, "")).filter(Boolean);
+            const tests = rules.map(r => new RegExp(`^${r.split("*").map(s => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`));
+            const { links } = await window.browser.runtime.sendMessage({ type: "links" });
+            let matched = 0;
+            for (const l of links) {
+              const hit = tests.some(t => t.test(form(l.url)));
+              const tags = (mockTags[l.key] || []).filter(t => t !== "filtered-out");
+              if (hit) { matched++; mockTags[l.key] = [...tags, "filtered-out"]; } else if (tags.length) mockTags[l.key] = tags; else delete mockTags[l.key];
+            }
+            store.filterRules = rules;
+            await saveTags();
+            return { ok: true, matched, added: matched, removed: 0, rules };
+          }
           // The popup's page: the link as the pages see it, and the stashes holding it.
           case "page-info": {
             const { links, stashes } = await window.browser.runtime.sendMessage({ type: "links" });

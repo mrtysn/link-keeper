@@ -338,6 +338,9 @@
   #detail .tagrow-label { font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
   #detail .tagrow .tagger { flex: 1 1 20rem; }
   #detail .pvbar label { display: inline-flex; align-items: center; gap: 6px; font-size: .875rem; cursor: pointer; }
+  #detail .pvbar { display: flex; align-items: center; gap: 8px; }
+  .pvseg { display: flex; gap: 4px; }
+  .pvseg .chip { min-height: 26px; padding: 2px 10px; font-size: .8125rem; }
   #pv-frame { display: block; width: 100%; height: 70vh; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
   #detail .pvnote { margin: 8px 0 0; color: var(--dim); font-size: .8125rem; }
   #detail .dempty { margin: 15vh auto; max-width: 24rem; text-align: center; color: var(--dim); }
@@ -376,6 +379,7 @@
     <div class="seg" role="group" aria-label="Which links">
       <button class="chip" id="f-all" aria-pressed="true">All</button>
       <button class="chip" id="f-uncaptured" aria-pressed="false" title="Web pages whose text is not saved yet">Not captured</button>
+      <button class="chip" id="t-filtered" aria-pressed="false" title="Sites' main pages, filtered out by the rules in Settings: hidden unless this is on">Filtered out</button>
     </div>
     <label class="view">Group by
       <select id="groupby">
@@ -445,11 +449,17 @@
         <legend>Screenshots</legend>
         <label class="field"><span>Folder inside Downloads</span>
           <input id="folder" type="text" autocomplete="off" spellcheck="false"></label>
-        <p class="hint">Keep with a screenshot saves to <code>Downloads/<span id="folder-echo">link-keeper</span>/</code>; Firefox extensions can only save inside Downloads; use a symlink to point it elsewhere.</p>
+        <p class="hint">Capture with a screenshot saves to <code>Downloads/<span id="folder-echo">link-keeper</span>/</code>; Firefox extensions can only save inside Downloads; use a symlink to point it elsewhere.</p>
       </fieldset>
       <fieldset>
         <legend>Tags</legend>
         <ul id="tag-list" class="exclude tag-list"></ul>
+      </fieldset>
+      <fieldset>
+        <legend>Filtered out <span class="hint">(still stashed, kept out of the main pile)</span></legend>
+        <p class="hint">One site's main page per line, without https:// — <code>reddit.com</code> is Reddit's front page only, never a post; <code>*</code> stands for anything, as in <code>mail.google.com/mail/u/*/#inbox</code>. Right-click a page → <i>Filter out this page</i> adds it. Matching links get the <b>filtered-out</b> tag.</p>
+        <textarea id="filter-rules" rows="7" spellcheck="false" aria-label="Pages to filter out, one per line"></textarea>
+        <div class="row"><button type="button" class="small" id="filter-save">Save and apply</button> <span id="filter-msg" class="hint" role="status"></span></div>
       </fieldset>
       <fieldset>
         <legend>Never stash these sites</legend>

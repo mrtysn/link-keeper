@@ -81,7 +81,7 @@ async function load() {
   const [d, { settings: st }, stored] = await Promise.all([loadLinks(), send({ type: "stash-settings" }), browser.storage.local.get(PREVIEW_KEY)]);
   data = d;
   settings = st;
-  previewOn = !!stored[PREVIEW_KEY];
+  previewMode = stored[PREVIEW_KEY] ? "keep" : previewMode === "keep" ? "off" : previewMode;
   render();
 }
 
@@ -270,7 +270,7 @@ LinkKeys.listen({
   read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
   tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
-  detail: () => togglePane(), preview: () => { if (!pane) togglePane(true); setPreview(!previewOn); },
+  detail: () => togglePane(), preview: () => { if (!pane) togglePane(true); setPreview(previewShowing(detailLink()) ? "off" : "this"); },
   escape: () => { document.querySelector(".tagpop")?.remove(); },
 }, { labels: { "group-prev": "◂ section", "group-next": "section ▸" } });
 $("keys").append(...LinkKeys.hint(["prev", "next", "group-next", "tags", "read", "remove", "open", "detail"]));
@@ -736,6 +736,9 @@ function renderRows() {
   $("bar-captured").style.width = total ? `${counts.captured / total * 100}%` : "0";
   const names = { all: "All", uncaptured: "Not captured" };
   for (const f of FILTERS) $(`f-${f}`).replaceChildren(`${names[f]} `, el("span", { className: "n", textContent: counts[f] }));
+  // Filtered out: a toggle beside the filters, counted whether shown or not.
+  $("t-filtered").replaceChildren("Filtered out ", el("span", { className: "n", textContent: data.filtered?.count || 0 }));
+  $("t-filtered").setAttribute("aria-pressed", String(FilteredOut.shown()));
   $("groupby").value = group;
 
   const out = $("out");
@@ -776,7 +779,12 @@ function renderRows() {
 const PREVIEW_KEY = "stashPreview";
 const ALL_SITES = { origins: ["*://*/*"] };
 const DWELL_MS = 500;
-let previewOn = false;
+/* The live preview: off (each link opens without it), this link (shown for the link you are on,
+ * off again on the next), or keep on (every link, remembered). Only keep on is stored. */
+let previewMode = "off";
+let previewFor = null;   // the link "this link" was turned on for
+const detailLink = () => rowsOnPage[cursorAt()]?.target.link || null;
+const previewShowing = link => previewMode === "keep" || (previewMode === "this" && !!link && previewFor === link.key);
 let previewTimer = null;
 let detailFor = null;
 
@@ -879,11 +887,20 @@ function knownBox(row) {
 function previewBox(link, keep) {
   const url = link.url;
   const box = el("section", { className: "box" }, el("h3", { textContent: "Live preview" }));
-  const toggle = el("input", { type: "checkbox", checked: previewOn });
-  toggle.onchange = () => setPreview(toggle.checked);
-  box.append(el("div", { className: "pvbar" }, el("label", {}, toggle, "Show the page here ", el("kbd", { textContent: "P" }))));
-  if (!previewOn) {
-    box.append(el("p", { className: "pvnote", textContent: "Off. Each preview loads the real page. Turn it on to load a page half a second after you select its link." }));
+  const showing = previewShowing(link);
+  const now = previewMode === "keep" ? "keep" : showing ? "this" : "off";
+  const seg = el("div", { className: "pvseg", role: "group" });
+  seg.setAttribute("aria-label", "Live preview");
+  for (const [mode, text, title] of [["off", "Off", "No preview"], ["this", "This link", "Show this link's page; the next link opens without it (P)"],
+    ["keep", "Keep on", "Show every link's page as you select it, until you turn it off"]]) {
+    const b = el("button", { type: "button", className: "chip small", textContent: text, title });
+    b.setAttribute("aria-pressed", String(mode === now));
+    b.onclick = () => setPreview(mode);
+    seg.append(b);
+  }
+  box.append(el("div", { className: "pvbar" }, seg, el("kbd", { textContent: "P" })));
+  if (!showing) {
+    box.append(el("p", { className: "pvnote", textContent: "Each preview loads the real page. This link shows it for this link only; Keep on shows it for every link until you turn it off." }));
     return box;
   }
   if (!isWeb(url)) {
@@ -902,14 +919,15 @@ function previewBox(link, keep) {
   return box;
 }
 
-async function setPreview(on) {
-  if (on && !(await browser.permissions.contains(ALL_SITES))) {
+async function setPreview(mode) {
+  if (mode !== "off" && !(await browser.permissions.contains(ALL_SITES))) {
     // Asked here, from the click: a permission prompt must come from a user gesture.
     const granted = await browser.permissions.request(ALL_SITES).catch(() => false);
-    if (!granted) { say("Previews need access to all sites; nothing changed"); on = false; }
+    if (!granted) { say("Previews need access to all sites; nothing changed"); mode = "off"; }
   }
-  previewOn = on;
-  await browser.storage.local.set({ [PREVIEW_KEY]: on });
+  previewMode = mode;
+  previewFor = mode === "this" ? detailLink()?.key || null : null;
+  await browser.storage.local.set({ [PREVIEW_KEY]: mode === "keep" });
   detailFor = null;
   renderDetail();
 }
@@ -968,6 +986,21 @@ function renderSettings() {
   }
 }
 
+$("t-filtered").onclick = () => { FilteredOut.set(!FilteredOut.shown()); load(); };
+
+/* The filtered-out rules: read when Settings opens, saved and applied to every link held. */
+async function loadFilterRules() {
+  const { rules } = await send({ type: "filter-rules" });
+  $("filter-rules").value = (rules || []).join("\n");
+}
+$("filter-save").onclick = async () => {
+  $("filter-msg").textContent = "applying…";
+  const res = await send({ type: "set-filter-rules", rules: $("filter-rules").value.split("\n") });
+  $("filter-rules").value = (res.rules || []).join("\n");
+  $("filter-msg").textContent = res.ok ? `${plural(res.matched, "link")} filtered out${res.added ? `, ${res.added} new` : ""}${res.removed ? `, ${res.removed} back in the pile` : ""}` : (res.error || "not saved");
+  load();
+};
+
 for (const r of document.querySelectorAll('input[name="after-stash"]')) r.onchange = () => act({ type: "set-stash-settings", afterStash: r.value });
 for (const r of document.querySelectorAll('input[name="after-restore"]')) r.onchange = () => act({ type: "set-stash-settings", afterRestore: r.value });
 $("exclude-form").onsubmit = e => {
@@ -983,6 +1016,7 @@ $("exclude-form").onsubmit = e => {
 function openPanel(which) {
   for (const id of ["settings-panel", "import-panel", "dups-panel"]) $(id).hidden = id !== which || !$(id).hidden;
   $("settings").setAttribute("aria-expanded", String(!$("settings-panel").hidden));
+  if (!$("settings-panel").hidden) loadFilterRules();
   $("import").setAttribute("aria-expanded", String(!$("import-panel").hidden));
   $("dups").setAttribute("aria-expanded", String(!$("dups-panel").hidden));
   if (!$("import-panel").hidden) $("import-text").focus();

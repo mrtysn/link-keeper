@@ -229,6 +229,40 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "palette: no errors " + p.errs.join("; "));
   await p.close();
 }
+// The live preview: off by default, this link only, or kept on
+{
+  const p = await page("list.html?pane=1");
+  const mode = () => p.$eval(".pvseg [aria-pressed=true]", e => e.textContent);
+  await key(p, "s"); await p.waitForTimeout(200);
+  ok(await mode() === "Off", "preview: off when a link opens");
+  await key(p, "p"); await p.waitForTimeout(300);
+  ok(await mode() === "This link" && !!(await p.$("#pv-frame")), "preview: P shows this link's page");
+  await key(p, "s"); await p.waitForTimeout(300);
+  ok(await mode() === "Off" && !(await p.$("#pv-frame")), "preview: the next link opens without it");
+  await p.click('.pvseg button:nth-child(3)'); await p.waitForTimeout(300);
+  await key(p, "s"); await p.waitForTimeout(300);
+  ok(await mode() === "Keep on" && !!(await p.$("#pv-frame")), "preview: Keep on stays on from link to link");
+  // The preview's storage lives in the page, so check what is stored rather than reloading.
+  ok(await p.evaluate(async () => (await browser.storage.local.get("stashPreview")).stashPreview) === true, "preview: Keep on is remembered");
+  await p.click('.pvseg button:nth-child(1)'); await p.waitForTimeout(200);
+  ok(!p.errs.length, "preview: no errors " + p.errs.join("; "));
+  await p.close();
+}
+// Filtered out: a rule hides a site's main page from the pile; the chip shows it again
+{
+  const p = await page("list.html");
+  const rows = () => p.$$eval(".rows > li", l => l.length);
+  const n0 = await rows();
+  await p.evaluate(() => browser.runtime.sendMessage({ type: "set-filter-rules", rules: ["news.ycombinator.com/item"] }));
+  await p.waitForTimeout(800);   // the page reloads itself on the tag change
+  ok(await rows() === n0 - 1, `filtered: the matching link leaves the pile (${n0} → ${await rows()})`);
+  ok(/Filtered out\s*1/.test(await p.$eval("#t-filtered", e => e.textContent)), "filtered: the chip counts it");
+  await p.click("#t-filtered"); await p.waitForTimeout(400);
+  ok(await rows() === n0, "filtered: the chip shows it again");
+  await p.click("#t-filtered"); await p.waitForTimeout(300);
+  ok(!p.errs.length, "filtered: no errors " + p.errs.join("; "));
+  await p.close();
+}
 // Hover previews (peek.js)
 {
   const p = await page("list.html?group=stash&pane=1");

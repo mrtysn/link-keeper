@@ -297,14 +297,15 @@ function buildSide() {
     side.append(el("section", { className: "grp" }, h2, ul));
   };
   const inShown = new Set();
+  const hidden = data.filtered?.hidden || new Set();   // filtered out: kept off the sidebar too
   for (const s of stashes.filter(s => onShow.has(s.id))) {
     for (const t of s.tabs) inShown.add(t.key);
     group(s.id, stashName(s), `${s.source === "import" ? "Imported" : "Stashed"} ${whenOf(s.created_at)}`,
-      s.tabs.map(t => ({ key: t.key, url: t.url, title: labelOf(byKey.get(t.key) || {}) || t.title })));
+      s.tabs.filter(t => !hidden.has(t.key)).map(t => ({ key: t.key, url: t.url, title: labelOf(byKey.get(t.key) || {}) || t.title })));
   }
   if (sources.has("list")) {
     group("list", "Reading list", "Links you queued to read, and pages you kept",
-      allLinks.filter(l => l.list && !inShown.has(l.key)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      allLinks.filter(l => l.list && !inShown.has(l.key) && !hidden.has(l.key)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
         .map(l => ({ key: l.key, url: l.url, title: labelOf(l) })));
   }
 }

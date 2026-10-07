@@ -205,7 +205,7 @@ function render() {
 }
 
 async function load() {
-  data = await loadLinks();
+  data = await loadLinks({ keepFiltered: true });
   render();
 }
 

@@ -924,6 +924,29 @@ await check("page-info: the page you are on, with each stash that holds it, or n
   assert.deepEqual([none.link, none.stashes], [null, []]);
 });
 
+await check("filtered out: rules match a site's main page only, tag it, and untag what they tagged when a rule goes", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [
+    { url: "https://mail.google.com/mail/u/0/#inbox" }, { url: "https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgRnJKplmQwLTvBkLdjMpXqZw" },
+    { url: "https://www.reddit.com/" }, { url: "https://www.reddit.com/r/games/comments/abc/x/" },
+    { url: "https://calendar.google.com/calendar/u/0/r/month/2026/9/1" }, { url: "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUv" },
+  ] }];
+  store.linkTags = {};
+  await load(browser);
+  const res = await browser.handle({ type: "set-filter-rules", rules: [
+    "mail.google.com/mail/u/*/#inbox", "https://www.reddit.com/", "calendar.google.com/calendar/u/*/r/month*", "drive.google.com/drive/home"] });
+  assert.equal(res.matched, 3, "the inbox, Reddit's front page and the month view");
+  const tagged = async () => plain(await browser.handle({ type: "links" })).links.filter(l => l.tags.includes("filtered-out")).map(l => l.url).sort();
+  assert.deepEqual(await tagged(), ["https://calendar.google.com/calendar/u/0/r/month/2026/9/1", "https://mail.google.com/mail/u/0/#inbox", "https://www.reddit.com/"],
+    "an email, a post and a Drive folder stay in the pile");
+  assert.deepEqual(plain(res.rules).slice(0, 2), ["mail.google.com/mail/u/*/#inbox", "reddit.com"], "rules are kept in their plain form");
+  const again = await browser.handle({ type: "set-filter-rules", rules: ["mail.google.com/mail/u/*/#inbox"] });
+  assert.equal(again.removed, 2, "a rule taken away untags what it tagged");
+  assert.deepEqual(await tagged(), ["https://mail.google.com/mail/u/0/#inbox"]);
+  const page = await browser.handle({ type: "filter-out-page", url: "https://www.youtube.com/?app=desktop" });
+  assert.equal(page.rule, "youtube.com", "right-click adds the page itself, query dropped");
+});
+
 await check("tags travel in exports and come back with imports", async () => {
   const { browser, store } = makeBrowser([]);
   store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://t.example/1" }] }];

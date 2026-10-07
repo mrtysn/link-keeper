@@ -815,6 +815,84 @@ async function showPage(page, windowId, suffix = "") {
   return tab;
 }
 
+/* --- filtered out ---------------------------------------------------------------
+ * filterRules: ["mail.google.com/mail/u/0/#inbox", …] — the main pages of sites, which are
+ * stashed with the rest but kept out of the pages' main pile: links matching a rule carry the
+ * "filtered-out" tag, which the pages hide unless asked. A rule is a URL without its scheme, www.,
+ * query or trailing slash, matched whole; * stands for any run of characters. So "reddit.com" is
+ * Reddit's front page and nothing under it, and an email under #inbox/<id> is not the inbox.
+ * filteredAuto: the keys the rules tagged, so a rule taken away untags only what it tagged. */
+const FILTER_TAG = "filtered-out";
+const DEFAULT_FILTER_RULES = [
+  "mail.google.com/mail/u/*/#inbox",
+  "calendar.google.com/calendar/u/*/r", "calendar.google.com/calendar/u/*/r/month*",
+  "calendar.google.com/calendar/u/*/r/week*", "calendar.google.com/calendar/u/*/r/day*",
+  "drive.google.com", "drive.google.com/drive/home", "drive.google.com/drive/my-drive",
+  "reddit.com", "old.reddit.com", "x.com/home", "youtube.com", "instagram.com", "pinterest.com",
+  "netflix.com", "netflix.com/browse", "about:newtab", "about:home",
+];
+/* A URL as a rule sees it. */
+function filterForm(url) {
+  if (/^about:/i.test(url)) return url.split(/[?#]/)[0].toLowerCase();
+  try {
+    const u = new URL(url);
+    // A trailing slash goes, unless a #part follows it: Gmail's inbox is /mail/u/0/#inbox.
+    const path = u.hash ? u.pathname : u.pathname.replace(/\/+$/, "");
+    return `${u.hostname.replace(/^www\./, "")}${path}${u.hash}`.toLowerCase();
+  } catch (e) { return ""; }
+}
+const cleanRule = r => filterForm(/^[a-z]+:/i.test(String(r).trim()) ? String(r).trim() : `https://${String(r).trim()}`)
+  || String(r).trim().toLowerCase();
+const ruleTest = rule => new RegExp(`^${rule.split("*").map(s => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
+async function getFilterRules() {
+  const got = await read("filterRules", null);
+  return Array.isArray(got) ? got : DEFAULT_FILTER_RULES;
+}
+const matchesRules = (url, tests) => { const f = filterForm(url); return !!f && tests.some(t => t.test(f)); };
+
+/* Tag every link a rule matches, and untag what the rules tagged and no longer match. */
+const filterQueue = serial();
+const applyFilterRules = () => filterQueue(async () => {
+  const tests = (await getFilterRules()).map(r => ruleTest(cleanRule(r)));
+  const { links } = await getLinks();
+  const auto = new Set(await read("filteredAuto", []));
+  let added = 0, removed = 0, matched = 0;
+  await editTags(all => {
+    for (const l of links) {
+      const hit = matchesRules(l.url, tests);
+      const tags = all[l.key] || [];
+      if (hit) {
+        matched++;
+        if (!tags.includes(FILTER_TAG)) { all[l.key] = [...tags, FILTER_TAG]; auto.add(l.key); added++; }
+      } else if (auto.has(l.key)) {
+        all[l.key] = tags.filter(t => t !== FILTER_TAG);
+        auto.delete(l.key);
+        removed++;
+      }
+    }
+  });
+  await browser.storage.local.set({ filteredAuto: [...auto] });
+  return { ok: true, matched, added, removed };
+});
+async function setFilterRules(rules) {
+  const clean = [...new Set((Array.isArray(rules) ? rules : []).map(cleanRule).filter(Boolean))];
+  await browser.storage.local.set({ filterRules: clean });
+  return { ...(await applyFilterRules()), rules: clean };
+}
+async function filterOutPage(url) {
+  const rule = filterForm(url);
+  if (!rule) return { ok: false, error: "this page has no address to filter out" };
+  const rules = await getFilterRules();
+  if (!rules.includes(rule)) await setFilterRules([...rules, rule]);
+  return { ok: true, rule };
+}
+// New links — a stash, an import, a capture, a queued page — are matched as they arrive.
+let filterTimer = null;
+const filterSoon = () => { clearTimeout(filterTimer); filterTimer = setTimeout(() => applyFilterRules().catch(() => {}), 1500); };
+browser.bookmarks?.onCreated?.addListener(filterSoon);
+browser.storage.onChanged.addListener((changes, area) => { if (area === "local" && (changes.items || changes.captures)) filterSoon(); });
+browser.runtime.onInstalled.addListener(() => applyFilterRules().catch(() => {}));
+
 /* What the popup knows about the page you are on: the link as the pages see it (its tags, its
  * capture, its reading-list entry), each stash holding a copy, whole, so the popup can remove one
  * copy and put it back, and how many links carry each tag. link is null when the URL is held nowhere. */
@@ -1426,14 +1504,13 @@ browser.commands.onCommand.addListener(async name => {
  */
 
 const MENU = [
-  { id: "menu-keep", title: "Keep this page", contexts: ["page", "selection", "image"] },
-  { id: "menu-shot", title: "Keep this page with a full-page screenshot", contexts: ["page", "selection", "image"] },
-  { id: "menu-next", title: "Next link in the list", contexts: ["page", "selection", "image"] },
-  { id: "menu-skip", title: "Skip this one and go to the next", contexts: ["page", "selection", "image"] },
-  { id: "menu-queue", title: "Add this page to the list", contexts: ["page", "selection", "image"] },
+  { id: "menu-keep", title: "Capture this page", contexts: ["page", "selection", "image"] },
+  { id: "menu-shot", title: "Capture this page with a full-page screenshot", contexts: ["page", "selection", "image"] },
+  { id: "menu-queue", title: "Add this page to the reading list", contexts: ["page", "selection", "image"] },
+  { id: "menu-filter", title: "Filter out this page (a site's main page)", contexts: ["page"] },
   { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
-  { id: "menu-list", title: "See the whole list", contexts: ["page", "selection", "image"] },
-  { id: "menu-cards", title: "Judge links as cards", contexts: ["page", "selection", "image"] },
+  { id: "menu-list", title: "Links", contexts: ["page", "selection", "image"] },
+  { id: "menu-cards", title: "Cards", contexts: ["page", "selection", "image"] },
   { id: "menu-sep-stash", type: "separator", contexts: ["page", "selection", "image"] },
   ...stashMenu("page", "Stash", ["page", "selection", "image"]),
   ...stashMenu("tab", "Stash to Link Keeper", ["tab"]),
@@ -1498,15 +1575,9 @@ async function onMenuClicked(info, tab) {
   switch (info.menuItemId) {
     case "menu-keep": await notify(describe(await captureActive())); break;
     case "menu-shot": await notify(describe(await captureActive("", true))); break;
-    case "menu-next": {
-      const res = await openNext();
-      await notify(res.ok ? `${res.remaining} left in the list` : `failed: ${res.error}`);
-      break;
-    }
-    case "menu-skip": {
-      await markCurrent("skipped");
-      const res = await openNext();
-      await notify(res.ok ? `skipped · ${res.remaining} left` : `failed: ${res.error}`);
+    case "menu-filter": {
+      const res = await filterOutPage(tab?.url || "");
+      await notify(res.ok ? `${res.rule} is filtered out` : res.error);
       break;
     }
     case "menu-queue": {
@@ -1618,6 +1689,15 @@ browser.runtime.onMessage.addListener(async msg => {
 
     case "page-info":
       return pageInfo(String(msg.url || ""));
+
+    case "filter-rules":
+      return { rules: await getFilterRules() };
+
+    case "set-filter-rules":
+      return setFilterRules(msg.rules);
+
+    case "filter-out-page":
+      return filterOutPage(String(msg.url || ""));
 
     case "link-counts":
       return linkCounts();
