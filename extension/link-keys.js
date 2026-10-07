@@ -175,7 +175,6 @@ const LinkKeys = (() => {
   function showGuide(on) {
     document.getElementById("key-guide")?.remove();
     if (on) document.body.append(drawGuide());
-    document.body.classList.toggle("kg-on", on);
     try { localStorage.setItem(GUIDE_KEY, on ? "on" : "off"); } catch (e) { /* storage unavailable */ }
   }
   const toggleGuide = () => showGuide(!document.getElementById("key-guide"));

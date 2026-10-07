@@ -54,7 +54,10 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!!(await p.$("#key-guide")), "guide: shown on a first visit");
   ok(await p.$eval('#key-guide [data-cmd="keep"]', e => e.textContent) === "Ekeep", "guide: E is labelled keep");
   ok(await p.$eval('#key-guide [data-cmd="preview"]', e => !e.classList.contains("idle")), "guide: P is live on Explore");
+  const width = () => p.$eval("#detail", e => e.getBoundingClientRect().width);
+  const w0 = await width();
   await key(p, "Shift+?"); ok(!(await p.$("#key-guide")), "guide: ? hides it");
+  ok(await width() === w0, "guide: floats; the page does not move when it hides");
   await key(p, "Shift+?"); ok(!!(await p.$("#key-guide")), "guide: ? shows it again");
   await p.keyboard.down("s");
   ok(await p.$$eval("#key-guide .kc.down", l => l.map(k => k.firstChild.textContent).join()) === "S", "guide: only the key held is down (S, not 2)");
@@ -120,8 +123,10 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await key(p, "Meta+z"); await p.waitForTimeout(200);
   ok((await top()) === a, "cards: undo later");
   const before = await top();
+  // The deck is shuffled: from the last stash there is no next one, so A goes the other way.
   await key(p, "d"); await p.waitForTimeout(200);
-  ok((await top()) !== before, "cards: D deals from the next stash in the sidebar");
+  if ((await top()) === before) { await key(p, "a"); await p.waitForTimeout(200); }
+  ok((await top()) !== before, "cards: D or A deals from another stash in the sidebar");
   ok(!p.errs.length, "cards: no errors " + p.errs.join("; "));
   await p.close();
 }

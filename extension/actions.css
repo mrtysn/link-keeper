@@ -66,13 +66,8 @@
 /* The row the keys act on, on pages of rows. */
 .lk-cursor { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
 
-/* The key guide (link-keys.js): the left hand's keys drawn where they sit, docked in the corner.
-   On a wide window the page makes room for it, so it never covers a button. */
-@media (min-width: 1000px) {
-  body.kg-on { padding-right: calc(22.5rem + 32px) !important; }
-  /* The top bar still runs the window's width. */
-  body.kg-on .app-nav { margin-right: calc(-22.5rem - 32px); }
-}
+/* The key guide (link-keys.js): the left hand's keys drawn where they sit, floating in the corner
+   over the page, which does not move for it; ? hides it. */
 .key-guide {
   position: fixed; z-index: 40; right: 16px; bottom: 16px; width: 22.5rem; max-width: calc(100vw - 32px);
   padding: 10px 12px 12px; background: var(--panel); color: var(--ink); border: 1px solid var(--line);

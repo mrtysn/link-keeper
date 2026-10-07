@@ -195,8 +195,8 @@ The **key guide** draws these keys where they sit on the keyboard, docked in the
 of every page: each keycap names what it does, coloured by kind (moving, keep, drop, opening,
 editing), keys the page has no use for are faint, and the key held down sinks and lights until it
 is let go. `?` shows and hides
-it, and the choice is remembered; it starts shown, except on a narrow window. On a wide window the
-page makes room for it, so it covers nothing.
+it, and the choice is remembered; it starts shown, except on a narrow window. It floats over the
+page, which does not move when it shows or hides.
 
 **Hover previews.** Anything that names something held elsewhere previews it after a moment's
 hover, in a card you can move into and click: a stash (its name, when it was stashed, its tabs, and
