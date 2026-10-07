@@ -194,7 +194,7 @@ The **key guide** draws these keys where they sit on the keyboard, docked in the
 of every page: each keycap names what it does, coloured by kind (moving, keep, drop, opening,
 editing), keys the page has no use for are faint, and the key held down sinks and lights until it
 is let go. `?` shows and hides
-it, and the choice is remembered; it starts shown, except on a narrow window. It floats over the
+it until the page loads again: every page opens with it shown. It floats over the
 page, which does not move when it shows or hides.
 
 **Hover previews.** Anything that names something held elsewhere previews it after a moment's

@@ -119,7 +119,7 @@ const LinkKeys = (() => {
   /* --- the key guide -----------------------------------------------------------------
    * A drawn keyboard docked in the corner: the left hand's keys where they sit, each keycap naming
    * what it does here, coloured by kind. Keys this page has no use for are faint, and the key held
-   * down sinks, lit, until it is let go. ? shows and hides it; the choice is remembered. */
+   * down sinks, lit, until it is let go. ? shows and hides it, and every page load shows it again. */
   const SHORT = {
     prev: "up", next: "down", "group-prev": "◂ group", "group-next": "group ▸", drop: "drop", keep: "keep",
     read: "capture", open: "open", "open-other": "open other", tags: "tags", list: "to list", move: "move",
@@ -145,7 +145,6 @@ const LinkKeys = (() => {
     "⇧4": "Digit4", [`${MOD}Z`]: "KeyZ", [`${MOD}⌫`]: "Backspace Delete", Esc: "Escape", "?": "Slash",
   };
   const SHIFTED = new Set(["⇧4", "?"]);
-  const GUIDE_KEY = "keyGuide";
   let active = new Set();
   let labels = {};
 
@@ -175,7 +174,6 @@ const LinkKeys = (() => {
   function showGuide(on) {
     document.getElementById("key-guide")?.remove();
     if (on) document.body.append(drawGuide());
-    try { localStorage.setItem(GUIDE_KEY, on ? "on" : "off"); } catch (e) { /* storage unavailable */ }
   }
   const toggleGuide = () => showGuide(!document.getElementById("key-guide"));
   /* The keycap for the key pressed, not every key bound to the command; it stays down while held,
@@ -193,14 +191,11 @@ const LinkKeys = (() => {
   }
   addEventListener("keyup", release);
   addEventListener("blur", release);
-  /* First visit: shown, unless the window is too narrow to spare the corner. */
+  /* Every page opens with it shown; hiding it lasts until the page loads again. */
   function startGuide(cmds, names) {
     active = new Set([...cmds, "help", "escape"]);
     labels = names || {};
-    let pref = null;
-    try { pref = localStorage.getItem(GUIDE_KEY); } catch (e) { /* storage unavailable */ }
-    const on = pref ? pref === "on" : innerWidth >= 720;
-    const go = () => { if (on) showGuide(true); };
+    const go = () => showGuide(true);
     if (document.body) go(); else addEventListener("DOMContentLoaded", go);
   }
 

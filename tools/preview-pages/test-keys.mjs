@@ -59,6 +59,8 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await key(p, "Shift+?"); ok(!(await p.$("#key-guide")), "guide: ? hides it");
   ok(await width() === w0, "guide: floats; the page does not move when it hides");
   await key(p, "Shift+?"); ok(!!(await p.$("#key-guide")), "guide: ? shows it again");
+  await key(p, "Shift+?"); await p.reload(); await p.waitForTimeout(600);
+  ok(!!(await p.$("#key-guide")), "guide: hidden, then reloaded, it is shown again");
   await p.keyboard.down("s");
   ok(await p.$$eval("#key-guide .kc.down", l => l.map(k => k.firstChild.textContent).join()) === "S", "guide: only the key held is down (S, not 2)");
   await p.keyboard.up("s");
