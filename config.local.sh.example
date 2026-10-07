@@ -32,3 +32,12 @@ SERVE_PORT=8790
 # ro.serialno) or its name in ADB Reconnect's devices.json. adb-reconnect resolves it to a live
 # adb serial. ANDROID_SERIAL, when set, wins over this.
 #PHONE_ADB_SERIAL=0123456789abcdef
+
+# Where native/link-keeper-bridge.py writes Link Keeper's backups: latest.json, rewritten about a
+# minute after changes, and backup-YYYY-MM-DD.json once a day, kept 30 days. Unset, no backups are
+# written. Register the bridge with native/install.zsh.
+#LINK_KEEPER_BACKUP_DIR="$HOME/backups/link-keeper"
+
+# Where the bridge keeps its socket for tools/link-keeper.mjs and the agents' undo journal.
+# Optional; defaults to ~/.local/state/link-keeper.
+#LINK_KEEPER_STATE_DIR="$HOME/.local/state/link-keeper"
