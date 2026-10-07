@@ -11,11 +11,30 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 const eq = (a, b, what) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${what}: ${JSON.stringify(a)} ≠ ${JSON.stringify(b)}`); };
 const yes = (v, what) => { if (!v) throw new Error(what); };
 
+// Polls until fn() returns something truthy, and returns it; throws with `what` after `ms`.
+async function until(fn, what, ms = 15000) {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = await fn();
+    if (v) return v;
+    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+    await wait(50);
+  }
+}
+
+// A window's new tabs report about:blank, with status "complete", until Firefox gets round to
+// them, in batches; a stash taken before then leaves those tabs open as empty. So this returns
+// only once every tab reports the URL it was opened with, in order.
 async function windowOf(urls, { pinFirst = false } = {}) {
   const w = await browser.windows.create({ url: urls });
-  await wait(800);
-  const tabs = await browser.tabs.query({ windowId: w.id });
-  if (pinFirst) await browser.tabs.update(tabs[0].id, { pinned: true });
+  const tabs = await until(async () => {
+    const t = await browser.tabs.query({ windowId: w.id });
+    return JSON.stringify(t.map(x => x.url)) === JSON.stringify(urls) && t;
+  }, `the ${urls.length} tabs of a new window to take their URLs`);
+  if (pinFirst) {
+    await browser.tabs.update(tabs[0].id, { pinned: true });
+    await until(async () => (await browser.tabs.get(tabs[0].id)).pinned, "the first tab to pin");
+  }
   return w.id;
 }
 const rootFolder = async () => (await browser.bookmarks.getChildren("unfiled_____")).find(n => n.title === "Link Keeper stashes");
