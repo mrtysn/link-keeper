@@ -1,22 +1,20 @@
-/* A shuffled deck of every undecided link in the sources chosen in the top bar.
+/* The links in the sources chosen in the top bar, one card at a time, shuffled — narrowed, if you
+ * like, to one tag, the untagged ones or those not captured yet.
  *
- * A card shows what is known: a page that was read carries its author, title, text, images and
- * screenshot; a stashed tab never read shows its tab title and address. Reading first (Read on the
- * List or Explore page) makes a card easier to judge.
+ * A card shows what is known: a captured page carries its author, title, text, images and
+ * screenshot; a stashed tab never captured shows its tab title and address.
  *
- * Keep and drop are one verdict per URL, written to every copy — capture, reading-list entry and
- * each stash. Neither deletes anything: a drop is a flag, so a change of mind costs one click.
- *
- * The actions under the card and their keys are every page's (link-actions.js, link-keys.js). The
- * deck and the sidebar move together: S (or 2) deals the next card without a verdict (Later), W
- * steps back, and A D deal the first link of the previous or next stash in the sidebar.
+ * Each card is tagged (T), captured (E), removed (Q, that copy only) or skipped (S) — the actions
+ * under it and their keys are every page's (link-actions.js, link-keys.js). Dragging the card left
+ * removes it, right or up skips it. W steps back, and A D deal the first link of the previous or
+ * next stash in the sidebar, which moves with the deck.
  */
 
 const THRESHOLD = 105;
 
 let deck = [];
 let index = 0;
-let tally = { keep: 0, drop: 0 };
+let tally = { removed: 0, skipped: 0 };   // this session
 
 function say(text) { $("msg").textContent = text; }
 
@@ -75,23 +73,26 @@ function toCard(link) {
  * together. "" is every tag; UNTAGGED the links with none set by hand. */
 const TAG_KEY = "cardsTag";
 const UNTAGGED = "\u0000untagged";
+const UNCAPTURED = "\u0000uncaptured";
 let dealTag = "";
 try { dealTag = localStorage.getItem(TAG_KEY) || ""; } catch (e) { /* storage blocked: every tag */ }
-const inDeal = l => !dealTag || (dealTag === UNTAGGED ? !l.tags.length : shownTags(l).tags.includes(dealTag));
+const inDeal = l => !dealTag || (dealTag === UNTAGGED ? !l.tags.length
+  : dealTag === UNCAPTURED ? isWeb(l.url) && !l.cap : shownTags(l).tags.includes(dealTag));
 
 function renderTagPick(links) {
   const sel = $("deal-tag");
-  const undecided = links.filter(l => !l.verdict);
   const counts = new Map();
-  for (const l of undecided) for (const t of shownTags(l).tags) counts.set(t, (counts.get(t) || 0) + 1);
+  for (const l of links) for (const t of shownTags(l).tags) counts.set(t, (counts.get(t) || 0) + 1);
   sel.textContent = "";
-  sel.append(el("option", { value: "", textContent: `Every tag (${undecided.length})` }));
-  const untagged = undecided.filter(l => !l.tags.length).length;
+  sel.append(el("option", { value: "", textContent: `Every link (${links.length})` }));
+  const untagged = links.filter(l => !l.tags.length).length;
   if (untagged) sel.append(el("option", { value: UNTAGGED, textContent: `Untagged (${untagged})` }));
+  const uncaptured = links.filter(l => isWeb(l.url) && !l.cap).length;
+  if (uncaptured) sel.append(el("option", { value: UNCAPTURED, textContent: `Not captured (${uncaptured})` }));
   for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
     sel.append(el("option", { value: t, textContent: `${t} (${n})` }));
   }
-  if (dealTag && ![...sel.options].some(o => o.value === dealTag)) sel.append(el("option", { value: dealTag, textContent: `${dealTag === UNTAGGED ? "Untagged" : dealTag} (0)` }));
+  if (dealTag && ![...sel.options].some(o => o.value === dealTag)) sel.append(el("option", { value: dealTag, textContent: `${dealTag === UNTAGGED ? "Untagged" : dealTag === UNCAPTURED ? "Not captured" : dealTag} (0)` }));
   sel.value = dealTag;
 }
 
@@ -107,14 +108,13 @@ function takeData(d) {
   byKey = new Map(d.all.links.map(l => [l.key, l]));
   sources = d.sources;
   onShow = new Set(d.stashes.map(s => s.id));
-  tally = { keep: d.links.filter(l => l.verdict === "keep").length, drop: d.links.filter(l => l.verdict === "drop").length };
   renderTagPick(d.links);
 }
 
-/* A new deal: every undecided link, shuffled. */
+/* A new deal: every link in the chosen narrowing, shuffled. */
 async function load() {
   takeData(await loadLinks());
-  deck = shuffle(data.links.filter(l => !l.verdict && inDeal(l)).map(toCard));
+  deck = shuffle(data.links.filter(inDeal).map(toCard));
   index = 0;
   buildSide();
   render();
@@ -127,9 +127,8 @@ async function refresh() {
   buildSide();
 }
 
-/* After a verdict, which the data already holds: the tally and the sidebar again, nothing reloaded. */
+/* After a change the data already holds: the sidebar again, nothing reloaded. */
 function recount() {
-  tally = { keep: data.links.filter(l => l.verdict === "keep").length, drop: data.links.filter(l => l.verdict === "drop").length };
   buildSide();
 }
 
@@ -241,14 +240,15 @@ function cardEl(card, top) {
   }));
   el.append(foot);
 
-  el.append(Object.assign(document.createElement("div"), { className: "stamp keep", textContent: "keep" }));
-  el.append(Object.assign(document.createElement("div"), { className: "stamp skip", textContent: "drop" }));
+  el.append(Object.assign(document.createElement("div"), { className: "stamp keep", textContent: "skip" }));
+  el.append(Object.assign(document.createElement("div"), { className: "stamp skip", textContent: "remove" }));
   return el;
 }
 
 /* Where a card came from. The newest stash on show is its home, where the sidebar marks it; the card
  * names the other places the same URL is held. */
-const LIST_STATUS = { pending: "not opened yet", seen: "opened, undecided", kept: "kept", skipped: "skipped" };
+// Kept and skipped are judgements from before 5.38; a list entry now reads as opened or not.
+const LIST_STATUS = { pending: "not opened yet", seen: "opened", kept: "opened", skipped: "opened" };
 
 function heldIn(link) {
   return link.copies
@@ -274,7 +274,7 @@ function contextEl(card) {
 
 /* The sidebar: every stash on show and then the reading list, as Explore lists them, with the top
  * card marked in its home stash. Built once per deal; each new card only moves the marks. Any row
- * deals its link next, decided or not. */
+ * deals its link next. */
 let sideRows = [];
 function buildSide() {
   const side = $("side");
@@ -314,8 +314,6 @@ function renderSide() {
   const home = card ? (heldIn(card.link).find(h => onShow.has(h.stash.id))?.stash.id || "list") : null;
   let mark = null;
   for (const r of sideRows) {
-    const link = byKey.get(r.key);
-    r.b.parentElement.className = link?.verdict || "";
     const here = !!card && r.key === card.link.key && r.group === home;
     r.b.toggleAttribute("aria-current", here);
     if (here) mark = r.b;
@@ -330,7 +328,7 @@ function renderSide() {
 }
 
 /* Deal any link next from a sidebar click: the card already in the deck if it is still to come,
- * else a fresh card for it — so a decided link can be judged again. */
+ * else a fresh card for it — so a link already passed can be dealt again. */
 function dealNext(key) {
   if (deck[index]?.link.key === key) return;
   const link = byKey.get(key);
@@ -345,9 +343,9 @@ function render() {
   const total = deck.length;
   const left = total - index;
   $("bar").style.width = total ? `${index / total * 100}%` : "100%";
-  $("pos").textContent = total ? `${index} of ${total} this session` : "nothing to judge";
-  $("t-kept").textContent = tally.keep;
-  $("t-skipped").textContent = tally.drop;
+  $("pos").textContent = total ? `${index} of ${total} this session` : "no links";
+  $("t-removed").textContent = tally.removed;
+  $("t-skipped").textContent = tally.skipped;
   $("t-left").textContent = left;
   renderActions();
 
@@ -357,10 +355,10 @@ function render() {
 
   if (left <= 0) {
     const [head, rest] = total
-      ? ["Deck finished.", "All undecided links in the chosen sources have been shown. "]
+      ? ["Deck finished.", "Every link in this deal has been shown. "]
       : known
-        ? ["Nothing undecided.", "Every link in the chosen sources already has a verdict. "]
-        : ["Nothing to judge.", "Choose a source with links in it in the bar at the top, or stash some tabs. "];
+        ? ["Nothing here.", "No link shown matches this choice. "]
+        : ["No links.", "Choose a source with links in it in the bar at the top, or stash some tabs. "];
     stage.append(el("div", { className: "done" }, el("b", { textContent: head }), rest,
       el("a", { href: "list.html", textContent: "The whole list →" })));
     return;
@@ -378,9 +376,9 @@ function render() {
   arm(stage.querySelector(".card.top"), deck[index]);
 }
 
-/* --- verdicts --- */
+/* --- the deck's moves --- */
 
-/* The top card leaves: right for keep, left for drop, up for Later. */
+/* The top card leaves: left when it is removed, up when it is skipped. */
 let flying = false;
 function fly(xdir, ydir = 0) {
   const top = $("stage").querySelector(".card.top");
@@ -391,21 +389,21 @@ function fly(xdir, ydir = 0) {
   top.style.opacity = "0";
 }
 
-/* Keep or drop the top card, from a key, a button or a drag. On a card already judged that way it
- * clears the verdict instead, and the card stays. */
-function decide(verdict) {
+/* Remove the top card's copy, from a key, a button or a drag; the card flies off left. */
+function removeTop() {
   const card = deck[index];
   if (!card) return;
-  if (card.link.verdict !== verdict) fly(verdict === "keep" ? 1 : -1);
-  LinkActions.run(verdict, { link: card.link }, { mark: { index } });
+  fly(-1);
+  LinkActions.run("remove", { link: card.link }, { mark: { index } });
 }
 
-/* Later: the next card, no verdict recorded; it comes back next session. Undo brings it back. */
-function later() {
+/* Skip: the next card, nothing recorded; it comes back next session. Undo brings it back. */
+function later(count = true) {
   const card = deck[index];
   if (!card) return;
   fly(0, -1);
-  LinkActions.push({ label: "Later", cmd: "later", target: { link: card.link }, mark: { index }, run: async () => ({ ok: true }) });
+  LinkActions.push({ label: "Skip", cmd: "later", target: { link: card.link }, mark: { index }, run: async () => ({ ok: true }) });
+  if (count) tally.skipped++;
   index++;
   setTimeout(() => { flying = false; render(); }, 190);
 }
@@ -418,14 +416,17 @@ LinkActions.setup({
   data: () => data,
   say,
   tags: () => openTags(),
-  tagNext: () => { later(); setTimeout(openTags, 260); },
+  tagNext: () => { later(false); setTimeout(openTags, 260); },
   async after(cmd, target, res) {
     const wait = flying ? new Promise(ok => setTimeout(ok, 190)) : null;
     flying = false;
     if (res.ok === false) { await wait; render(); return; }
     const onTop = deck[index]?.link.key === target?.link.key;
     const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
-    if (cmd !== "undo" && onTop && (((cmd === "keep" || cmd === "drop") && !res.cleared) || leaves)) index++;
+    if (cmd === "remove" && onTop) tally.removed++;
+    if (cmd === "undo" && res.cmd === "remove") tally.removed = Math.max(0, tally.removed - 1);
+    if (cmd === "undo" && res.cmd === "later") tally.skipped = Math.max(0, tally.skipped - 1);
+    if (cmd !== "undo" && onTop && leaves) index++;
     await Promise.all([res.local ? recount() : refresh(), wait]);
     if (cmd === "undo" && res.mark && target) {
       // Back on top, where it was dealt.
@@ -452,24 +453,22 @@ function openTags() {
   pop.classList.add("cards-tagpop");
 }
 
-/* Under the card: the shared actions, its keep and drop flying the card as a key does, then the
- * deck's own two — Later and Undo. */
+/* Under the card: the shared actions, Remove flying the card as Q does, then the deck's own two —
+ * Skip and Undo. */
 function renderActions() {
   const box = $("actions");
   box.textContent = "";
   const card = deck[index];
-  const laterB = el("button", { type: "button", title: `Next card, no verdict; it comes back next session (${LinkKeys.showOf("next")})`, disabled: !card }, "Later", el("kbd", { textContent: LinkKeys.showOf("next") }));
-  laterB.onclick = later;
+  const laterB = el("button", { type: "button", title: `On to the next card, nothing recorded; it comes back next session (${LinkKeys.showOf("next")})`, disabled: !card }, "Skip", el("kbd", { textContent: LinkKeys.showOf("next") }));
+  laterB.onclick = () => later();
   const undoB = el("button", { type: "button", title: `Undo the last action (${LinkKeys.showOf("undo")})`, disabled: !LinkActions.canUndo() }, "Undo", el("kbd", { textContent: LinkKeys.showOf("undo") }));
   undoB.onclick = () => LinkActions.undo();
   if (!card) { box.append(el("div", { className: "lk-bar" }, undoB)); return; }
-  // Two rows: the deck's moves — open, keep, drop, later, undo — then the rest.
   const bar = LinkActions.bar({ link: card.link });
-  for (const v of ["keep", "drop"]) {
-    const b = bar.querySelector(`[data-cmd="${v}"]`);
-    b.onclick = e => { e.stopPropagation(); decide(v); };
-  }
-  bar.querySelector('[data-cmd="drop"]').after(laterB, undoB, el("span", { className: "brk" }));
+  const remove = bar.querySelector('[data-cmd="remove"]');
+  if (remove) remove.onclick = e => { e.stopPropagation(); removeTop(); };
+  const more = bar.querySelector(".more");
+  more ? more.before(laterB, undoB) : bar.append(laterB, undoB);
   box.append(bar);
 }
 
@@ -495,13 +494,12 @@ LinkKeys.listen({
   prev: () => back(),
   next: () => later(),
   "group-prev": () => jumpGroup(-1), "group-next": () => jumpGroup(1),
-  drop: () => decide("drop"), keep: () => decide("keep"),
   read: onTop("read"), open: onTop("open"), "open-other": onTop("open-other"),
-  tags: () => openTags(), list: onTop("list"), move: onTop("move"), remove: onTop("remove"),
+  tags: () => openTags(), list: onTop("list"), move: onTop("move"), remove: () => removeTop(),
   undo: () => LinkActions.undo(),
   escape: () => document.querySelector(".tagpop")?.remove(),
-}, { labels: { prev: "back", next: "later", "group-prev": "◂ stash", "group-next": "stash ▸" } });
-$("keys-line").append("Drag the card, or ", ...LinkKeys.hint(["drop", "keep", "next", "prev", "group-next", "open", "tags"]));
+}, { labels: { prev: "back", next: "skip", "group-prev": "◂ stash", "group-next": "stash ▸" } });
+$("keys-line").append("Drag left to remove, right or up to skip, or ", ...LinkKeys.hint(["tags", "read", "remove", "next", "prev", "group-next", "open"]));
 
 /* --- drag --- */
 
@@ -530,9 +528,9 @@ function arm(el, card) {
     if (!dragging) return;
     dragging = false;
     el.style.transition = "transform .28s ease-out, opacity .28s ease-out";
-    if (Math.abs(dx) >= THRESHOLD) {
-      decide(dx > 0 ? "keep" : "drop");
-    } else if (dy < -THRESHOLD) {
+    if (dx <= -THRESHOLD) {
+      removeTop();
+    } else if (dx >= THRESHOLD || dy < -THRESHOLD) {
       later();
     } else {
       el.style.transform = "";

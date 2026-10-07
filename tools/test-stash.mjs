@@ -932,15 +932,16 @@ await check("the popup's view buttons switch to an open viewer instead of openin
   const { browser, store } = makeBrowser(tabs);
   store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://s.example/1", verdict: "keep" }, { url: "https://s.example/2" }] }];
   store.items = [{ url: "https://s.example/2", status: "pending" }, { url: "https://l.example/", status: "pending" }];
-  await load(browser);
+  const ctx = await load(browser);
+  store.linkTags = { [vm.runInContext('keyOf("https://s.example/1")', ctx)]: ["read later"] };
   for (const type of ["open-cards", "open-cards", "open-explore", "open-list", "open-list"]) await browser.handle({ type });
   const pages = p => tabs.filter(t => t.url.startsWith(`moz-extension://fake-uuid/${p}`)).length;
   assert.deepEqual([pages("cards.html"), pages("stash-cards.html"), pages("list.html")], [1, 1, 1], "one tab per viewer");
   let c = plain(await browser.handle({ type: "link-counts" }));
-  assert.deepEqual([c.total, c.undecided, c.sources, c.stashes], [3, 2, { tabs: 2, import: 0, list: 2 }, 1]);
+  assert.deepEqual([c.total, c.untagged, c.sources, c.stashes], [3, 2, { tabs: 2, import: 0, list: 2 }, 1]);
   store.viewSources = ["list"];
   c = plain(await browser.handle({ type: "link-counts" }));
-  assert.deepEqual([c.total, c.undecided], [2, 2], "counts follow the chosen sources");
+  assert.deepEqual([c.total, c.untagged], [2, 2], "counts follow the chosen sources");
 });
 
 /* Stash folders as the 29 Sep import left them: written within ten seconds, in these sizes, plus

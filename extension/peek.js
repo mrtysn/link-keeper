@@ -10,7 +10,7 @@
  *   held    "<link key>" — every stash holding the link, with where it sits in each
  *   tag     "<tag>" — its colour, its count, its newest links
  *   link    "<link key>" — what is known of it: text, picture, state, where it is held, tags
- *   site    "<host>" — its links on show, with their verdicts
+ *   site    "<host>" — its links on show, and how many are captured
  *   source  "<tabs|import|list>|<link key>" — where the link sits in that source
  *
  * A new kind is one Peek.kind(name, (id, data) => node) call; a renderer returning null shows nothing.
@@ -117,7 +117,7 @@ const Peek = (() => {
     const shown = links.slice(0, ROWS);
     const box = el("ol", { className: "pk-rows" }, ...shown.map(l => el("li", { className: l.key === here ? "here" : "" },
       srcIcon(l.url), el("span", { className: "t", textContent: linkTitle(l) }),
-      l.verdict ? el("span", { className: `v ${l.verdict}`, textContent: l.verdict === "keep" ? "✓" : "✕" }) : null)));
+      l.cap ? el("span", { className: "rd on", title: "Captured" }) : null)));
     if (links.length > ROWS) box.append(el("li", { className: "pk-more", textContent: `and ${links.length - ROWS} more` }));
     return box;
   }
@@ -189,9 +189,9 @@ const Peek = (() => {
     const siteOf = url => (kindOf(url) === "web" ? hostOf(url) : kindOf(url) === "file" ? "Local files" : "Browser pages");
     const links = d.links.filter(l => siteOf(l.url) === host).sort(byNewest);
     if (!links.length) return null;
-    const n = v => links.filter(l => (l.verdict || null) === v).length;
+    const captured = links.filter(l => l.cap).length;
     return el("div", {},
-      head(host, `${plural(links.length, "link")} shown · ${n("keep")} kept · ${n("drop")} dropped · ${n(null)} undecided`),
+      head(host, `${plural(links.length, "link")} shown · ${captured} captured`),
       linkRows(links));
   });
 

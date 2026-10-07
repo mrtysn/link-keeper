@@ -126,10 +126,7 @@
   #side li button[aria-current] { background: var(--accent); color: var(--bg); font-weight: 600; }
   #side li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #side li .t.plain { font-family: ui-monospace, Menlo, monospace; font-size: .75rem; }
-  #side li.drop .t { text-decoration: line-through; }
   #side li .m { font-weight: 700; text-align: center; }
-  #side li.keep .m::before { content: "✓"; color: var(--keep); }
-  #side li.drop .m::before { content: "✕"; color: var(--skip); }
   .src { display: inline-block; width: 16px; height: 16px; background: center/contain no-repeat; border-radius: 4px; }
   @media (max-width: 52rem) {
     .layout { display: block; }
@@ -181,16 +178,16 @@
 <aside id="side" aria-label="All stashes shown"></aside>
 <div class="wrap">
   <header>
-    <h1>Judge the undecided</h1>
-    <label class="sr-only" for="deal-tag">Show one tag at a time</label>
-    <select id="deal-tag" title="Show one tag at a time"></select>
+    <h1>One at a time</h1>
+    <label class="sr-only" for="deal-tag">Which links</label>
+    <select id="deal-tag" title="Every link, one tag, the untagged ones or those not captured"></select>
   </header>
 
   <div class="meter"><i id="bar"></i></div>
   <div class="tally">
     <span id="pos">—</span>
-    <span class="k">kept <b id="t-kept">0</b></span>
-    <span class="x">dropped <b id="t-skipped">0</b></span>
+    <span class="x">removed <b id="t-removed">0</b></span>
+    <span>skipped <b id="t-skipped">0</b></span>
     <span>left <b id="t-left">0</b></span>
   </div>
 

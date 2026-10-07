@@ -1,5 +1,5 @@
 /* Drive List, Cards, Explore and Tag in the preview with the keys every page shares (link-keys.js)
- * and check each action and its undo lands: walking, groups and sections, keep and drop, remove,
+ * and check each action and its undo lands: walking, groups and sections, capture, remove,
  * move, to the reading list, the key list, and the tag field's Escape. Run by test-keys.zsh, which
  * builds and serves the preview; node test-keys.mjs <base url> runs it against one already served.
  * Prints one line per check and exits non-zero if any failed. */
@@ -26,17 +26,18 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await key(p, "1"); ok(await cur() === a, "explore: 1 walks back");
   await key(p, "s"); ok(await cur() === b2, "explore: S walks down, judging nothing");
   await key(p, "w"); ok(await cur() === a, "explore: W walks up");
-  // find an undecided row: walk to Companion Link Report (no verdict)
+  // The four actions, and no judging.
+  const cmds = await p.$$eval("#detail .lk-bar > button[data-cmd]", l => l.map(b => b.dataset.cmd).join());
+  ok(cmds === "open,tags,read,remove", `explore: Open, Tags, Capture, Remove (${cmds})`);
+  ok(!(await p.$('#detail [data-cmd="keep"], #detail [data-cmd="drop"]')), "explore: no Keep or Drop");
+  ok(!(await p.$("#side li.keep, #side li.drop")), "explore: no ✓ or ✕ marks");
   while (!(await cur()).includes("Companion")) await key(p, "2");
-  await key(p, "e");
-  ok(/Kept/.test(await msg(p)), "explore: E keeps (" + await msg(p) + ")");
-  ok(!(await cur()).includes("Companion"), "explore: keep moves on");
-  const keptNow = await p.$$eval("#side li", lis => lis.find(li => li.textContent.includes("Companion"))?.className);
-  ok(/keep/.test(keptNow), "explore: row marked kept");
+  const rows0 = await p.$$eval("#side li", l => l.length);
+  await key(p, "q");
+  ok(/Removed from/.test(await msg(p)), "explore: Q removes this copy (" + await msg(p) + ")");
+  ok(!(await cur()).includes("Companion") && await p.$$eval("#side li", l => l.length) === rows0 - 1, "explore: and moves on");
   await key(p, "Meta+z");
-  ok(/Undone: keep/.test(await msg(p)), "explore: ⌘Z undoes (" + await msg(p) + ")");
-  const after = await p.$$eval("#side li", lis => lis.find(li => li.textContent.includes("Companion"))?.className);
-  ok(!/keep/.test(after), "explore: verdict cleared after undo");
+  ok(await p.$$eval("#side li", l => l.length) === rows0, "explore: ⌘Z puts it back (" + await msg(p) + ")");
   // remove + undo
   const rowsBefore = await p.$$eval("#side li", l => l.length);
   await key(p, "Meta+Backspace");
@@ -52,7 +53,8 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await key(p, "Meta+z");
   ok(/Undone: move/.test(await msg(p)), "explore: undo move (" + await msg(p) + ")");
   ok(!!(await p.$("#key-guide")), "guide: shown on a first visit");
-  ok(await p.$eval('#key-guide [data-cmd="keep"]', e => e.textContent) === "Ekeep", "guide: E is labelled keep");
+  ok(await p.$$eval('#key-guide .kc[data-cmd="read"]', l => l.map(e => e.textContent).includes("Ecapture")), "guide: E is labelled capture");
+  ok(await p.$eval('#key-guide .kc[data-cmd="remove"]', e => e.textContent) === "Qremove", "guide: Q is labelled remove");
   ok(await p.$eval('#key-guide [data-cmd="preview"]', e => !e.classList.contains("idle")), "guide: P is live on Explore");
   const width = () => p.$eval("#detail", e => e.getBoundingClientRect().width);
   const w0 = await width();
@@ -71,13 +73,9 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(g0 !== g1, `explore: D jumps to the next stash (${g0} → ${g1})`);
   await key(p, "a"); ok(await group() === g0, "explore: A jumps back");
   ok(!(await p.$(".lk-pane-on")), "explore: no panes");
-  // Keeps pressed faster than they are saved all land, and none is painted back by a reload.
-  await p.click('.chip[data-f="open"]'); await p.waitForTimeout(200);
-  const undecided = () => p.$$eval("#side li", l => l.length);
-  const u0 = await undecided();
-  for (let i = 0; i < 4; i++) await p.keyboard.press("e");
-  await p.waitForTimeout(900);
-  ok(await undecided() === u0 - 4, `explore: four quick keeps all stick (${u0} → ${await undecided()})`);
+  // The Not captured chip shows only links whose text is not saved.
+  await p.click('.chip[data-f="uncaptured"]'); await p.waitForTimeout(200);
+  ok(await p.$$eval("#side li", l => l.length > 0 && l.every(li => !li.querySelector(".rd.on"))), "explore: Not captured shows uncaptured links only");
   ok(!p.errs.length, "explore: no errors " + p.errs.join("; "));
   await p.close();
 }
@@ -90,8 +88,8 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await key(p, "2"); await key(p, "2"); await key(p, "2");
   const c4 = await cur();  // Visual bookmarks / companion region
   await key(p, "q");
-  ok(/Dropped|Cleared/.test(await msg(p)), "list: Q drops (" + await msg(p) + ")");
-  ok((await cur()) !== c4, "list: cursor moved on");
+  ok(/Removed|locked/.test(await msg(p)), "list: Q removes this copy (" + await msg(p) + ")");
+  ok((await cur()) !== c4 || /locked/.test(await msg(p)), "list: cursor moved on");
   await key(p, "Meta+z"); ok(/Undone/.test(await msg(p)), "list: undo (" + await msg(p) + ")");
   const sec = () => p.$eval(".lk-cursor", e => e.closest("section.group").querySelector("h2").textContent.slice(0, 30));
   const s1 = await sec(); await key(p, "d"); const s2 = await sec();
@@ -114,16 +112,24 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 {
   const p = await page("cards.html");
   const top = () => p.$eval(".card.top .title", e => e.textContent.slice(0, 40));
-  const kept = () => p.$eval("#t-kept", e => e.textContent);
-  const a = await top(); const k = await kept();
-  await key(p, "e"); await p.waitForTimeout(250);
-  ok((await top()) !== a && (await kept()) === String(+k + 1), `cards: E keeps (${k}→${await kept()})`);
+  const removed = () => p.$eval("#t-removed", e => e.textContent);
+  const skipped = () => p.$eval("#t-skipped", e => e.textContent);
+  // The deck is shuffled, and a locked stash refuses: skip to a card that can be removed.
+  let a = await top();
+  for (let i = 0; i < 12; i++) {
+    await key(p, "q"); await p.waitForTimeout(300);
+    if (!/locked/.test(await msg(p))) break;
+    await key(p, "s"); await p.waitForTimeout(250);
+    a = await top();
+  }
+  const s0 = +(await skipped());
+  ok((await top()) !== a && (await removed()) === "1", `cards: Q removes the card's copy (${await msg(p)})`);
+  await key(p, "Meta+z"); await p.waitForTimeout(300);
+  ok((await top()) === a && (await removed()) === "0", "cards: undo brings it back");
+  await key(p, "s"); await p.waitForTimeout(250);
+  ok((await top()) !== a && +(await skipped()) === s0 + 1, "cards: S skips");
   await key(p, "Meta+z"); await p.waitForTimeout(200);
-  ok((await top()) === a && (await kept()) === k, "cards: undo brings it back");
-  await key(p, "2"); await p.waitForTimeout(250);
-  ok((await top()) !== a, "cards: 2 = later");
-  await key(p, "Meta+z"); await p.waitForTimeout(200);
-  ok((await top()) === a, "cards: undo later");
+  ok((await top()) === a && +(await skipped()) === s0, "cards: undo the skip");
   const before = await top();
   // The deck is shuffled: from the last stash there is no next one, so A goes the other way.
   await key(p, "d"); await p.waitForTimeout(200);

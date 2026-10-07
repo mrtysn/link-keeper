@@ -107,12 +107,11 @@ On macOS these are bound with `MacCtrl`, so they are the literal **Control** key
 Firefox's own Browser Console, so Control is both freer and less surprising. Rebind any of them
 in `about:addons` → gear → *Manage Extension Shortcuts*.
 
-Loading or capturing a link marks it **seen**. Only a keep marks it **kept**: capturing saves the
-page, it does not judge it. **Skip** marks it `skipped`, which is a deliberate rejection rather than
-"opened it, moved on" — the list filters the two separately.
+Loading or capturing a link marks it **seen** (opened), which takes it off the reading list's queue.
+**Skip** in the popup marks it `skipped` and moves on.
 
 The **popup** is a way in, not a workspace. On top, the three viewers — **List**, **Cards** and
-**Explore** — each with a live count (links on show, left to judge, stashes); under them, a toggle per
+**Explore** — each with a live count (links shown, how many are untagged, stashes); under them, a toggle per
 source, the same as the pages' top bar, with how many links each holds. Then **This tab**: **Stash**
 (its ▾ holds the scopes), **Capture** (its ▾ captures with a full-page screenshot, or with a note) and
 **+ List**. Last, the reading list's next link with **Next** and **Skip**. One action is filled at a
@@ -129,9 +128,8 @@ The bar across the top of every page links the viewers and holds a chip per sour
 and the choice holds as you switch viewers and between visits. Each chip counts its links.
 
 A URL is one link wherever it is held. In a joint view it shows once, with badges saying where it
-is (*Reading list*, *Stashed*, *Imported ×2*), and **Keep** / **Drop** is one verdict written to
-every copy — its capture, its reading-list entry (kept or skipped) and each stash. Clearing it clears
-them all. Nothing is merged or deleted underneath: a stash keeps its bookmarks and the list its
+is (*Reading list*, *Stashed*, *Imported ×2*). Its tags and its capture belong to the URL, so every
+copy shows them; removing acts on one copy, the one in front of you. Nothing is merged or deleted underneath: a stash keeps its bookmarks and the list its
 entries.
 
 ### Tags
@@ -172,26 +170,29 @@ come back with an import.
 ### Acting on a link — the same on every page
 
 List, Cards, Explore and Tags offer one set of actions on a link, drawn the same way and answering to
-the same keys. Under the one link Cards and Explore show, every action is a button with its key; on
-a row of List or Tag, **Open**, **Keep** and **Drop** show and the rest sit under **⋯**. The keys are
-laid out for a left hand on WASD: W S walk and A D jump a group, as in a game; Q E, beside them,
-judge, so walking never judges. The number row works as reddit's keyboard navigation (RES) has it.
+the same keys. There are four things to do with a link: **tag** it, **capture** it (save its text,
+images and links), **remove** it, or **skip** it for now. Under the one link Cards and Explore show,
+**Open**, **Tags**, **Capture** and **Remove** are buttons with their keys; on a row of List or Tags,
+Tags, Capture and Remove show. Move, To list and removing the link's *other* copies sit under **⋯** —
+nothing acts on more than the copy in front of you unless you pick it there. The keys are laid out
+for a left hand on WASD: W S walk (walking on is skipping) and A D jump a group, as in a game. The
+number row works as reddit's keyboard navigation (RES) has it.
 
 | Key | Action |
 |---|---|
 | `W` `S` (`1` `2`, `↑` `↓`) | previous / next link; a sidebar and the view beside it move together; held, they repeat |
 | `A` `D` | previous / next group: the stash on Explore and Cards, the section on List, the tag on Tags |
-| `Q` `E` (`←` `→`) | drop / keep, then on to the next link; again on a judged link clears it |
+| `T` | tags |
+| `E` (`3`) | capture: load it in a background tab and save its text, images and links |
+| `Q` (`⌘⌫`) | remove this copy — from its stash, or from the reading list — then on to the next link |
 | `4` | open — a stashed tab reopens through its stash, keeping its container and marking it restored |
 | `⇧4` | open with the other stash effect: taken out of the stash if the setting keeps it, and the reverse |
-| `3` | capture: load it in a background tab and save its text, images and links |
-| `T` `L` `M` | tags · to the reading list · move to another stash (a field filters the stashes) |
-| `⌘⌫` | remove from its stash, or from the reading list |
+| `L` `M` | to the reading list · move to another stash (a field filters the stashes) |
 | `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
 | `/` `?` `Esc` | filter · the key guide · back out |
 
 The **key guide** draws these keys where they sit on the keyboard, docked in the bottom-right corner
-of every page: each keycap names what it does, coloured by kind (moving, keep, drop, opening,
+of every page: each keycap names what it does, coloured by kind (moving, capture, remove, opening,
 editing), keys the page has no use for are faint, and the key held down sinks and lights until it
 is let go. `?` shows and hides
 it until the page loads again: every page opens with it shown. It floats over the
@@ -207,36 +208,39 @@ letter.
 hover, in a card you can move into and click: a stash (its name, when it was stashed, its tabs, and
 where this link sits among them), the other stashes holding a link, a tag (its newest links), a
 link in a sidebar or on Tags (its text, picture, state, tags and where it is held), a site chip on
-List (its links and verdicts), and a source badge (where the link sits in the reading list or a
+List (its links and how many are captured), and a source badge (where the link sits in the reading list or a
 stash). Escape, a click elsewhere or leaving closes it. One module draws them all (`peek.js`): a page
 marks an element with `Peek.mark(node, kind, id)`, and a new kind is one `Peek.kind()` renderer.
 
 Whether a link was captured shows the same way everywhere: a **captured** badge (its date on hover)
 or a dashed **not captured** on a row, card or Explore's header, and a page icon beside the title in the
-Cards and Explore sidebars. Tag rows and cards also badge a verdict, and a card says when its tab was
-last restored.
+Cards and Explore sidebars. A card also says when its tab was last restored.
 
-Only walking repeats while held, so a held key cannot judge or remove a run of links. Keys never act
+Keep and Drop, the verdicts of versions before 5.38, are gone from the pages; marks already stored
+stay in storage untouched, and nothing reads them.
+
+Only walking repeats while held, so a held key cannot remove a run of links. Keys never act
 while a field has the keyboard; `Esc` leaves it. What plain Open does to the stash is **Settings →
 After restoring** on the List page; `⇧4` does the other.
 
-### Cards — judging
+### Cards — one at a time
 
-Open *Cards* and go through every undecided link in the chosen sources as a shuffled deck. `E` (or
-right, or a drag right) keeps, `Q` drops, `S` defers to the next session (Later) and `W` steps back
-a card. The sidebar lists every stash on show and the reading list, the card's row marked as the
+Open *Cards* and go through the links in the chosen sources as a shuffled deck, one card at a time —
+every link, one tag, the untagged ones or those not captured, as the selector says. `T` tags the
+card, `E` captures it, `Q` (or a drag left) removes its copy, `S` (or a drag right or up) skips it —
+it comes back next session — and `W` steps back a card. The sidebar lists every stash on show and the reading list, the card's row marked as the
 deck moves; `A` `D` deal the first link of the previous or next stash, and a click deals any row.
 
 A card shows what is known. A captured page (`Ctrl+Shift+K`, or **Capture** on any page, key `3`)
 carries its headline, text, embedded links, images and screenshot preview; a stashed tab never captured
 shows only its tab title and address — `x.com/i/status/2086188444317819246` tells you nothing, so
-reading first makes a card judgeable.
+capturing first makes a card worth looking at.
 
-A verdict never deletes anything. Dropping sets a flag, struck through in the list, and one click
-reverses it. Deferring records nothing, so the card returns next session.
+Removing takes out only the copy the card stands for, and `⌘Z` puts it back. Skipping records
+nothing.
 
 The deck is shuffled fresh each visit: ordered by date it would be 133 x.com cards in a row, and
-mixing the domains keeps each card an actual decision.
+mixing the domains keeps each card worth a look.
 
 ### Stashing tabs
 
@@ -305,19 +309,17 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 
 **Explore** shows every link in the chosen sources in a sidebar — everything, one stash, or the
 reading list; stashes in the order they were stashed, then the reading list — with a filter and
-Undecided / Kept / Dropped chips, and the chosen link in full beside it. Click any row to jump to it,
+All / Untagged / Not captured chips, and the chosen link in full beside it. Click any row to jump to it,
 or walk with `W` `S`, the detail following; the sidebar keeps each stash in tab-strip order. `A` `D`
 jump to the previous or next stash, and Space / ⇧Space scroll a long detail. The detail pane shows the
 link's capture if the page was ever read, whether it is on the reading list or in other stashes, and
-how many links share its site. The actions and keys are every page's (above); pressing Keep or
-Drop again clears it. A drop is a flag,
-struck through in the list; **Clear dropped…** on the List page removes dropped stashed tabs, after a
-confirm.
+how many links share its site. The actions and keys are every page's (above).
 
 The **live preview** (`p`) shows the page itself, half a second after you land on a tab. Most sites
-forbid being framed, so for frames inside this page only, the extension strips `X-Frame-Options` and
-CSP `frame-ancestors` from the response (`webRequestBlocking`, plus all-sites access asked on the
-first preview). The frame is sandboxed without top navigation, and it loads logged out — Firefox keeps
+forbid being framed, so for frames opened from Link Keeper's own pages only, a `declarativeNetRequest`
+rule removes `X-Frame-Options` and the `Content-Security-Policy` header from the response (all-sites
+access is asked on the first preview). Removing them through `webRequest` does nothing: Firefox
+enforces them anyway, as `tools/preview-frames/test-preview-frames.zsh` shows. The frame is sandboxed without top navigation, and it loads logged out — Firefox keeps
 a framed page's cookies apart. Local files and browser pages cannot be framed at all.
 
 `node tools/test-stash.mjs` runs the stash code against a fake browser and bookmark tree with 349
@@ -345,9 +347,9 @@ a 22rem popup.
   a line down its left edge.
 - Rows show the captured title, the post's text and any links found inside it, so a tweet you
   already read is legible without opening it again.
-- Per row: **Re-read** reads it again in the background, and **⋯** holds Open or **Open in this
-  tab**, **Keep** and **Drop**, **Add to** or **Move to reading list**, the stash moves when grouped
-  by stash, and a **Remove from …** for each place it is held.
+- Per row: **Tags**, **Capture** (or **Capture again**) and **Remove** (this copy), and **⋯** holds
+  Open or **Open in this tab**, Move, **To list**, the stash moves when grouped by stash, and a
+  **Remove from …** for each *other* place it is held.
 
 **Duplicates (N)…**, shown when any link is held in more than one place among the sources on show
 (two stashes, or a stash and the reading list), lists each such link with a checkbox per copy:
@@ -380,7 +382,7 @@ already exist.
 
 ### Screenshots
 
-**Keep with a full-page screenshot** (the ▾ beside the popup's Keep) — one action. It reads the page, then scrolls it a screenful at a time, shoots each
+**Capture with a full-page screenshot** (the ▾ beside the popup's Capture) — one action. It reads the page, then scrolls it a screenful at a time, shoots each
 viewport, and stitches the tiles into a single PNG named after the post. Leave the tab alone for a
 second while it walks the page.
 
@@ -419,8 +421,8 @@ destinations the post linked to. A bare `x.com/i/status/<id>` resolves fine, han
 
     ./importers/telegram.py result.json | ./importers/enrich-x.py > link-captures.jsonl
 
-Then, in the list page, **Import…** → choose the file or paste it. Those links arrive already read, so
-the card deck can judge them immediately.
+Then, in the list page, **Import…** → choose the file or paste it. Those links arrive already captured, so
+their cards show their text straight away.
 
 Import lives in the list page rather than the popup on purpose: choosing a file opens an OS dialog,
 which closes a browser-action popup and destroys its JavaScript before the change event can fire — the

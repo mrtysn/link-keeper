@@ -143,7 +143,7 @@
             const shown = links.filter(l => l.sources.some(x => chosen.includes(x)));
             const sources = { tabs: 0, import: 0, list: 0 };
             for (const l of links) for (const x of l.sources) sources[x]++;
-            return { total: shown.length, undecided: shown.filter(l => !l.verdict).length, sources, stashes: stashes.length, chosen };
+            return { total: shown.length, untagged: shown.filter(l => !l.tags.length).length, sources, stashes: stashes.length, chosen };
           }
           case "links": {
             // The stored shapes joinLinks reads.

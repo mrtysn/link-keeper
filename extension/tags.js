@@ -244,7 +244,7 @@ LinkActions.setup({
   tagNext: () => { walk(1); onRow("tags")(); },
   async after(cmd, target, res) {
     if (res.ok === false) return;
-    const leaves = (((cmd === "keep" || cmd === "drop") && !res.cleared) || ["list", "move", "remove"].includes(cmd));
+    const leaves = ["list", "move", "remove"].includes(cmd);
     if (leaves && target?.link.key === cursor) walk(1);
     if (res.local) render();
     else await load();
@@ -254,12 +254,12 @@ LinkActions.setup({
 LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
   "group-prev": () => jumpTag(-1), "group-next": () => jumpTag(1),
-  drop: onRow("drop"), keep: onRow("keep"), read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
+  read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
   tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("new-name").focus(),
   escape: () => document.querySelector(".tagpop")?.remove(),
 }, { labels: { "group-prev": "◂ tag", "group-next": "tag ▸" } });
-$("keys-line").append(...LinkKeys.hint(["prev", "next", "group-next", "tags", "open"]));
+$("keys-line").append(...LinkKeys.hint(["prev", "next", "group-next", "tags", "read", "remove", "open"]));
 
 drawMaker();
 reloadOnChanges(load);

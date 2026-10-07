@@ -297,7 +297,7 @@ await check("the popup: three viewers with live counts, This tab's split buttons
   const d = view.document;
   const c = await linkCounts();
   eq(d.getElementById("n-links").textContent, c.total.toLocaleString(), "List shows the links on show");
-  eq(d.getElementById("n-undecided").textContent, c.undecided.toLocaleString(), "Cards shows what is left to judge");
+  eq(d.getElementById("n-untagged").textContent, c.untagged.toLocaleString(), "Cards shows how many links have no tags");
   eq([...d.querySelectorAll("#sources button")].length, 3, "one toggle per source");
   eq([...d.querySelectorAll("#stash-menu [data-scope]")].map(b => b.dataset.scope), ["window", "tab", "left", "right", "others", "all-windows"], "the scopes sit behind the arrow");
   yes(d.getElementById("keep-shot") && d.getElementById("keep-note"), "Keep's arrow offers a screenshot and a note");

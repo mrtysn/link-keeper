@@ -1,5 +1,6 @@
-/* What can be done to a link, the same on every page: open, keep, drop, read, tags, to the reading
- * list, move to a stash, remove — and undo of any of them. List, Cards, Explore and Tag call these
+/* What can be done to a link, the same on every page: tag it, capture it, remove it, or skip it —
+ * and open it, move it to a stash or the reading list — with undo of any of them. Keep and drop stay
+ * for the marks stored before 5.38, but no page offers them. List, Cards, Explore and Tags call these
  * and draw them with bar(); the keys for them are in link-keys.js.
  *
  * A target is a link and, where the page shows it inside a stash, that copy: { link, stash, tab }.
@@ -250,8 +251,9 @@ const LinkActions = (() => {
 
   const keyed = (text, cmd) => [text, el("kbd", { textContent: LinkKeys.showOf(cmd) })];
 
-  /* The actions for one link. Full, as under the one link Cards and Explore show: every action a
-   * button with its key. Compact, as on a row of List or Tag: Open, Keep and Drop, the rest under ⋯.
+  /* The actions for one link. Full, as under the one link Cards and Explore show: Open, Tags,
+   * Capture and Remove, each a button with its key, the rest under ⋯. Compact, as on a row of List or
+   * Tags: Tags, Capture and Remove, with Open under ⋯ (the title opens it too).
    * extra: further menu items, { text, run, title?, className?, disabled? }. */
   function bar(t, { compact = false, extra = [] } = {}) {
     const { link } = t;
@@ -264,34 +266,25 @@ const LinkActions = (() => {
       b.addEventListener("pointerdown", e => e.stopPropagation());   // not the start of a drag
       return b;
     };
-    const keep = btn("keep", "Keep", "keep", link.verdict === "keep" ? "Clear kept" : "Mark it kept everywhere it is saved");
-    const drop = btn("drop", "Drop", "drop", link.verdict === "drop" ? "Clear dropped" : "Mark it dropped everywhere it is saved");
-    keep.setAttribute("aria-pressed", String(link.verdict === "keep"));
-    drop.setAttribute("aria-pressed", String(link.verdict === "drop"));
+    // The four things done to a link — tag it, capture it, remove it, or skip it (the walking keys) —
+    // and Open. Remove takes out only the copy on show; every other copy is a separate ⋯ item.
     const copy = copyOf(t);
     const open = btn("open", "Open", "primary", copy ? `Reopen this tab; ${LinkKeys.showOf("open-other")} uses the other restore option` : "Open it in a new tab");
-    const out = el("div", { className: `lk-bar${compact ? " compact" : ""}` }, open, keep, drop);
-
-    const rest = [
-      web && { cmd: "read", text: link.cap ? "Capture again" : "Capture", title: "Load it in a background tab and save its text, images and links" },
-      { cmd: "tags", text: "Tags", title: "Edit its tags", picker: a => tags(t, a) },
-      canList(t) && { cmd: "list", text: "To list", title: "Move it out of its stash onto the reading list" },
-      canMove(t) && { cmd: "move", text: "Move…", title: "Move it to another stash", picker: a => moveMenu(t, a) },
+    const tagsB = btn("tags", "Tags", "", "Edit its tags", a => tags(t, a));
+    const capture = web && btn("read", link.cap ? "Capture again" : "Capture", "", "Load it in a background tab and save its text, images and links");
+    const where = copy ? stashName(copy.stash) : "the reading list";
+    const others = copiesOf(link).length + (link.list && !link.list.loose ? 1 : 0) - 1;
+    const remove = canRemove(t) && btn("remove", "Remove", "danger",
+      `Take it out of ${where}${others === 1 ? "; its other copy stays" : others > 1 ? `; its ${others} other copies stay` : ""}`);
+    const more = [
+      compact && { text: `Open  ${LinkKeys.showOf("open")}`, run: () => run("open", t) },
+      canMove(t) && { text: `Move…  ${LinkKeys.showOf("move")}`, title: "Move it to another stash", run: () => moveMenu(t, out.querySelector(".more") || out) },
+      canList(t) && { text: `To list  ${LinkKeys.showOf("list")}`, title: "Move it out of its stash onto the reading list", run: () => run("list", t) },
     ].filter(Boolean);
-
-    if (!compact) {
-      for (const r of rest) out.append(btn(r.cmd, r.text, "", r.title, r.picker));
-      if (canRemove(t)) out.append(btn("remove", "Remove", "danger", copy && !copy.stash.locked ? `Take it out of ${stashName(copy.stash)}` : "Take it off the reading list"));
-      const more = menuItems(t, extra, true);
-      if (more.length) out.append(...popoverMenu("⋯", `More for ${labelOf(link) || shortUrl(link.url)}`, more));
-      return out;
-    }
-    const items = [
-      ...rest.map(r => ({ text: `${r.text}  ${LinkKeys.showOf(r.cmd)}`, title: r.title,
-        run: () => (r.picker ? r.picker(out.querySelector(".more") || out) : run(r.cmd, t)) })),
-      ...menuItems(t, extra, false),
-    ];
-    out.append(...popoverMenu("⋯", `More for ${labelOf(link) || shortUrl(link.url)}`, items));
+    const removals = menuItems(t, extra, true);
+    const items = [...more, ...(more.length && removals.length ? ["-"] : []), ...removals];
+    const out = el("div", { className: `lk-bar${compact ? " compact" : ""}` }, ...[compact ? null : open, tagsB, capture, remove].filter(Boolean));
+    if (items.length) out.append(...popoverMenu("⋯", `More for ${labelOf(link) || shortUrl(link.url)}`, items));
     return out;
   }
 

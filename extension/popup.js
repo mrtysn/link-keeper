@@ -55,7 +55,7 @@ const SOURCES = [["tabs", "Stashed tabs"], ["import", "Imports"], ["list", "Read
 async function counts() {
   const c = await send({ type: "link-counts" });
   $("n-links").textContent = fmt(c.total);
-  $("n-undecided").textContent = fmt(c.undecided);
+  $("n-untagged").textContent = fmt(c.untagged);
   $("n-stashes").textContent = fmt(c.stashes);
   $("n-stashes-word").textContent = c.stashes === 1 ? "stash" : "stashes";
   // Each source toggles, as in the pages' top bar; the viewers follow.

@@ -6,14 +6,14 @@
  * URL held in two stashes shows in both there, since a stash is a container; in every other
  * grouping it shows once, with badges saying where it is held.
  *
- * Keep and Drop are one verdict per URL, written to every copy (judge-link). A stash is the only
+ * A row is tagged, captured, removed (that copy only) or skipped. A stash is the only
  * record of the tabs it closed, so Delete and Remove are the only ways to lose one; a lock
  * prevents both, and Delete asks first.
  */
 
-const GROUPS = ["stash", "domain", "tag", "status", "day", "month", "newest", "oldest"];
+const GROUPS = ["stash", "domain", "tag", "day", "month", "newest", "oldest"];
 const GROUP_KEY = "listGroup";
-const FILTERS = ["all", "left", "seen", "kept", "dropped"];
+const FILTERS = ["all", "uncaptured"];
 
 let data = { links: [], stashes: [], all: { links: [], stashes: [] }, sources: new Set(), byKey: new Map() };
 let settings = { afterStash: "show", afterRestore: "keep", exclude: [] };
@@ -65,7 +65,7 @@ const visibleStash = id => data.stashes.some(s => s.id === id);
 const siteOf = url => ({ web: () => hostOf(url), file: () => "Local files", other: () => "Browser pages" })[kindOf(url)]();
 
 function matches(link, term) {
-  if (filter !== "all" && stateOf(link) !== filter) return false;
+  if (filter === "uncaptured" && !(isWeb(link.url) && !link.cap)) return false;
   if (domainSel.size && !domainSel.has(siteOf(link.url))) return false;
   if (tagSel.size && ![...tagSel].some(t => (t === UNTAGGED ? !link.tags.length : shownTags(link).tags.includes(t)))) return false;
   if (!term) return true;
@@ -101,7 +101,7 @@ function titleLink(link, ctx) {
   }
   /* A click is Open, as 4 is: a stashed tab reopens through the background, which keeps its
    * container and marks it restored; a reading-list link opens in a new tab and becomes the current
-   * entry, so a keep on that tab attaches to it. Middle-click and copy-link behave as on any link. */
+   * entry, so a capture of that tab attaches to it. Middle-click and copy-link behave as on any link. */
   a.addEventListener("click", e => {
     if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
@@ -191,8 +191,8 @@ function onRow(cmd) {
   };
 }
 
-/* After an action: a verdict moves the cursor on, as does anything that takes the row away; then
- * the page reloads with the cursor where it now is. */
+/* After an action: anything that takes the row away (or a capture under Not captured) moves the
+ * cursor on; then the page reloads with the cursor where it now is. */
 LinkActions.setup({
   data: () => data,
   say,
@@ -202,7 +202,7 @@ LinkActions.setup({
     if (res.ok === false) return;
     const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
     const i = cursorAt();
-    if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (((cmd === "keep" || cmd === "drop") && !res.cleared) || leaves)) {
+    if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (leaves || (cmd === "read" && filter === "uncaptured"))) {
       const next = rowsOnPage[i + 1] || rowsOnPage[i - 1];
       if (next) cursorId = next.id;
     }
@@ -215,12 +215,12 @@ LinkActions.setup({
 LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
   "group-prev": () => jumpSection(-1), "group-next": () => jumpSection(1),
-  drop: onRow("drop"), keep: onRow("keep"), read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
+  read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
   tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
   escape: () => { document.querySelector(".tagpop")?.remove(); },
 }, { labels: { "group-prev": "◂ section", "group-next": "section ▸" } });
-$("keys").append(...LinkKeys.hint(["prev", "next", "group-next", "drop", "keep", "open", "tags"]));
+$("keys").append(...LinkKeys.hint(["prev", "next", "group-next", "tags", "read", "remove", "open"]));
 
 /* What only this page adds to a row's ⋯ menu: opening a reading-list link in this tab, and moving a
  * stashed one up or down its stash. Everything else is the shared bar's. */
@@ -239,15 +239,13 @@ function rowExtras(link, ctx) {
 }
 
 function rowEl(link, ctx) {
-  const state = stateOf(link);
   const li = el("li");
-  li.dataset.status = state;
   if (link.list?.current) li.classList.add("current");
 
   li.append(srcIcon(link.url));
-  const mark = el("span", { className: "mark", title: STATE_NAMES[state] });
-  mark.setAttribute("role", "img");
-  mark.setAttribute("aria-label", STATE_NAMES[state]);
+  // The page icon when its text is captured; the column stays when it is not.
+  const mark = readMark(link);
+  mark.classList.add("mark");
   li.append(mark);
 
   const main = el("div", { className: "main" });
@@ -529,11 +527,6 @@ function bucketsOf(visible) {
     }
     return [...buckets.entries()].sort((a, b) => (a[0] === "Untagged") - (b[0] === "Untagged") || b[1].length - a[1].length || a[0].localeCompare(b[0]));
   }
-  if (group === "status") {
-    return ["left", "seen", "kept", "dropped"]
-      .map(s => [STATE_NAMES[s], visible.filter(l => stateOf(l) === s).sort(byNewest)])
-      .filter(([, list]) => list.length);
-  }
   const keyFor = {
     domain: l => siteOf(l.url),
     day: l => (l.date ? new Date(l.date).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "No date"),
@@ -643,24 +636,21 @@ function render() {
   renderSettings();
   renderDuplicates();
   const term = $("q").value.trim().toLowerCase();
-  const counts = { left: 0, seen: 0, kept: 0, dropped: 0 };
-  for (const l of data.links) counts[stateOf(l)]++;
   const total = data.links.length;
-
+  const counts = {
+    all: total,
+    uncaptured: data.links.filter(l => isWeb(l.url) && !l.cap).length,
+    captured: data.links.filter(l => l.cap).length,
+    untagged: data.links.filter(l => !l.tags.length).length,
+  };
   const stashBit = data.stashes.length ? ` · ${data.stashes.length === 1 ? "1 stash" : `${data.stashes.length} stashes`}` : "";
   $("sub").textContent = total
-    ? `${plural(total, "link")} · ${counts.kept} kept · ${counts.dropped} dropped · ${counts.seen} seen · ${counts.left} left${stashBit}`
+    ? `${plural(total, "link")} · ${counts.captured} captured · ${counts.untagged} untagged${stashBit}`
     : "Nothing to show";
-  for (const [id, k] of [["bar-kept", "kept"], ["bar-seen", "seen"], ["bar-skipped", "dropped"]]) {
-    $(id).style.width = total ? `${counts[k] / total * 100}%` : "0";
-  }
-  const names = { all: "All", left: "Left", seen: "Seen", kept: "Kept", dropped: "Dropped" };
-  for (const f of FILTERS) $(`f-${f}`).replaceChildren(`${names[f]} `, el("span", { className: "n", textContent: f === "all" ? total : counts[f] }));
+  $("bar-captured").style.width = total ? `${counts.captured / total * 100}%` : "0";
+  const names = { all: "All", uncaptured: "Not captured" };
+  for (const f of FILTERS) $(`f-${f}`).replaceChildren(`${names[f]} `, el("span", { className: "n", textContent: counts[f] }));
   $("groupby").value = group;
-
-  const dropped = data.all.stashes.reduce((n, s) => n + (s.locked ? 0 : s.tabs.filter(t => t.verdict === "drop").length), 0);
-  $("clear-dropped").hidden = !dropped;
-  $("clear-dropped").textContent = `Clear ${dropped} dropped from stashes…`;
 
   const out = $("out");
   out.textContent = "";
@@ -787,7 +777,7 @@ function duplicateSets() {
         label: stashName(stash), detail: `${stash.source === "import" ? "imported" : "stashed"} ${whenOf(stash.created_at)} · tab ${at + 1} of ${stash.tabs.length}` };
     });
     if (link.list && !link.list.loose && data.sources.has("list")) {
-      const LIST = { pending: "not opened yet", seen: "opened", kept: "kept", skipped: "skipped" };
+      const LIST = { pending: "not opened yet", seen: "opened", kept: "opened", skipped: "opened" };
       copies.push({ id: `list:${link.key}`, list: true, locked: false, label: "Reading list",
         detail: `${LIST[link.list.status] || link.list.status}${link.list.added_at ? ` · added ${link.list.added_at.slice(0, 10)}` : ""}` });
     }
@@ -1064,11 +1054,6 @@ for (const f of FILTERS) $(`f-${f}`).onclick = () => { setFilter(f); render(); }
 
 $("stash").onclick = () => act({ type: "stash" }, r => `Stashed ${plural(r.stashed, "tab")}${r.why ? ` · left open: ${r.why}` : ""}`);
 
-$("clear-dropped").onclick = () => {
-  const n = data.all.stashes.reduce((sum, s) => sum + (s.locked ? 0 : s.tabs.filter(t => t.verdict === "drop").length), 0);
-  if (!confirm(`Remove the ${n} stashed tabs you dropped? They are closed, so this removes the only record of them. Locked stashes keep theirs.`)) return;
-  act({ type: "clear-dropped" }, r => `Removed ${plural(r.removed, "dropped tab")}`);
-};
 
 function download(name, type, body) {
   const a = document.createElement("a");

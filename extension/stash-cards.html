@@ -90,10 +90,7 @@
   #side li button[aria-current="true"] { background: var(--accent); color: var(--on-accent); }
   #side li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #side li .t.plain { font-family: ui-monospace, Menlo, monospace; font-size: .75rem; }
-  #side li.drop .t { text-decoration: line-through; opacity: .75; }
   #side li .m { font-size: .75rem; font-weight: 700; text-align: center; }
-  #side li.keep .m::before { content: "✓"; color: var(--ok); }
-  #side li.drop .m::before { content: "✕"; color: var(--bad); }
   #side li button[aria-current="true"] .m::before { color: inherit; }
   .src { display: inline-block; width: 16px; height: 16px; background: center/contain no-repeat; border-radius: 4px; }
   .side-empty { padding: 24px 16px; color: var(--dim); font-size: .875rem; }
@@ -113,8 +110,6 @@
   #detail .lk-bar { margin-top: 14px; }
   .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
   .badge { padding: 1px 9px; border-radius: 999px; background: var(--chip); font-size: .75rem; line-height: 1.6; }
-  .badge.keep { color: var(--ok); background: var(--keep-bg); font-weight: 600; }
-  .badge.drop { color: var(--bad); background: var(--drop-bg); font-weight: 600; }
   button.link { min-height: 0; padding: 1px 9px; border: 0; border-radius: 999px; background: var(--chip); color: var(--accent); font-size: .75rem; }
 
   section.box { margin-top: 22px; }
@@ -161,12 +156,10 @@
   <select id="scope" aria-label="Which stash or list"></select>
   <label class="sr-only" for="q">Filter</label>
   <input id="q" type="search" placeholder="Filter by title or URL…" autocomplete="off" spellcheck="false">
-  <div class="seg" role="group" aria-label="Verdict">
+  <div class="seg" role="group" aria-label="Which links">
     <button class="chip" data-f="all" aria-pressed="true">All</button>
-    <button class="chip" data-f="open" aria-pressed="false">Undecided</button>
-    <button class="chip" data-f="keep" aria-pressed="false">Kept</button>
-    <button class="chip" data-f="drop" aria-pressed="false">Dropped</button>
     <button class="chip" data-f="untagged" aria-pressed="false" title="Links with no tags of their own">Untagged</button>
+    <button class="chip" data-f="uncaptured" aria-pressed="false" title="Web pages whose text is not saved yet">Not captured</button>
   </div>
 </header>
 <div class="panes">

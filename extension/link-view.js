@@ -57,8 +57,8 @@ function readMark(link) {
   return span;
 }
 /* A verdict as a badge, for pages whose rows have no mark of their own. */
-const verdictBadge = link => (link.verdict === "keep" ? el("span", { className: "lk-verdict keep", textContent: "✓ kept" })
-  : link.verdict === "drop" ? el("span", { className: "lk-verdict drop", textContent: "✕ dropped" }) : null);
+// Keep and drop left the pages in 5.38; marks stored before then are not shown.
+const verdictBadge = () => null;
 
 /* One state per link, shown the same everywhere: a verdict if it has one, else whether it was seen. */
 const stateOf = link => (link.verdict === "keep" ? "kept" : link.verdict === "drop" ? "dropped" : link.seen ? "seen" : "left");

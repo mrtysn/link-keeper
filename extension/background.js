@@ -816,14 +816,14 @@ async function showPage(page, windowId, suffix = "") {
 }
 
 /* What the popup shows on its view buttons, counted in the background so the popup never holds
- * the whole dataset: links per source, and how many in the chosen sources are left to judge. */
+ * the whole dataset: links per source, and how many in the chosen sources have no tags yet. */
 async function linkCounts() {
   const { links, stashes } = await getLinks();
   const chosen = new Set((await read("viewSources", null)) || LINK_SOURCES);
   const shown = links.filter(l => l.sources.some(s => chosen.has(s)));
   const sources = { tabs: 0, import: 0, list: 0 };
   for (const l of links) for (const s of l.sources) sources[s]++;
-  return { total: shown.length, undecided: shown.filter(l => !l.verdict).length, sources, stashes: stashes.length, chosen: [...chosen] };
+  return { total: shown.length, untagged: shown.filter(l => !l.tags.length).length, sources, stashes: stashes.length, chosen: [...chosen] };
 }
 
 /* Pinned tabs, empty tabs, sites on the never-stash list and Link Keeper's own pages stay open.

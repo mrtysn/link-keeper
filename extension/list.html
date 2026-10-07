@@ -130,20 +130,7 @@
     display: inline-block; flex: none; width: 16px; height: 16px; margin-top: 4px;
     background: center/contain no-repeat; border-radius: 4px;
   }
-  /* State by shape as well as colour: ring not looked at, dot seen, tick kept, cross dropped. */
-  .mark { display: grid; place-items: center; width: 14px; height: 14px; margin-top: 5px; }
-  .mark::before {
-    content: ""; box-sizing: border-box; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--mark);
-  }
-  li[data-status="seen"] .mark::before { background: var(--seen); border-color: var(--seen); }
-  li[data-status="kept"] .mark::before,
-  li[data-status="dropped"] .mark::before {
-    width: auto; height: auto; border: 0; border-radius: 0; font-size: 13px; font-weight: 700; line-height: 1;
-  }
-  li[data-status="kept"] .mark::before { content: "✓"; color: var(--ok); }
-  li[data-status="dropped"] .mark::before { content: "✕"; color: var(--bad); font-size: 11px; }
-  /* The strike says dropped; the title stays readable (opacity .6 left it at Lc 43). */
-  li[data-status="dropped"] .ttl { color: var(--dim); text-decoration: line-through; }
+  .mark { width: 12px; height: 14px; margin-top: 4px; }
 
   .main { min-width: 0; }
   .ttl {
@@ -302,7 +289,6 @@
       <p class="sub" id="sub">Loading…</p>
     </div>
     <div class="page-actions">
-      <button class="danger" id="clear-dropped" hidden title="Remove every stashed tab you dropped; locked stashes keep theirs">Clear dropped…</button>
       <button id="dups" hidden aria-expanded="false" aria-controls="dups-panel" title="Links saved in more than one place. Tick the copies to remove.">Duplicates…</button>
       <button id="import" aria-expanded="false" aria-controls="import-panel" title="Import stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links, or capture JSONL for the reading list">Import…</button>
       <span id="export-slot"></span>
@@ -311,24 +297,20 @@
     </div>
   </header>
 
-  <div class="meter" aria-hidden="true"><i class="k" id="bar-kept"></i><i class="s" id="bar-seen"></i><i class="x" id="bar-skipped"></i></div>
+  <div class="meter" aria-hidden="true" title="Captured"><i class="k" id="bar-captured"></i></div>
 
   <div class="bar">
     <label class="sr-only" for="q">Filter</label>
     <input id="q" type="search" placeholder="Filter by title, URL, text, note…" autocomplete="off" spellcheck="false">
-    <div class="seg" role="group" aria-label="State">
+    <div class="seg" role="group" aria-label="Which links">
       <button class="chip" id="f-all" aria-pressed="true">All</button>
-      <button class="chip" id="f-left" aria-pressed="false" title="Not opened, restored or captured yet">Left</button>
-      <button class="chip" id="f-seen" aria-pressed="false" title="Opened, restored or captured, and not yet judged">Seen</button>
-      <button class="chip" id="f-kept" aria-pressed="false">Kept</button>
-      <button class="chip" id="f-dropped" aria-pressed="false">Dropped</button>
+      <button class="chip" id="f-uncaptured" aria-pressed="false" title="Web pages whose text is not saved yet">Not captured</button>
     </div>
     <label class="view">Group by
       <select id="groupby">
         <option value="stash">Stash</option>
         <option value="domain">Domain</option>
         <option value="tag">Tag</option>
-        <option value="status">State</option>
         <option value="day">Day</option>
         <option value="month">Month</option>
         <option value="newest">Newest first</option>

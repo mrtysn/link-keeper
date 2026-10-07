@@ -7,8 +7,8 @@
  * where else it is held — and
  * two things that do: Read (loads it in a background tab and extracts it) and the live preview.
  *
- * The actions and their keys are every page's (link-actions.js, link-keys.js): keep and drop are one
- * verdict per URL, written to every copy, and pressing one again clears it.
+ * The actions and their keys are every page's (link-actions.js, link-keys.js): tag, capture, remove
+ * this copy, or skip on to the next.
  */
 
 const scope = new URLSearchParams(location.search).get("stash") || "all";
@@ -18,7 +18,7 @@ const DWELL_MS = 500;
 
 let data = { links: [], stashes: [], all: { links: [], stashes: [] }, sources: new Set(), byKey: new Map() };
 let deck = [];           // [{ link, stash?, tab?, pos? }] in sidebar order, for the chosen scope
-let visible = [];        // deck after filter and verdict chips
+let visible = [];        // deck after the filter and the chips
 let current = null;      // key of the card on show
 let filter = "all";
 let previewOn = false;
@@ -29,7 +29,7 @@ let previewTimer = null;
 let said = "";
 function say(text) { said = text; const m = $("msg"); if (m) m.textContent = text; }
 const cardKey = c => c && (c.stash ? `${c.stash.id} ${c.tab.id}` : `list ${c.link.key}`);
-const verdictOf = c => c.link.verdict || "open";
+const uncaptured = c => isWeb(c.link.url) && !c.link.cap;
 
 /* --- data ----------------------------------------------------------------------- */
 
@@ -48,7 +48,7 @@ async function load() {
   applyFilter();
   if (!deck.some(c => cardKey(c) === current)) {
     // First load, or the card left (moved to the list): land on the first undecided one.
-    const first = visible.find(c => !c.link.verdict) || visible[0];
+    const first = visible[0];
     current = cardKey(first);
   }
   renderScope();
@@ -61,10 +61,8 @@ const titleOf = c => labelOf(c.link) || (c.tab?.title) || null;
 function applyFilter() {
   const term = $("q").value.trim().toLowerCase();
   visible = deck.filter(c => {
-    const v = c.link.verdict;
-    if (filter === "open" && v) return false;
     if (filter === "untagged" && c.link.tags.length) return false;
-    if ((filter === "keep" || filter === "drop") && v !== filter) return false;
+    if (filter === "uncaptured" && !uncaptured(c)) return false;
     return !term || `${titleOf(c) || ""} ${c.link.url} ${c.link.cap?.text || ""} ${shownTags(c.link).tags.join(" ")}`.toLowerCase().includes(term);
   });
 }
@@ -80,10 +78,9 @@ function renderScope() {
   if (data.sources.has("list")) sel.append(el("option", { value: "list", textContent: `Reading list (${listN})` }));
   sel.value = [...sel.options].some(o => o.value === scope) ? scope : "all";
 
-  const counts = { all: deck.length, open: 0, keep: 0, drop: 0, untagged: deck.filter(c => !c.link.tags.length).length };
-  for (const c of deck) counts[verdictOf(c)]++;
+  const counts = { all: deck.length, untagged: deck.filter(c => !c.link.tags.length).length, uncaptured: deck.filter(uncaptured).length };
   for (const chip of document.querySelectorAll(".chip")) {
-    const label = { all: "All", open: "Undecided", keep: "Kept", drop: "Dropped", untagged: "Untagged" }[chip.dataset.f];
+    const label = { all: "All", untagged: "Untagged", uncaptured: "Not captured" }[chip.dataset.f];
     chip.replaceChildren(`${label} `, el("span", { className: "n", textContent: counts[chip.dataset.f] }));
     chip.setAttribute("aria-pressed", String(chip.dataset.f === filter));
   }
@@ -119,7 +116,7 @@ function renderSide() {
     Peek.mark(b, "link", card.link.key);
     if (cardKey(card) === current) b.setAttribute("aria-current", "true");
     b.onclick = () => select(cardKey(card));
-    list.append(el("li", { className: card.link.verdict || "" }, b));
+    list.append(el("li", {}, b));
   }
   side.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
   markHeads();
@@ -154,7 +151,8 @@ function step(by) {
 
 /* --- detail --------------------------------------------------------------------- */
 
-const LIST_STATUS = { pending: "not opened yet", seen: "opened, undecided", kept: "kept", skipped: "skipped" };
+// Kept and skipped are judgements from before 5.38; a list entry now reads as opened or not.
+const LIST_STATUS = { pending: "not opened yet", seen: "opened", kept: "opened", skipped: "opened" };
 
 function renderDetail() {
   const pane = $("detail");
@@ -189,8 +187,6 @@ function renderDetail() {
   pane.append(LinkActions.bar(card));
 
   const badges = el("div", { className: "badges" });
-  if (link.verdict === "keep") badges.append(el("span", { className: "badge keep", textContent: "✓ Kept" }));
-  if (link.verdict === "drop") badges.append(el("span", { className: "badge drop", textContent: "✕ Dropped" }));
   if (tab?.seen_at) badges.append(el("span", { className: "badge", textContent: `restored ${whenOf(tab.seen_at)}` }));
   if (tab?.container) badges.append(el("span", { className: "badge", textContent: "Container" }));
   if (stash?.source === "import") badges.append(el("span", { className: "badge", textContent: "Imported" }));
@@ -204,7 +200,7 @@ function renderDetail() {
   pane.append(el("p", { id: "msg", role: "status", textContent: said }));
 
   pane.append(knownBox(card), previewBox(card));
-  pane.append(el("p", { className: "keys" }, ...LinkKeys.hint(["prev", "next", "group-next", "drop", "keep", "open", "read", "tags", "preview"])));
+  pane.append(el("p", { className: "keys" }, ...LinkKeys.hint(["prev", "next", "group-next", "tags", "read", "remove", "open", "preview"])));
 }
 
 function knownBox(card) {
@@ -310,16 +306,17 @@ async function setPreview(on) {
 
 /* --- actions -------------------------------------------------------------------- */
 
-/* After an action: a verdict moves on to the next link, as does anything that takes the link out of
- * the row it had (to the list, a move, a removal); then everything reloads — or, for a verdict, which
- * the data already holds, redraws. */
+/* After an action: anything that takes the link out of the row it had (to the list, a move, a
+ * removal, or a capture under the Not captured chip) moves on to the next link; then everything
+ * reloads. */
 LinkActions.setup({
   data: () => data,
   say,
   async after(cmd, target, res) {
     if (res.ok === false) return;
-    const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
-    if (((cmd === "keep" || cmd === "drop") && !res.cleared) || leaves) {
+    const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""))
+      || (cmd === "read" && filter === "uncaptured");
+    if (leaves) {
       const i = visible.findIndex(c => cardKey(c) === current);
       const next = visible[i + 1] || visible[i - 1];
       if (next) current = cardKey(next);
@@ -335,9 +332,10 @@ LinkActions.setup({
 
 function refilter() {
   applyFilter();
+  // A link the filter hides gives way to the first one shown, before the sidebar marks it.
+  if (!visible.some(c => cardKey(c) === current) && visible[0]) current = cardKey(visible[0]);
   renderScope();
   renderSide();
-  if (!visible.some(c => cardKey(c) === current) && visible[0]) current = cardKey(visible[0]);
   renderDetail();
 }
 
@@ -375,7 +373,7 @@ const onCard = cmd => () => {
 LinkKeys.listen({
   prev: () => step(-1), next: () => step(1),
   "group-prev": () => jumpGroup(-1), "group-next": () => jumpGroup(1),
-  drop: onCard("drop"), keep: onCard("keep"), read: onCard("read"), open: onCard("open"), "open-other": onCard("open-other"),
+  read: onCard("read"), open: onCard("open"), "open-other": onCard("open-other"),
   tags: onCard("tags"), list: onCard("list"), move: onCard("move"), remove: onCard("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(), preview: () => setPreview(!previewOn),
   escape: () => document.querySelector(".tagpop")?.remove(),
