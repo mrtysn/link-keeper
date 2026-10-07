@@ -17,45 +17,45 @@ async function page(path) {
 const msg = p => p.$eval("#msg", e => e.textContent).catch(() => "");
 const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(250); };
 
-// Explore
+// Links with the detail pane (what was Explore)
 {
-  const p = await page("stash-cards.html");
-  const cur = () => p.$eval("#side button[aria-current]", e => e.textContent);
+  const p = await page("list.html?group=stash&pane=1");
+  const cur = () => p.$eval(".lk-cursor .ttl", e => e.textContent);
   const a = await cur(); await key(p, "2"); const b2 = await cur();
-  ok(a !== b2, "explore: 2 walks the sidebar");
-  await key(p, "1"); ok(await cur() === a, "explore: 1 walks back");
-  await key(p, "s"); ok(await cur() === b2, "explore: S walks down, judging nothing");
-  await key(p, "w"); ok(await cur() === a, "explore: W walks up");
+  ok(a !== b2, "pane: 2 walks the sidebar");
+  await key(p, "1"); ok(await cur() === a, "pane: 1 walks back");
+  await key(p, "s"); ok(await cur() === b2, "pane: S walks down, judging nothing");
+  await key(p, "w"); ok(await cur() === a, "pane: W walks up");
   // The four actions, and no judging.
   const cmds = await p.$$eval("#detail .lk-bar > button[data-cmd]", l => l.map(b => b.dataset.cmd).join());
-  ok(cmds === "open,tags,read,remove", `explore: Open, Tags, Capture, Remove (${cmds})`);
-  ok(!(await p.$('#detail [data-cmd="keep"], #detail [data-cmd="drop"]')), "explore: no Keep or Drop");
-  ok(!(await p.$("#side li.keep, #side li.drop")), "explore: no ✓ or ✕ marks");
+  ok(cmds === "open,tags,read,remove", `pane: Open, Tags, Capture, Remove (${cmds})`);
+  ok(!(await p.$('#detail [data-cmd="keep"], #detail [data-cmd="drop"]')), "pane: no Keep or Drop");
+  ok(!(await p.$("#out .lk-verdict")), "pane: no ✓ or ✕ marks");
   while (!(await cur()).includes("Companion")) await key(p, "2");
-  const rows0 = await p.$$eval("#side li", l => l.length);
+  const rows0 = await p.$$eval("#out ul.rows > li", l => l.length);
   await key(p, "q");
-  ok(/Removed from/.test(await msg(p)), "explore: Q removes this copy (" + await msg(p) + ")");
-  ok(!(await cur()).includes("Companion") && await p.$$eval("#side li", l => l.length) === rows0 - 1, "explore: and moves on");
+  ok(/Removed from/.test(await msg(p)), "pane: Q removes this copy (" + await msg(p) + ")");
+  ok(!(await cur()).includes("Companion") && await p.$$eval("#out ul.rows > li", l => l.length) === rows0 - 1, "pane: and moves on");
   await key(p, "Meta+z");
-  ok(await p.$$eval("#side li", l => l.length) === rows0, "explore: ⌘Z puts it back (" + await msg(p) + ")");
+  ok(await p.$$eval("#out ul.rows > li", l => l.length) === rows0, "pane: ⌘Z puts it back (" + await msg(p) + ")");
   // remove + undo
-  const rowsBefore = await p.$$eval("#side li", l => l.length);
+  const rowsBefore = await p.$$eval("#out ul.rows > li", l => l.length);
   await key(p, "Meta+Backspace");
-  ok(/Removed from/.test(await msg(p)), "explore: ⌘⌫ removes (" + await msg(p) + ")");
-  ok(await p.$$eval("#side li", l => l.length) === rowsBefore - 1, "explore: one row fewer");
+  ok(/Removed from/.test(await msg(p)), "pane: ⌘⌫ removes (" + await msg(p) + ")");
+  ok(await p.$$eval("#out ul.rows > li", l => l.length) === rowsBefore - 1, "pane: one row fewer");
   await key(p, "Meta+z");
-  ok(await p.$$eval("#side li", l => l.length) === rowsBefore, "explore: undo puts it back");
+  ok(await p.$$eval("#out ul.rows > li", l => l.length) === rowsBefore, "pane: undo puts it back");
   // move + undo
   await key(p, "m");
-  ok(!!(await p.$(".mover")), "explore: M opens the stash picker");
+  ok(!!(await p.$(".mover")), "pane: M opens the stash picker");
   await p.keyboard.type("aug"); await key(p, "Enter");
-  ok(/Moved to/.test(await msg(p)), "explore: move (" + await msg(p) + ")");
+  ok(/Moved to/.test(await msg(p)), "pane: move (" + await msg(p) + ")");
   await key(p, "Meta+z");
-  ok(/Undone: move/.test(await msg(p)), "explore: undo move (" + await msg(p) + ")");
+  ok(/Undone: move/.test(await msg(p)), "pane: undo move (" + await msg(p) + ")");
   ok(!!(await p.$("#key-guide")), "guide: shown on a first visit");
   ok(await p.$$eval('#key-guide .kc[data-cmd="read"]', l => l.map(e => e.textContent).includes("Ecapture")), "guide: E is labelled capture");
   ok(await p.$eval('#key-guide .kc[data-cmd="remove"]', e => e.textContent) === "Qremove", "guide: Q is labelled remove");
-  ok(await p.$eval('#key-guide [data-cmd="preview"]', e => !e.classList.contains("idle")), "guide: P is live on Explore");
+  ok(await p.$eval('#key-guide [data-cmd="preview"]', e => !e.classList.contains("idle")), "guide: P is live on Links");
   const width = () => p.$eval("#detail", e => e.getBoundingClientRect().width);
   const w0 = await width();
   await key(p, "Shift+?"); ok(!(await p.$("#key-guide")), "guide: ? hides it");
@@ -68,15 +68,21 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.keyboard.up("s");
   ok(!(await p.$("#key-guide .kc.down")), "guide: let go, it rises");
   // A D: the first link of the next stash, then back to this one's start.
-  const group = () => p.$eval("#side button[aria-current]", b => b.closest("ul").previousElementSibling?.textContent);
+  const group = () => p.$eval(".lk-cursor", e => e.closest("section.group").querySelector("h2").textContent.slice(0, 40));
   const g0 = await group(); await key(p, "d"); const g1 = await group();
-  ok(g0 !== g1, `explore: D jumps to the next stash (${g0} → ${g1})`);
-  await key(p, "a"); ok(await group() === g0, "explore: A jumps back");
-  ok(!(await p.$(".lk-pane-on")), "explore: no panes");
+  ok(g0 !== g1, `pane: D jumps to the next stash (${g0} → ${g1})`);
+  await key(p, "a"); ok(await group() === g0, "pane: A jumps back");
+  ok(!(await p.$(".lk-pane-on")), "pane: no key panes, one page");
+  ok(await p.$eval("#detail", e => !e.hidden) && /\d+ \/ \d+/.test(await p.$eval("#detail .pos", e => e.textContent)), "pane: the selected link shows in full");
+  await key(p, "v"); ok(await p.$eval("#detail", e => e.hidden), "pane: V hides the detail pane");
+  await key(p, "v"); ok(await p.$eval("#detail", e => !e.hidden), "pane: V shows it again");
+  ok(await p.evaluate(() => document.body.classList.contains("compact")), "pane: rows are compact with the pane on");
+  await p.click("#t-tools"); ok(await p.$eval(".group > h2 .gacts", e => getComputedStyle(e).display === "none"), "pane: Stash tools hides the heading buttons");
+  await p.click("#t-tools");
   // The Not captured chip shows only links whose text is not saved.
-  await p.click('.chip[data-f="uncaptured"]'); await p.waitForTimeout(200);
-  ok(await p.$$eval("#side li", l => l.length > 0 && l.every(li => !li.querySelector(".rd.on"))), "explore: Not captured shows uncaptured links only");
-  ok(!p.errs.length, "explore: no errors " + p.errs.join("; "));
+  await p.click('#f-uncaptured'); await p.waitForTimeout(200);
+  ok(await p.$$eval("#out ul.rows > li", l => l.length > 0 && l.every(li => !li.querySelector(".rd.on"))), "pane: Not captured shows uncaptured links only");
+  ok(!p.errs.length, "pane: no errors " + p.errs.join("; "));
   await p.close();
 }
 // List
@@ -114,11 +120,12 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const top = () => p.$eval(".card.top .title", e => e.textContent.slice(0, 40));
   const removed = () => p.$eval("#t-removed", e => e.textContent);
   const skipped = () => p.$eval("#t-skipped", e => e.textContent);
-  // The deck is shuffled, and a locked stash refuses: skip to a card that can be removed.
+  // The deck is shuffled; a locked stash refuses, and a capture held nowhere has nothing to remove
+  // from: skip to a card that can be removed.
   let a = await top();
   for (let i = 0; i < 12; i++) {
     await key(p, "q"); await p.waitForTimeout(300);
-    if (!/locked/.test(await msg(p))) break;
+    if (!/locked|Nothing to remove/.test(await msg(p))) break;
     await key(p, "s"); await p.waitForTimeout(250);
     a = await top();
   }
@@ -140,11 +147,11 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 }
 // Tagging one link after another, from any page: Explore's Untagged chip, T, Enter on an empty field
 {
-  const p = await page("stash-cards.html");
-  await p.click('.chip[data-f="untagged"]'); await p.waitForTimeout(200);
-  const n0 = await p.$$eval("#side li", l => l.length);
-  ok(n0 > 0, `untagged: the chip narrows Explore to links with no tags (${n0})`);
-  const cur = () => p.$eval("#side button[aria-current]", e => e.textContent);
+  const p = await page("list.html?group=stash&pane=1");
+  await p.click('#tagchips .chip'); await p.waitForTimeout(200);
+  const n0 = await p.$$eval("#out ul.rows > li", l => l.length);
+  ok(n0 > 0, `untagged: the Untagged chip narrows Links to links with no tags (${n0})`);
+  const cur = () => p.$eval(".lk-cursor .ttl", e => e.textContent);
   const first = await cur();
   await key(p, "t");
   ok(await p.evaluate(() => !!document.activeElement.closest("#detail .tagger")), "untagged: T opens the tag field");
@@ -160,7 +167,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 }
 {
   const p = await page("list.html");
-  ok(await p.$eval('#key-guide [data-cmd="preview"]', e => e.classList.contains("idle")), "guide: P is faint where it does nothing");
+  ok(await p.$eval('#key-guide [data-cmd="preview"]', e => !e.classList.contains("idle")), "guide: P is live on Links");
   ok(!(await p.$('.app-pages a[href="tag.html"]')), "nav: no Untagged page");
   ok(await p.$$eval(".src.own", l => l.length) > 0, "icons: a site's saved icon is drawn in place of the made-up one");
   // List's editor is a popover: Enter on it empty closes it and opens the next row's.
@@ -171,6 +178,11 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await key(p, "Enter"); await p.waitForTimeout(250);
   ok((await cur()) !== r0 && !!(await p.$(".tagpop .tagger input")), "untagged: Enter on it empty opens the next row's");
   ok(await p.evaluate(() => !!document.activeElement.closest(".tagpop")), "untagged: with the keyboard in it");
+  await p.close();
+}
+{
+  const p = await page("cards.html");
+  ok(await p.$eval('#key-guide [data-cmd="preview"]', e => e.classList.contains("idle")), "guide: P is faint where it does nothing");
   await p.close();
 }
 // Tags: the library, a tag's links, and the editor's palette
@@ -201,7 +213,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 {
-  const p = await page("stash-cards.html");
+  const p = await page("list.html?group=stash&pane=1");
   await key(p, "t");
   ok(await p.$$eval("#detail .palette .tag.pick", l => l.length) >= 16, "palette: T shows every tag to pick");
   const first = await p.$eval("#detail .palette .tag.pick", e => e.textContent.replace(/^\d/, ""));
@@ -219,7 +231,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 }
 // Hover previews (peek.js)
 {
-  const p = await page("stash-cards.html");
+  const p = await page("list.html?group=stash&pane=1");
   const peek = () => p.$eval(".peek", e => e.textContent).catch(() => null);
   // Walk until the detail names another stash.
   for (let i = 0; i < 40 && !(await p.$('#detail [data-peek^="stash:"]')); i++) await key(p, "s");
@@ -230,22 +242,24 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.hover(".peek .pk-go"); await p.waitForTimeout(400);
   ok(!!(await peek()), "peek: stays open while the pointer is in it");
   await key(p, "Escape"); ok(!(await peek()), "peek: Esc closes it");
-  await p.hover("#side h2[data-peek]"); await p.waitForTimeout(500);
-  ok(/Explore this stash/.test(await peek() || ""), "peek: a sidebar stash heading previews the stash");
+  await p.hover(".group > h2 .name[data-peek]"); await p.waitForTimeout(500);
+  ok(/Open this stash/.test(await peek() || ""), "peek: a stash heading previews the stash");
   await p.mouse.move(5, 5); await p.waitForTimeout(400);
   ok(!(await peek()), "peek: leaving closes it");
-  await p.hover("#side li:nth-child(2) button"); await p.waitForTimeout(500);
-  ok(!!(await peek()), "peek: a sidebar link previews the link");
+  await p.hover("#out ul.rows > li:nth-child(2) .ttl"); await p.waitForTimeout(500);
+  ok(!!(await peek()), "peek: a compact row's title previews the link");
   // A long stash: every tab listed, scrolled to the chosen one.
   await p.mouse.move(2, 2); await p.waitForTimeout(300);
-  await p.evaluate(() => [...document.querySelectorAll("#side h2[data-peek]")].at(-1).nextElementSibling.lastElementChild.querySelector("button").click());
+  const lastRow = await p.evaluateHandle(() => [...document.querySelectorAll(".group > h2 .name[data-peek]")].at(-1).closest("section.group").querySelector("ul.rows > li:last-child"));
+  await lastRow.asElement().click({ position: { x: 4, y: 4 } });
   await p.waitForTimeout(300);
-  const heads = await p.$$("#side h2[data-peek]");
+  await p.mouse.move(2, 2); await p.waitForTimeout(300);
+  const heads = await p.$$(".group > h2 .name[data-peek]");
   await heads[heads.length - 1].hover(); await p.waitForTimeout(500);
   const sc = await p.evaluate(() => { const l = document.querySelector(".peek .pk-rows"), h = l?.querySelector("li.here"); return { n: l?.children.length, seen: !!h && h.offsetTop >= l.scrollTop && h.offsetTop + h.offsetHeight <= l.scrollTop + l.clientHeight, scrolls: l && l.scrollHeight > l.clientHeight }; });
   ok(sc.n === 28 && sc.scrolls, `peek: a stash lists every tab, scrolling (${sc.n})`);
   ok(sc.seen, "peek: and opens scrolled to the chosen link");
-  ok(!p.errs.length, "peek explore: no errors " + p.errs.join("; "));
+  ok(!p.errs.length, "peek links: no errors " + p.errs.join("; "));
   await p.close();
 }
 {

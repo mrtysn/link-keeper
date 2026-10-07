@@ -1,12 +1,13 @@
-/* Run by test-preview-frames.zsh beside the real extension in headless Firefox: Explore's live
- * preview frames pages that forbid framing, and only Explore does. PORT is filled in by the runner. */
+/* Run by test-preview-frames.zsh beside the real extension in headless Firefox: the Links detail
+ * pane's live preview frames pages that forbid framing, and only Link Keeper's pages do. PORT is filled in by the runner. */
 const BASE = `http://127.0.0.1:${PORT}`;
 await new Promise(r => setTimeout(r, 500));   // the preview rule is registered as the background starts
 
-await check("Explore frames pages that forbid framing: X-Frame-Options and frame-ancestors", async () => {
-  const tab = await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html") });
+await check("the Links detail pane frames pages that forbid framing: X-Frame-Options and frame-ancestors", async () => {
+  // The Links page with its detail pane, where the live preview's frame lives.
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("list.html?pane=1") });
   await new Promise(r => setTimeout(r, 2500));
-  const view = browser.extension.getViews({ type: "tab" }).find(v => v.location.pathname.endsWith("stash-cards.html"));
+  const view = browser.extension.getViews({ type: "tab", tabId: tab.id })[0];
   const got = [];
   view.addEventListener("message", e => got.push(e.data));
   for (const p of ["/plain", "/xfo", "/csp"]) {

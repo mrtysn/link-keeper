@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="nav.css">
 <link rel="stylesheet" href="tags.css">
 <link rel="stylesheet" href="actions.css">
-<title>Link Keeper: list</title>
+<title>Link Keeper: links</title>
 <style>
   :root {
     /* Measured in WCAG 2 and APCA on every ground these pages use. WCAG overrates light text on a
@@ -278,6 +278,77 @@
   .dup-row:has(input:checked) .dup-where { color: var(--bad); text-decoration: line-through; }
   /* The remove button stays in reach at the foot of the screen however long the list is. */
   .dups-actions { position: sticky; bottom: 0; z-index: 2; margin: 12px -16px -16px; padding: 12px 16px; background: var(--panel); border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; }
+
+  /* --- view toggles, and the one-stash banner --- */
+  .viewtoggles { margin-left: auto; }
+  #only button { min-height: 30px; padding: 4px 12px; border-radius: 999px; font-size: .8125rem; background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+  /* Stash tools off: the headings keep their names and counts, not their buttons. */
+  body.no-tools .group > h2 .gacts { display: none; }
+
+  /* Compact rows: icon, captured mark and title on one line; the rest is in the detail pane. */
+  body.compact ul.rows > li { padding: 4px 8px; align-items: center; grid-template-columns: 16px 12px minmax(0, 1fr); border-radius: 6px; }
+  body.compact ul.rows > li .src, body.compact ul.rows > li .mark { margin-top: 0; }
+  body.compact .main > :not(.ttl), body.compact ul.rows > li > .lk-bar { display: none; }
+  body.compact .ttl { -webkit-line-clamp: 1; font-size: .875rem; }
+  body.compact .ttl.plain { font-size: .8125rem; }
+  body.compact .group { margin-top: 18px; }
+  body.compact .group > h2 { font-size: .8125rem; margin-bottom: 4px; padding-bottom: 6px; }
+
+  /* --- the detail pane: rows on the left, the selected link on the right --- */
+  body.pane .wrap { max-width: none; }
+  body.pane .panes { display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr); gap: 0 24px; align-items: start; margin-top: 8px; }
+  body.pane #out, body.pane #detail {
+    position: sticky; top: 64px; max-height: calc(100vh - 72px); overflow-y: auto; overscroll-behavior: contain;
+  }
+  body.pane #out { padding-right: 8px; border-right: 1px solid var(--line); }
+  body.pane #out .group:first-child { margin-top: 8px; }
+  /* Beside the pane a row is narrow: its buttons, link chips and pictures are the pane's to show. */
+  body.pane ul.rows > li { grid-template-columns: 16px 12px minmax(0, 1fr); }
+  body.pane ul.rows > li > .lk-bar, body.pane .main > .inner, body.pane .main > .shots { display: none; }
+  body.pane .lk-cursor { outline: 0; background: var(--chip); box-shadow: inset 3px 0 0 var(--accent); }
+  body.pane.compact .lk-cursor { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+  body.pane.compact .lk-cursor .ttl { color: inherit; }
+  body.pane #detail { padding: 8px 4px 48px; }
+  #detail .dhead { display: flex; align-items: center; gap: 12px; }
+  #detail .dhead .src { width: 36px; height: 36px; margin-top: 0; border-radius: 8px; }
+  #detail .site { font-weight: 650; }
+  #detail .when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+  #detail .pos { margin-left: auto; white-space: nowrap; color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+  #detail .dtitle {
+    margin: 14px 0 6px; font-size: 1.5rem; line-height: 1.25; letter-spacing: -.015em; overflow-wrap: anywhere; text-wrap: pretty;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+  }
+  #detail .dtitle.plain { font: 1.05rem/1.5 ui-monospace, Menlo, monospace; }
+  #detail .durl { font: .8125rem/1.5 ui-monospace, Menlo, monospace; color: var(--dim); overflow-wrap: anywhere; user-select: all; }
+  #detail .lk-bar { margin-top: 14px; }
+  #detail .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  #detail button.link { min-height: 0; padding: 1px 9px; border: 0; border-radius: 999px; background: var(--chip); color: var(--accent); font-size: .75rem; }
+  #detail section.box { margin-top: 22px; }
+  #detail section.box > h3 { margin: 0 0 8px; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
+  #detail .captext { color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16rem; overflow-y: auto; }
+  #detail .who { font-weight: 600; color: var(--ink); }
+  #detail .thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  #detail .thumbs img { height: 6rem; max-width: 12rem; object-fit: cover; border-radius: 6px; background: var(--chip); outline: 1px solid var(--img-outline); outline-offset: -1px; }
+  #detail .facts { margin: 0; padding: 0; list-style: none; color: var(--prose); font-size: .875rem; display: grid; gap: 4px; }
+  #detail .facts li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  #detail .captext + .facts, #detail .thumbs + .facts, #detail .inner + .facts { margin-top: 12px; }
+  #detail .muted { color: var(--dim); font-size: .875rem; margin: 0; }
+  #detail .tagrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 0 0; }
+  #detail .tagrow-label { font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
+  #detail .tagrow .tagger { flex: 1 1 20rem; }
+  #detail .pvbar label { display: inline-flex; align-items: center; gap: 6px; font-size: .875rem; cursor: pointer; }
+  #pv-frame { display: block; width: 100%; height: 70vh; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  #detail .pvnote { margin: 8px 0 0; color: var(--dim); font-size: .8125rem; }
+  #detail .dempty { margin: 15vh auto; max-width: 24rem; text-align: center; color: var(--dim); }
+  #detail .dempty b { display: block; color: var(--ink); font-size: 1.05rem; margin-bottom: 4px; }
+
+  @media (max-width: 48rem) {
+    body.pane .panes { display: block; }
+    body.pane #out { position: static; max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--line); padding-right: 0; }
+    body.pane #detail { position: static; max-height: none; overflow: visible; padding: 12px 0 0; }
+    .viewtoggles { margin-left: 0; }
+  }
 </style>
 </head>
 <body>
@@ -317,6 +388,12 @@
         <option value="oldest">Oldest first</option>
       </select>
     </label>
+    <div class="seg viewtoggles" role="group" aria-label="View">
+      <button class="chip" id="t-pane" aria-pressed="false" title="The selected link in full beside the list (V)">Detail</button>
+      <button class="chip" id="t-compact" aria-pressed="false" title="Rows as icon and title only">Compact</button>
+      <button class="chip" id="t-tools" aria-pressed="true" title="Restore all, Move to list, Star, Lock and ⋯ on each stash heading">Stash tools</button>
+    </div>
+    <span id="only" hidden></span>
   </div>
 
   <section class="panel" id="import-panel" hidden aria-labelledby="import-h">
@@ -389,7 +466,11 @@
   <p id="msg" role="status"></p>
   <div class="domains" id="domains" role="group" aria-label="Domains; with none selected, all are shown"></div>
   <div class="domains" id="tagchips" role="group" aria-label="Tags; with none selected, all are shown"></div>
-  <div id="out"></div>
+  <!-- The rows, and beside them, with the Detail toggle on, the selected link in full. -->
+  <div class="panes" id="panes">
+    <div id="out"></div>
+    <aside id="detail" hidden aria-label="The selected link"></aside>
+  </div>
 </div>
 <script src="icons.js"></script>
 <script src="link-view.js"></script>

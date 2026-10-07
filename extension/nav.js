@@ -12,9 +12,8 @@
 
 (() => {
   const PAGES = [
-    ["list.html", "List", "Every link, grouped as you like"],
-    ["cards.html", "Cards", "Judge what is undecided as a shuffled card deck"],
-    ["stash-cards.html", "Explore", "Every link in a sidebar, the chosen one in full with a live preview"],
+    ["list.html", "Links", "Every link, grouped as you like; Detail shows the selected one in full"],
+    ["cards.html", "Cards", "Go through links one card at a time, shuffled"],
     ["tags.html", "Tags", "Every tag, each a collection: make, rename, merge and recolour them, and see their links"],
   ];
   const SOURCES = [

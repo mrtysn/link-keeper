@@ -1,5 +1,5 @@
 #!/bin/zsh
-# DESC: Check in headless Firefox that Explore's live preview can frame pages that forbid framing, and nothing else can.
+# DESC: Check in headless Firefox that the Links detail pane's live preview can frame pages that forbid framing, and nothing else can.
 #
 # Usage: test-preview-frames.zsh [--port 8791]
 # Serves pages with X-Frame-Options and frame-ancestors on 127.0.0.1 (the extension may reach that

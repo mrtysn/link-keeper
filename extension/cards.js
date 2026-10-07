@@ -272,7 +272,7 @@ function contextEl(card) {
   return facts.length ? el("div", { className: "ctx" }, ...facts.flatMap((f, i) => (i ? [" · ", f] : [f]))) : null;
 }
 
-/* The sidebar: every stash on show and then the reading list, as Explore lists them, with the top
+/* The sidebar: every stash on show and then the reading list, as Links lists them grouped by stash, with the top
  * card marked in its home stash. Built once per deal; each new card only moves the marks. Any row
  * deals its link next. */
 let sideRows = [];

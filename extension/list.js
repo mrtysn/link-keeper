@@ -1,5 +1,11 @@
-/* List: every link from the sources chosen in the top bar — stashed tabs, imports, the reading list
- * — one row per URL, grouped by stash, domain, status, day or month, or in date order.
+/* Links: every link from the sources chosen in the top bar — stashed tabs, imports, the reading
+ * list — one row per URL, grouped by stash, domain, tag, day or month, or in date order.
+ *
+ * Three view toggles, each remembered: Detail (V) narrows the rows to a sidebar and shows the
+ * selected link in full beside them — its capture, where else it is held, other links from its
+ * site, and the live preview (P); Compact shows a row as its icon and title only, the default with
+ * the pane; Stash tools shows or hides the buttons on stash headings. ?pane=1 opens with the pane,
+ * ?stash=<id> shows only that stash.
  *
  * Grouped by stash it is what the Stashed tabs page was: each stash under its own heading with its
  * actions, rows that drag between and within stashes, and the reading list's links after them. A
@@ -25,26 +31,57 @@ let domainsExpanded = false;
 let renaming = null;
 let dragging = null;
 
+/* The view toggles, each remembered in this browser; storage that throws leaves the defaults. */
+const PANE_KEY = "listPane", COMPACT_KEY = "listCompact", COMPACT_PANE_KEY = "listCompactPane", TOOLS_KEY = "listTools";
+const pref = (key, fallback) => {
+  try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch (e) { return fallback; }
+};
+const setPref = (key, on) => { try { localStorage.setItem(key, on ? "1" : "0"); } catch (e) { /* not remembered */ } };
+let pane = pref(PANE_KEY, false);
+let stashOnly = null;   // ?stash=<id> (or "list"): only that stash, until its banner is closed
+
 let group = "domain";
 try { group = localStorage.getItem(GROUP_KEY) || "domain"; } catch (e) { /* storage blocked: default */ }
 {
-  // ?group=stash is how the popup's Stashed button and stashing itself land here.
-  const asked = new URLSearchParams(location.search).get("group");
+  // ?group=stash is how stashing lands here; ?pane=1 and ?stash=<id> are how Explore's old
+  // address and a stash's "Open this stash" do.
+  const params = new URLSearchParams(location.search);
+  const asked = params.get("group");
   if (asked) {
     group = asked;
     try { localStorage.setItem(GROUP_KEY, asked); } catch (e) { /* not remembered */ }
-    history.replaceState(null, "", location.pathname + location.hash);
   }
+  if (params.get("pane") === "1") { pane = true; setPref(PANE_KEY, true); }
+  if (params.get("stash")) { stashOnly = params.get("stash"); group = "stash"; }
+  if ([...params.keys()].length) history.replaceState(null, "", location.pathname + location.hash);
   if (group === "flat") group = "newest";
   if (!GROUPS.includes(group)) group = "domain";
+}
+
+const compactNow = () => (pane ? pref(COMPACT_PANE_KEY, true) : pref(COMPACT_KEY, false));
+function applyView() {
+  document.body.classList.toggle("pane", pane);
+  document.body.classList.toggle("compact", compactNow());
+  document.body.classList.toggle("no-tools", !pref(TOOLS_KEY, true));
+  $("t-pane").setAttribute("aria-pressed", String(pane));
+  $("t-compact").setAttribute("aria-pressed", String(compactNow()));
+  $("t-tools").setAttribute("aria-pressed", String(pref(TOOLS_KEY, true)));
+  $("detail").hidden = !pane;
+}
+function togglePane(on = !pane) {
+  pane = on;
+  setPref(PANE_KEY, on);
+  applyView();
+  render();
 }
 
 function say(text) { $("msg").textContent = text; }
 
 async function load() {
-  const [d, { settings: st }] = await Promise.all([loadLinks(), send({ type: "stash-settings" })]);
+  const [d, { settings: st }, stored] = await Promise.all([loadLinks(), send({ type: "stash-settings" }), browser.storage.local.get(PREVIEW_KEY)]);
   data = d;
   settings = st;
+  previewOn = !!stored[PREVIEW_KEY];
   render();
 }
 
@@ -65,6 +102,7 @@ const visibleStash = id => data.stashes.some(s => s.id === id);
 const siteOf = url => ({ web: () => hostOf(url), file: () => "Local files", other: () => "Browser pages" })[kindOf(url)]();
 
 function matches(link, term) {
+  if (stashOnly === "list" ? !link.list : stashOnly && !link.copies.some(c => c.stash === stashOnly)) return false;
   if (filter === "uncaptured" && !(isWeb(link.url) && !link.cap)) return false;
   if (domainSel.size && !domainSel.has(siteOf(link.url))) return false;
   if (tagSel.size && ![...tagSel].some(t => (t === UNTAGGED ? !link.tags.length : shownTags(link).tags.includes(t)))) return false;
@@ -105,6 +143,8 @@ function titleLink(link, ctx) {
   a.addEventListener("click", e => {
     if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
+    // With the detail pane, a click selects the row (its pointerdown already did); 4 opens it.
+    if (pane) return;
     LinkActions.run("open", { link, ...ctx });
   });
   return a;
@@ -160,6 +200,17 @@ function setCursor(id, scroll = true) {
   cursorId = id;
   for (const r of rowsOnPage) r.li.classList.toggle("lk-cursor", r.id === id);
   if (scroll) rowsOnPage.find(r => r.id === id)?.li.scrollIntoView({ block: "nearest" });
+  markHeads();
+  if (pane) renderDetail();
+}
+
+/* A stash's name previews the stash on hover, opened on the cursor's link when it is one of its tabs. */
+function markHeads() {
+  const at = rowsOnPage.find(r => r.id === cursorId)?.target;
+  for (const name of document.querySelectorAll(".group > h2 .name[data-stash]")) {
+    const id = name.dataset.stash;
+    Peek.mark(name, "stash", at?.stash?.id === id ? `${id}|${at.link.key}` : id);
+  }
 }
 const cursorAt = () => rowsOnPage.findIndex(r => r.id === cursorId);
 
@@ -186,7 +237,8 @@ function onRow(cmd) {
     const i = cursorAt();
     if (i === -1) return walk(1);
     const { li, target } = rowsOnPage[i];
-    const anchor = (cmd === "tags" && li.querySelector(".tagedit")) || li.querySelector(".lk-bar .more") || li;
+    const inPane = pane && document.querySelector(`#detail .lk-bar [data-cmd="${cmd === "open-other" ? "open" : cmd}"]`);
+    const anchor = inPane || (cmd === "tags" && li.querySelector(".tagedit")) || li.querySelector(".lk-bar .more") || li;
     LinkActions.key(cmd, target, anchor);
   };
 }
@@ -196,7 +248,7 @@ function onRow(cmd) {
 LinkActions.setup({
   data: () => data,
   say,
-  tags: (t, anchor) => anchoredPopover(anchor, tagEditor(t.link, () => load())),
+  tags: (t, anchor) => (pane ? $("detail").querySelector(".tagger input")?.focus() : anchoredPopover(anchor, tagEditor(t.link, () => load()))),
   tagNext: () => { walk(1); onRow("tags")(); },
   async after(cmd, target, res) {
     if (res.ok === false) return;
@@ -218,9 +270,17 @@ LinkKeys.listen({
   read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
   tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
+  detail: () => togglePane(), preview: () => { if (!pane) togglePane(true); setPreview(!previewOn); },
   escape: () => { document.querySelector(".tagpop")?.remove(); },
 }, { labels: { "group-prev": "◂ section", "group-next": "section ▸" } });
-$("keys").append(...LinkKeys.hint(["prev", "next", "group-next", "tags", "read", "remove", "open"]));
+$("keys").append(...LinkKeys.hint(["prev", "next", "group-next", "tags", "read", "remove", "open", "detail"]));
+
+// Space and ⇧Space scroll a long detail pane.
+addEventListener("keydown", e => {
+  if (!pane || e.key !== " " || e.altKey || e.ctrlKey || e.metaKey || e.target.closest?.("input, textarea, select, button, a, [contenteditable]")) return;
+  e.preventDefault();
+  $("detail").scrollBy({ top: (e.shiftKey ? -1 : 1) * $("detail").clientHeight * 0.8, behavior: "smooth" });
+});
 
 /* What only this page adds to a row's ⋯ menu: opening a reading-list link in this tab, and moving a
  * stashed one up or down its stash. Everything else is the shared bar's. */
@@ -249,7 +309,10 @@ function rowEl(link, ctx) {
   li.append(mark);
 
   const main = el("div", { className: "main" });
-  main.append(titleLink(link, ctx));
+  const ttl = titleLink(link, ctx);
+  // Compact, a row is only its title: hovering it previews the rest.
+  if (compactNow()) Peek.mark(ttl, "link", link.key);
+  main.append(ttl);
   const cap = link.cap;
 
   // A titled page carries a description worth a second line, unless the title already is that text.
@@ -426,7 +489,9 @@ function stashHeading(stash, shown) {
     h2.append(input);
     queueMicrotask(() => { input.focus(); input.select(); });
   } else {
-    h2.append(el("span", { className: "name", textContent: stash.name }));
+    const name = el("span", { className: "name", textContent: stash.name });
+    name.dataset.stash = stash.id;
+    h2.append(name);
     if (renamed(stash)) h2.append(el("span", { className: "when", textContent: whenOf(stash.created_at) }));
   }
   const n = stash.tabs.length;
@@ -456,8 +521,6 @@ function stashHeading(stash, shown) {
       () => act({ type: "move-stash", id: stash.id },
         r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}` +
           (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : "")), locked),
-    button("Explore", "", "Browse this stash with a sidebar, details and a live preview",
-      () => send({ type: "open-stash-cards", id: stash.id })),
     toggle(stash.starred ? "★ Starred" : "☆ Star", stash.starred, "Starred stashes stay at the top",
       () => act({ type: "flag-stash", id: stash.id, starred: !stash.starred })),
     toggle(locked ? "Locked" : "Lock", locked, "A locked stash cannot lose a tab: no delete, remove or move out, and restoring keeps it",
@@ -497,6 +560,7 @@ function renderByStash(out, visible, term) {
   const show = new Set(visible.map(l => l.key));
   let any = false;
   for (const stash of data.stashes) {
+    if (stashOnly && stash.id !== stashOnly) continue;
     const rows = stash.tabs.map((tab, index) => ({ tab, index, link: data.byKey.get(tab.key) })).filter(r => r.link && show.has(r.link.key));
     if (!rows.length && filtering) continue;
     any = true;
@@ -505,7 +569,7 @@ function renderByStash(out, visible, term) {
     out.append(el("section", { className: `group${stash.locked ? " locked" : ""}` }, stashHeading(stash, rows.length), ul));
   }
   // Reading-list links not already shown under a stash.
-  const listOnly = visible.filter(l => l.list && !l.copies.some(c => visibleStash(c.stash))).sort(byNewest);
+  const listOnly = stashOnly && stashOnly !== "list" ? [] : visible.filter(l => l.list && !l.copies.some(c => visibleStash(c.stash))).sort(byNewest);
   if (listOnly.length) {
     any = true;
     out.append(section("Reading list", listOnly.length, listOnly.map(l => safeRow(l, null)), " list-group"));
@@ -629,7 +693,29 @@ function clearFilters() {
 
 /* --- render ------------------------------------------------------------------------------- */
 
+/* With ?stash=<id>, a banner saying so; closing it shows everything again. */
+function renderOnly() {
+  const box = $("only");
+  box.textContent = "";
+  const name = stashOnly === "list" ? "the reading list" : stashOnly && stashById(stashOnly) ? stashName(stashById(stashOnly)) : null;
+  box.hidden = !name;
+  if (!name) return;
+  const b = el("button", { type: "button", title: "Show every stash again" }, `Only ${name} ×`);
+  b.onclick = () => { stashOnly = null; render(); };
+  box.append(b);
+}
+
 function render() {
+  renderRows();
+  renderOnly();
+  markHeads();
+  if (!pane) return;
+  // The pane always shows a link: the cursor's, else the first row's.
+  if (cursorAt() === -1 && rowsOnPage.length) setCursor(rowsOnPage[0].id, false);
+  else renderDetail();
+}
+
+function renderRows() {
   rowsOnPage = [];
   renderDomainChips();
   renderTagChips();
@@ -681,6 +767,151 @@ function render() {
     return;
   }
   for (const [name, list] of bucketsOf(visible)) out.append(section(name, list.length, list.map(l => safeRow(l, null))));
+}
+
+/* --- the detail pane ------------------------------------------------------------------------
+ * The cursor's link in full: what is known without touching the network — its capture, where else
+ * it is held, other links from its site — and the live preview, which loads the page itself. */
+
+const PREVIEW_KEY = "stashPreview";
+const ALL_SITES = { origins: ["*://*/*"] };
+const DWELL_MS = 500;
+let previewOn = false;
+let previewTimer = null;
+let detailFor = null;
+
+// Kept and skipped are judgements from before 5.38; a list entry now reads as opened or not.
+const LIST_STATUS = { pending: "not opened yet", seen: "opened", kept: "opened", skipped: "opened" };
+
+function renderDetail() {
+  const box = $("detail");
+  const i = cursorAt();
+  const row = rowsOnPage[i];
+  // A tag being typed in the pane survives the reload its own save sets off.
+  if (row && row.id === detailFor && box.contains(document.activeElement)) return;
+  // The live page stays loaded while the same link is shown.
+  const frame = $("pv-frame");
+  const keep = frame && row && frame.dataset.url === row.target.link.url ? frame : null;
+  box.textContent = "";
+  clearTimeout(previewTimer);
+  detailFor = row?.id || null;
+  if (!row) {
+    box.append(el("div", { className: "dempty" }, el("b", { textContent: "Nothing selected" }), "Pick a link on the left, or walk to one with W S."));
+    return;
+  }
+  const { link, stash, tab } = row.target;
+  const url = link.url;
+  const kind = kindOf(url);
+  const when = stash
+    ? `stashed ${whenOf(stash.created_at)}${renamed(stash) ? ` · ${stash.name}` : ""}`
+    : link.date ? `${link.list?.saved_at ? "saved" : "added"} ${whenOf(link.date)} · reading list` : "reading list";
+  box.append(el("div", { className: "dhead" }, srcIcon(url),
+    el("div", {},
+      el("div", { className: "site", textContent: kind === "web" ? hostOf(url) : kind === "file" ? "Local file" : "Browser page" }),
+      el("div", { className: "when" }, when, readBadge(link))),
+    el("div", { className: "pos", textContent: `${i + 1} / ${rowsOnPage.length}` })));
+
+  const title = labelOf(link) || tab?.title || null;
+  box.append(el("h2", { className: `dtitle${title ? "" : " plain"}`, textContent: title || shortUrl(url) }));
+  box.append(el("div", { className: "durl", textContent: url }));
+  box.append(LinkActions.bar(row.target));
+
+  const badges = el("div", { className: "badges" });
+  if (tab?.seen_at) badges.append(el("span", { className: "badge", textContent: `restored ${whenOf(tab.seen_at)}` }));
+  if (tab?.container) badges.append(el("span", { className: "badge", textContent: "Container" }));
+  if (stash?.source === "import") badges.append(el("span", { className: "badge", textContent: "Imported" }));
+  if (kind === "other") badges.append(el("span", { className: "badge", textContent: "Opens as a stand-in" }));
+  if (badges.childElementCount) box.append(badges);
+  // Tags edit in place; T jumps into the field, Enter on it empty moves to the next link. The rows
+  // catch up on the next reload, so a filter such as Untagged does not pull the link away mid-edit.
+  const tagrow = el("div", { className: "tagrow" }, el("span", { className: "tagrow-label", textContent: "Tags" }), tagEditor(link, () => {}));
+  tagrow.addEventListener("tagdone", e => { if (e.detail?.escape) document.activeElement?.blur(); });
+  box.append(tagrow);
+  box.append(knownBox(row), previewBox(link, keep));
+}
+
+function knownBox(row) {
+  const { link, stash } = row.target;
+  const box = el("section", { className: "box" }, el("h3", { textContent: "Page content" }));
+  const c = link.cap;
+  if (c?.text) box.append(el("div", { className: "captext" }, c.handle && el("span", { className: "who", textContent: `${c.handle} ` }), c.text));
+  else if (c?.title && c.title !== labelOf(link)) box.append(el("p", { className: "muted", textContent: c.title }));
+  if (c?.images?.length) {
+    box.append(el("div", { className: "thumbs" }, ...c.images.slice(0, 8).map(src => {
+      const img = el("img", { src, loading: "lazy", alt: "" });
+      img.addEventListener("error", () => img.remove());
+      return el("a", { href: src, target: "_blank", rel: "noopener noreferrer" }, img);
+    })));
+  }
+  if (c?.links?.length) {
+    box.append(el("div", { className: "inner" }, ...c.links.slice(0, 8).map(href => linkChip(href, shortUrl(href), href))));
+  }
+
+  const facts = el("ul", { className: "facts" });
+  if (c?.captured_at) facts.append(el("li", { textContent: `Captured ${whenOf(c.captured_at)}` }));
+  else if (isWeb(link.url)) facts.append(el("li", { textContent: "Not captured yet. Capture saves its text and images." }));
+  if (link.list) facts.append(el("li", { textContent: `On the reading list: ${LIST_STATUS[link.list.status] || link.list.status}` }));
+  for (const copy of link.copies) {
+    if (stash && copy.stash === stash.id) continue;
+    const s = stashById(copy.stash);
+    if (!s) continue;
+    // A copy shown as its own row is a click away; one that is not, a hover preview.
+    const there = rowsOnPage.find(r => r.base === `${s.id} ${link.key}`);
+    const name = there
+      ? Object.assign(el("button", { className: "link", textContent: stashName(s) }), { onclick: () => setCursor(there.id) })
+      : el("span", { className: "peekable", textContent: stashName(s) });
+    Peek.mark(name, "stash", `${s.id}|${link.key}`);
+    facts.append(el("li", {}, stash ? "Also stashed in " : "Stashed in ", name, visibleStash(s.id) ? "" : " (not shown)"));
+  }
+  if (isWeb(link.url)) {
+    const host = hostOf(link.url);
+    const same = data.links.filter(l => l.key !== link.key && isWeb(l.url) && hostOf(l.url) === host).length;
+    if (same) {
+      const b = el("button", { className: "link", textContent: `Show all ${same + 1}` });
+      b.onclick = () => { $("q").value = host; render(); };
+      facts.append(el("li", {}, `${plural(same, "other link")} from ${host} `, b));
+    }
+  }
+  box.append(facts);
+  return box;
+}
+
+function previewBox(link, keep) {
+  const url = link.url;
+  const box = el("section", { className: "box" }, el("h3", { textContent: "Live preview" }));
+  const toggle = el("input", { type: "checkbox", checked: previewOn });
+  toggle.onchange = () => setPreview(toggle.checked);
+  box.append(el("div", { className: "pvbar" }, el("label", {}, toggle, "Show the page here ", el("kbd", { textContent: "P" }))));
+  if (!previewOn) {
+    box.append(el("p", { className: "pvnote", textContent: "Off. Each preview loads the real page. Turn it on to load a page half a second after you select its link." }));
+    return box;
+  }
+  if (!isWeb(url)) {
+    box.append(el("p", { className: "pvnote", textContent: kindOf(url) === "file"
+      ? "Local files cannot be shown inside an extension page. Open reopens it through the helper."
+      : "Browser and extension pages cannot be shown here. Open brings it back as a stand-in." }));
+    return box;
+  }
+  if (keep) { box.append(keep); return box; }
+  const frame = el("iframe", { id: "pv-frame", title: `Preview of ${labelOf(link) || url}`, referrerPolicy: "no-referrer" });
+  frame.dataset.url = url;
+  // No allow-top-navigation: a framed page cannot navigate this one away.
+  frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
+  box.append(frame, el("p", { className: "pvnote", textContent: "If the preview is blank, the site refused to be shown; use Open instead." }));
+  previewTimer = setTimeout(() => { frame.src = url; }, DWELL_MS);
+  return box;
+}
+
+async function setPreview(on) {
+  if (on && !(await browser.permissions.contains(ALL_SITES))) {
+    // Asked here, from the click: a permission prompt must come from a user gesture.
+    const granted = await browser.permissions.request(ALL_SITES).catch(() => false);
+    if (!granted) { say("Previews need access to all sites; nothing changed"); on = false; }
+  }
+  previewOn = on;
+  await browser.storage.local.set({ [PREVIEW_KEY]: on });
+  detailFor = null;
+  renderDetail();
 }
 
 /* --- settings ------------------------------------------------------------------------------ */
@@ -1089,6 +1320,11 @@ function download(name, type, body) {
   trigger.id = "export";
   $("export-slot").replaceWith(trigger, menu);
 }
+
+$("t-pane").onclick = () => togglePane();
+$("t-compact").onclick = () => { setPref(pane ? COMPACT_PANE_KEY : COMPACT_KEY, !compactNow()); applyView(); };
+$("t-tools").onclick = () => { setPref(TOOLS_KEY, !pref(TOOLS_KEY, true)); applyView(); };
+applyView();
 
 if (location.hash === "#import") { openPanel("import-panel"); previewImport(); }
 takePendingRefresh();

@@ -1607,8 +1607,9 @@ browser.runtime.onMessage.addListener(async msg => {
       await showPage("cards.html", (await browser.windows.getLastFocused()).id);
       return { ok: true };
 
+    // Explore became the Links page's detail pane.
     case "open-explore":
-      await showPage("stash-cards.html", (await browser.windows.getLastFocused()).id);
+      await showPage("list.html", (await browser.windows.getLastFocused()).id, "?pane=1");
       return { ok: true };
 
     case "open-tags":
@@ -1746,7 +1747,7 @@ browser.runtime.onMessage.addListener(async msg => {
       return recolorTag(msg.tag, msg.hue);
 
     case "open-stash-cards":
-      await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html") + (msg.id ? `?stash=${encodeURIComponent(msg.id)}` : "") });
+      await browser.tabs.create({ url: browser.runtime.getURL("list.html") + `?pane=1${msg.id ? `&stash=${encodeURIComponent(msg.id)}` : ""}` });
       return { ok: true };
 
     case "add":

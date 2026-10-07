@@ -1,6 +1,6 @@
 /* What can be done to a link, the same on every page: tag it, capture it, remove it, or skip it —
  * and open it, move it to a stash or the reading list — with undo of any of them. Keep and drop stay
- * for the marks stored before 5.38, but no page offers them. List, Cards, Explore and Tags call these
+ * for the marks stored before 5.38, but no page offers them. Links, Cards and Tags call these
  * and draw them with bar(); the keys for them are in link-keys.js.
  *
  * A target is a link and, where the page shows it inside a stash, that copy: { link, stash, tab }.
@@ -251,7 +251,7 @@ const LinkActions = (() => {
 
   const keyed = (text, cmd) => [text, el("kbd", { textContent: LinkKeys.showOf(cmd) })];
 
-  /* The actions for one link. Full, as under the one link Cards and Explore show: Open, Tags,
+  /* The actions for one link. Full, as under the one link Cards and the Links detail pane show: Open, Tags,
    * Capture and Remove, each a button with its key, the rest under ⋯. Compact, as on a row of List or
    * Tags: Tags, Capture and Remove, with Open under ⋯ (the title opens it too).
    * extra: further menu items, { text, run, title?, className?, disabled? }. */

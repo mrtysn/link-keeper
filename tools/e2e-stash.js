@@ -173,20 +173,21 @@ await check("the joined dataset: one link per URL across stashes and the list, o
   eq((await getSessions())[0].tabs[0].verdict, undefined, "cleared everywhere");
 });
 
-await check("List, Cards and Explore load in Firefox with the bar, the sources and rows from every source", async () => {
+await check("Links, its detail pane and Cards load in Firefox with the bar, the sources and rows from every source", async () => {
   const errors = [];
   const open = async page => {
     const tab = await browser.tabs.create({ url: browser.runtime.getURL(page), active: true });
     await wait(1500);
-    const view = browser.extension.getViews({ type: "tab" }).find(v => v.location.pathname === `/${page.split("?")[0]}`);
+    // By tab, since a page may forward to another (Explore's old address to Links).
+    const view = browser.extension.getViews({ type: "tab", tabId: tab.id })[0];
     yes(view, `${page}: no page to inspect`);
     view.addEventListener("error", e => errors.push(`${page}: ${e.message}`));
     return { tab, doc: view.document, view };
   };
   const list = await open("list.html?group=stash");
   const d = list.doc;
-  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["List", "Cards", "Explore", "Tags"], "viewers in the bar");
-  eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "List", "List is marked");
+  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["Links", "Cards", "Tags"], "viewers in the bar");
+  eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "Links", "Links is marked");
   eq([...d.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["true", "true", "true"], "every source on at first");
   yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
   yes([...d.querySelectorAll(".group > h2 .badge")].some(b => b.textContent.startsWith("Imported")), "an import is marked on its heading");
@@ -200,13 +201,16 @@ await check("List, Cards and Explore load in Firefox with the bar, the sources a
   eq(d.querySelectorAll("ul.rows.stash > li").length, 0, "no stash rows with stashes off");
   yes([...d.querySelectorAll(".group > h2")].some(h => h.textContent.startsWith("Reading list")), "the reading list shows");
 
+  // Explore's old address forwards to Links with the detail pane.
   const explore = await open("stash-cards.html");
-  eq([...explore.doc.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["false", "false", "true"], "Explore shares the choice");
-  yes(explore.doc.querySelector("#side h2")?.textContent.startsWith("Reading list"), "Explore lists the reading list");
+  eq(explore.view.location.pathname, "/list.html", "Explore's address forwards to Links");
+  yes(explore.doc.body.classList.contains("pane") && !explore.doc.getElementById("detail").hidden, "with the detail pane on");
+  eq([...explore.doc.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["false", "false", "true"], "the pane shares the choice");
+  yes([...explore.doc.querySelectorAll(".group > h2")].some(h => h.textContent.startsWith("Reading list")), "it lists the reading list");
   await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
-  await wait(800);
-  yes(explore.doc.querySelectorAll("#side li").length > 300, "Explore lists stashed tabs once they are back on");
-  yes(explore.doc.querySelector(".dtitle"), "a link is shown in full");
+  await wait(1200);
+  yes(explore.doc.querySelectorAll("ul.rows > li").length > 300, "and the stashed tabs once they are back on");
+  yes(explore.doc.querySelector("#detail .dtitle"), "a link is shown in full");
 
   const cards = await open("cards.html");
   yes(cards.doc.querySelector(".card.top"), "Cards deals a card");
@@ -297,7 +301,7 @@ await check("the popup: this page, Stash ▾ for the window, and the viewers as 
   const d = view.document;
   // Opened as a tab, the popup's own page is the one it is on: a browser page.
   yes(/cannot be saved/.test(d.getElementById("where").textContent), `a browser page says so: ${d.getElementById("where").textContent}`);
-  eq([...d.querySelectorAll(".viewers [data-open]")].map(b => b.textContent), ["List", "Cards", "Explore", "Tags"], "the viewers as links");
+  eq([...d.querySelectorAll(".viewers [data-open]")].map(b => b.textContent), ["Links", "Cards", "Tags"], "the viewers as links");
   eq([...d.querySelectorAll("#stash-menu [data-scope]")].map(b => b.dataset.scope), ["window", "left", "right", "others", "all-windows"], "the scopes sit behind the arrow");
   yes(d.getElementById("keep-shot") && d.getElementById("keep-note"), "Capture's arrow offers a screenshot and a note");
   eq(d.getElementById("next"), null, "no reading-list walker");
@@ -441,25 +445,26 @@ await check("data patches run once and are recorded; a fingerprint not found her
   eq((await browser.storage.local.get("dataPatches")).dataPatches["2026-09-29-mark-onetab-import"].at, rec.at, "stored");
 });
 
-await check("tagging one link after another in Explore: Untagged chip, Enter saves, Enter on empty moves to the next", async () => {
+await check("tagging one link after another in the Links detail pane: Untagged chip, Enter saves, Enter on empty moves to the next", async () => {
   await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
-  const tab = await browser.tabs.create({ url: browser.runtime.getURL("stash-cards.html"), active: true });
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL("list.html?pane=1"), active: true });
   await wait(1500);
-  const view = viewOf("stash-cards.html"), d = view.document;
-  d.querySelector('.chip[data-f="untagged"]').click();
-  await wait(200);
+  const view = browser.extension.getViews({ type: "tab", tabId: tab.id })[0], d = view.document;
+  d.querySelector("#tagchips .chip").click();
+  await wait(300);
   const untagged = (await getLinks()).links.filter(l => !l.tags.length).length;
-  yes(d.querySelectorAll("#side li").length > 0 && untagged > 0, "the chip shows the untagged links");
-  const first = d.querySelector("#side button[aria-current]").dataset.key;
+  yes(d.querySelectorAll("ul.rows > li").length > 0 && untagged > 0, "the chip shows the untagged links");
+  // Rows may share a title; the pane's "i / n" says which row is selected.
+  const first = d.querySelector("#detail .pos").textContent;
   const input = () => d.querySelector("#detail .tagger input");
   input().focus();
-  input().value = "tagged in explore";
+  input().value = "tagged in the pane";
   input().dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   await wait(600);
-  yes((await getLinks()).links.some(l => l.tags.includes("tagged in explore")), "saved for that link");
+  yes((await getLinks()).links.some(l => l.tags.includes("tagged in the pane")), "saved for that link");
   input().dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   await wait(300);
-  yes(d.querySelector("#side button[aria-current]").dataset.key !== first, "Enter on the empty field moves to the next link");
+  yes(d.querySelector("#detail .pos").textContent !== first, `Enter on the empty field moves to the next link (${first} → ${d.querySelector("#detail .pos").textContent})`);
   eq(d.activeElement, input(), "with its tag field open");
   await browser.tabs.remove(tab.id);
 });

@@ -1,4 +1,4 @@
-/* What a key means on every Link Keeper page, in one place. List, Cards, Explore and Tag all read
+/* What a key means on every Link Keeper page, in one place. Links, Cards and Tags all read
  * this table, and their key hints are drawn from it, so the pages cannot drift apart.
  *
  * There are no panes to switch between: every key means one thing wherever the page has the keyboard.
@@ -14,7 +14,7 @@
  *   L M        to the reading list · move to a stash
  *   ⌘Z         undo
  *   /  ?  Esc  filter · these keys · back out
- *   P          Explore's live preview on/off
+ *   V  P       Links' detail pane on/off · its live preview on/off
  *
  * ↑ ↓ walk too. Only walking repeats while a key is held, so a held key cannot remove a run of
  * links. Plain keys never act while a field has the keyboard; Escape there leaves the field.
@@ -38,6 +38,7 @@ const LinkKeys = (() => {
     { cmd: "list", show: ["L"], does: "to the reading list" },
     { cmd: "move", show: ["M"], does: "move to a stash" },
     { cmd: "undo", show: [`${MOD}Z`], does: "undo" },
+    { cmd: "detail", show: ["V"], does: "detail pane on/off" },
     { cmd: "preview", show: ["P"], does: "live preview on/off" },
     { cmd: "filter", show: ["/"], does: "filter" },
     { cmd: "help", show: ["?"], does: "these keys" },
@@ -45,7 +46,7 @@ const LinkKeys = (() => {
   ];
   const BY_CMD = new Map(TABLE.map(r => [r.cmd, r]));
 
-  const PLAIN = { w: "prev", s: "next", a: "group-prev", d: "group-next", q: "remove", e: "read", t: "tags", l: "list", m: "move", p: "preview" };
+  const PLAIN = { w: "prev", s: "next", a: "group-prev", d: "group-next", q: "remove", e: "read", t: "tags", l: "list", m: "move", p: "preview", v: "detail" };
   const DIGITS = { Digit1: "prev", Digit2: "next", Digit3: "read", Digit4: "open" };
   const ARROWS = { ArrowUp: "prev", ArrowDown: "next" };
   const REPEATING = new Set(["prev", "next"]);
@@ -121,12 +122,12 @@ const LinkKeys = (() => {
   const SHORT = {
     prev: "up", next: "skip ↓", "group-prev": "◂ group", "group-next": "group ▸",
     read: "capture", open: "open", "open-other": "open other", tags: "tags", list: "to list", move: "move",
-    remove: "remove", undo: "undo", preview: "preview", filter: "filter", help: "keys", escape: "back",
+    remove: "remove", undo: "undo", detail: "detail", preview: "preview", filter: "filter", help: "keys", escape: "back",
   };
   const KIND = {
     prev: "go", next: "go", "group-prev": "go", "group-next": "go",
     read: "keep", open: "open", "open-other": "open", tags: "edit", list: "edit", move: "edit", remove: "drop",
-    undo: "edit", preview: "view", filter: "view", help: "view", escape: "view",
+    undo: "edit", detail: "view", preview: "view", filter: "view", help: "view", escape: "view",
   };
   // The left hand's rows as they sit, and the keys away from it beneath; null caps are spacers.
   const ROWS = [
@@ -134,12 +135,12 @@ const LinkKeys = (() => {
     [["Tab", null, "wide"], ["Q", "remove"], ["W", "prev"], ["E", "read"], ["R"], ["T", "tags"]],
     [["Caps", null, "wider"], ["A", "group-prev"], ["S", "next"], ["D", "group-next"], ["F"], ["G"]],
   ];
-  const EXTRA = [["L", "list"], ["M", "move"], ["P", "preview"], ["/", "filter"], ["⇧4", "open-other"],
+  const EXTRA = [["L", "list"], ["M", "move"], ["V", "detail"], ["P", "preview"], ["/", "filter"], ["⇧4", "open-other"],
     [`${MOD}Z`, "undo"], [`${MOD}⌫`, "remove"], ["Esc", "escape"], ["?", "help"]];
   // The physical keys behind each keycap (KeyboardEvent.code), and whether Shift is part of it.
   const CODES = {
     1: "Digit1", 2: "Digit2", 3: "Digit3", 4: "Digit4", Q: "KeyQ", W: "KeyW ArrowUp", E: "KeyE",
-    T: "KeyT", A: "KeyA", S: "KeyS ArrowDown", D: "KeyD", L: "KeyL", M: "KeyM", P: "KeyP", "/": "Slash",
+    T: "KeyT", A: "KeyA", S: "KeyS ArrowDown", D: "KeyD", L: "KeyL", M: "KeyM", V: "KeyV", P: "KeyP", "/": "Slash",
     "⇧4": "Digit4", [`${MOD}Z`]: "KeyZ", [`${MOD}⌫`]: "Backspace Delete", Esc: "Escape", "?": "Slash",
   };
   const SHIFTED = new Set(["⇧4", "?"]);

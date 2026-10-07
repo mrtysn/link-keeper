@@ -139,7 +139,7 @@ const Peek = (() => {
       head(stashName(s), [`${plural(s.tabs.length, "tab")}`, renamed(s) ? `stashed ${whenOf(s.created_at)}` : null, ...flags].filter(Boolean).join(" · ")),
       pos !== -1 ? el("p", { className: "pk-note", textContent: `This link is tab ${pos + 1} of ${s.tabs.length}` }) : null,
       linkRows(links, here),
-      go(`stash-cards.html?stash=${encodeURIComponent(s.id)}`, "Explore this stash →"));
+      go(`list.html?pane=1&stash=${encodeURIComponent(s.id)}`, "Open this stash →"));
   });
 
   kind("held", (key, d) => {
@@ -152,7 +152,7 @@ const Peek = (() => {
       head(`In ${plural(held.length, "stash")}`, linkTitle(link)),
       el("ul", { className: "pk-places" }, ...held.map(({ c, s }) => {
         const i = s.tabs.findIndex(t => t.id === c.tab);
-        return el("li", {}, el("a", { href: `stash-cards.html?stash=${encodeURIComponent(s.id)}`, textContent: stashName(s) }),
+        return el("li", {}, el("a", { href: `list.html?pane=1&stash=${encodeURIComponent(s.id)}`, textContent: stashName(s) }),
           el("span", { textContent: `tab ${i + 1} of ${s.tabs.length}${renamed(s) ? ` · ${whenOf(s.created_at)}` : ""}` }));
       })));
   });
@@ -214,7 +214,7 @@ const Peek = (() => {
     return el("div", {}, head(SOURCE[src] || src, linkTitle(link)),
       el("ul", { className: "pk-places" }, ...held.map(({ c, s }) => {
         const i = s.tabs.findIndex(t => t.id === c.tab);
-        return el("li", {}, el("a", { href: `stash-cards.html?stash=${encodeURIComponent(s.id)}`, textContent: stashName(s) }),
+        return el("li", {}, el("a", { href: `list.html?pane=1&stash=${encodeURIComponent(s.id)}`, textContent: stashName(s) }),
           el("span", { textContent: `tab ${i + 1} of ${s.tabs.length}` }));
       })));
   });

@@ -1,4 +1,4 @@
-/* What List, Cards and Explore share about showing a link: DOM and text helpers, a link's label and
+/* What Links, Cards and Tags share about showing a link: DOM and text helpers, a link's label and
  * state, and loading the joined dataset (links.js, via the background) filtered to the sources
  * chosen in the top bar (nav.js). */
 
