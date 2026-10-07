@@ -22,7 +22,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `native/` | the helper that reopens stashed local-file tabs — `native/install.zsh` registers it with Firefox |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, List, Cards and Explore in any browser with a fake extension API and real capture text<br>`preview-frames/test-preview-frames.zsh` — check in headless Firefox that Explore's live preview frames sites that forbid framing, and nothing else can<br>`preview-pages/test-keys.zsh` — drive List, Cards, Explore and Tags in that preview with the shared keys and check each action and its undo, the tag library, the tag palette and the hover previews<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, Links, Cards and Tags in any browser with a fake extension API and real capture text<br>`preview-frames/test-preview-frames.zsh` — check in headless Firefox that the Links detail pane's live preview frames sites that forbid framing, and nothing else can<br>`preview-pages/test-keys.zsh` — drive Links (with and without its detail pane), Cards, Tags and the popup in that preview with the shared keys and check each action and its undo, the tag library, the tag palette and the hover previews<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## After an export: one command
 
@@ -111,17 +111,17 @@ yet — and, if you do, its tags with nine of the palette, your most used first,
 page you do not hold, **Capture** for one held without its text. Then what to do with it: **Capture** (its ▾
 captures with a full-page screenshot, or with a note), **Remove** — one copy; held in several places,
 its menu names each and you pick one, with **Undo** after — and, for a page not saved yet, **+ List**
-and **Stash tab**. The foot holds links to List, Cards, Explore and Tags, each switching to the
+and **Stash tab**. The foot holds links to Links, Cards and Tags, each switching to the
 viewer's tab if one is open, and a small **Stash window** (its ▾ holds the other scopes). The last
 action's message comes back when the popup reopens only on the page it was about, within ten
 minutes. Adding links in
-bulk, exports and settings live on the List page.
+bulk, exports and settings live on the Links page.
 
 ### Viewers and sources
 
 Links come from three **sources** — **Stashed tabs** (stashes made from your open tabs), **Imports**
 (stashes brought in from OneTab, TidyTab, a file or pasted text) and the **Reading list** (links you
-queued, and pages you kept) — and three **viewers** show them: **List**, **Cards** and **Explore**.
+queued, and pages you kept) — and three **viewers** show them: **Links**, **Cards** and **Tags**.
 The bar across the top of every page links the viewers and holds a chip per source; turn any mix on,
 and the choice holds as you switch viewers and between visits. Each chip counts its links.
 
@@ -132,8 +132,8 @@ entries.
 
 ### Tags
 
-A tag belongs to a link — the URL wherever it is held — so tagging it on List shows on its Explore
-and Cards copies too. Until a link has tags of its own, what kind of site it is shows in their place,
+A tag belongs to a link — the URL wherever it is held — so tagging it on Links shows on its Cards
+copies too. Until a link has tags of its own, what kind of site it is shows in their place,
 dashed: `code` (GitHub, GitLab…), `video`, `post`, `discussion`, `game`, `paper`, `doc`, `article`,
 `local file`. Guesses are never saved; the first change in the editor makes the shown tags yours,
 and removing every tag brings the guess back.
@@ -142,11 +142,11 @@ and removing every tag brings the guess back.
   there is — click one, or press `1`–`9` on the empty field, to put it on or take it off. Typing
   narrows the palette (spaces and punctuation ignored, so `gamejam` finds *game jam*); Enter or Tab
   takes the first match, and a name the palette lacks is offered as **+ new tag**. Backspace takes
-  the last tag off; Escape stops. Every change is saved at once. Explore has the editor in its
+  the last tag off; Escape stops. Every change is saved at once. the Links detail pane has the editor in its
   detail pane, and Cards opens it over the card.
 - **Tagging many in a row** works on every page: Enter on the empty field moves to the next link
   with its editor already open, so `T`, type, Enter, Enter, type, … runs down the links; Escape
-  stops. Narrow first to the links that need it: **Untagged** is a chip in Explore and on List, and
+  stops. Narrow first to the links that need it: **Untagged** is a tag chip on Links, and
   an option in Cards' tag selector.
 - A stash heading's **⋯ → Tag all tabs…** adds one tag to every tab in it.
 - List has a row of tag chips — any of them, or **Untagged** for the links with none of their own —
@@ -167,9 +167,9 @@ come back with an import.
 
 ### Acting on a link — the same on every page
 
-List, Cards, Explore and Tags offer one set of actions on a link, drawn the same way and answering to
+Links, Cards and Tags offer one set of actions on a link, drawn the same way and answering to
 the same keys. There are four things to do with a link: **tag** it, **capture** it (save its text,
-images and links), **remove** it, or **skip** it for now. Under the one link Cards and Explore show,
+images and links), **remove** it, or **skip** it for now. Under the one link Cards and the Links detail pane show,
 **Open**, **Tags**, **Capture** and **Remove** are buttons with their keys; on a row of List or Tags,
 Tags, Capture and Remove show. Move, To list and removing the link's *other* copies sit under **⋯** —
 nothing acts on more than the copy in front of you unless you pick it there. The keys are laid out
@@ -179,7 +179,7 @@ number row works as reddit's keyboard navigation (RES) has it.
 | Key | Action |
 |---|---|
 | `W` `S` (`1` `2`, `↑` `↓`) | previous / next link; a sidebar and the view beside it move together; held, they repeat |
-| `A` `D` | previous / next group: the stash on Explore and Cards, the section on List, the tag on Tags |
+| `A` `D` | previous / next group: the section on Links (a stash, grouped by stash), the stash on Cards, the tag on Tags |
 | `T` | tags |
 | `E` (`3`) | capture: load it in a background tab and save its text, images and links |
 | `Q` (`⌘⌫`) | remove this copy — from its stash, or from the reading list — then on to the next link |
@@ -211,15 +211,15 @@ stash). Escape, a click elsewhere or leaving closes it. One module draws them al
 marks an element with `Peek.mark(node, kind, id)`, and a new kind is one `Peek.kind()` renderer.
 
 Whether a link was captured shows the same way everywhere: a **captured** badge (its date on hover)
-or a dashed **not captured** on a row, card or Explore's header, and a page icon beside the title in the
-Cards and Explore sidebars. A card also says when its tab was last restored.
+or a dashed **not captured** on a row, card or the detail pane's header, and a page icon beside the title in Links'
+rows and the Cards sidebar. A card also says when its tab was last restored.
 
 Keep and Drop, the verdicts of versions before 5.38, are gone from the pages; marks already stored
 stay in storage untouched, and nothing reads them.
 
 Only walking repeats while held, so a held key cannot remove a run of links. Keys never act
 while a field has the keyboard; `Esc` leaves it. What plain Open does to the stash is **Settings →
-After restoring** on the List page; `⇧4` does the other.
+After restoring** on the Links page; `⇧4` does the other.
 
 ### Cards — one at a time
 
@@ -244,7 +244,7 @@ mixing the domains keeps each card worth a look.
 
 OneTab's move, kept apart from the reading list. **Stash** (`Ctrl+Shift+S`, the popup, the page's
 right-click menu, or right-click on the tab strip) folds tabs into a saved group and closes them:
-the selected tabs if you have selected several, otherwise the whole window. The List page, grouped
+the selected tabs if you have selected several, otherwise the whole window. The Links page, grouped
 by stash, opens in their place.
 
 The **Stash** submenu — on a page, and on a tab in the tab strip — and the ▾ beside the popup's
@@ -252,7 +252,7 @@ Stash button take other scopes too: **all tabs in this window** (even when sever
 **only this tab**, **tabs to the left**, **tabs to the right**,
 **all except this one**, and **every window** (one stash per window). On the tab strip, "this tab" is
 the one you right-clicked. **Never stash this site** in the same submenu puts a site on a list that
-stashing leaves open; **Settings** on the List page shows the list. Two commands without a
+stashing leaves open; **Settings** on the Links page shows the list. Two commands without a
 default key, *Stash only this tab* and *Show stashed tabs*, can be bound in Firefox's
 *Manage Extension Shortcuts*.
 
@@ -305,15 +305,17 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
   tabs**, which moves it between the two sources. Stashes imported before 5.14 were not marked;
   the one known import of that time is marked by a data patch (below), any other by hand.
 
-**Explore** shows every link in the chosen sources in a sidebar — everything, one stash, or the
-reading list; stashes in the order they were stashed, then the reading list — with a filter and
-All / Untagged / Not captured chips, and the chosen link in full beside it. Click any row to jump to it,
-or walk with `W` `S`, the detail following; the sidebar keeps each stash in tab-strip order. `A` `D`
-jump to the previous or next stash, and Space / ⇧Space scroll a long detail. The detail pane shows the
-link's capture if the page was ever read, whether it is on the reading list or in other stashes, and
-how many links share its site. The actions and keys are every page's (above).
+**The detail pane** (the bar's **Detail** toggle, or `V`) narrows the rows to a sidebar and shows
+the selected one in full beside it — Explore, before 5.43, was this as a page of its own, and its old
+address now opens Links with the pane. Click any row or walk with `W` `S`, the pane following; `A` `D`
+jump a section, and Space / ⇧Space scroll a long pane. It shows the link's capture, whether it is on
+the reading list or in other stashes, and how many links share its site, with the usual actions.
+Two more toggles in the bar, each remembered: **Compact** shows a row as its icon and title only (on
+by default with the pane, and then hovering a title previews the link), and **Stash tools** shows or
+hides the buttons on stash headings. `?stash=<id>` opens one stash alone, with an **Only … ×**
+banner to show everything again; a stash's hover preview links there.
 
-The **live preview** (`p`) shows the page itself, half a second after you land on a tab. Most sites
+The **live preview** (`P`, inside the detail pane) shows the page itself, half a second after you land on a tab. Most sites
 forbid being framed, so for frames opened from Link Keeper's own pages only, a `declarativeNetRequest`
 rule removes `X-Frame-Options` and the `Content-Security-Policy` header from the response (all-sites
 access is asked on the first preview). Removing them through `webRequest` does nothing: Firefox
@@ -328,7 +330,7 @@ a throwaway headless Firefox — real tabs, real bookmarks, a temporary profile 
 `node tools/test-stash-import.mjs` checks every import format.
 `tools/test-open-local-files.py` checks the helper's refusals without opening anything.
 
-### The List page
+### The Links page
 
 *Open list* in the popup opens it — the readable view when there are hundreds of links, rather than
 a 22rem popup.
