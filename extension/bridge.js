@@ -117,10 +117,13 @@ async function backupNow(reason = "change") {
 }
 
 /* The first change starts the clock and later ones ride along, so a busy minute is one backup
- * written at its end, never one put off for as long as changes keep coming. */
-let backupTimer = null;
+ * written at its end, never one put off for as long as changes keep coming. A sooner request
+ * (the one on connecting) pulls a pending backup forward rather than waiting behind it. */
+let backupTimer = null, backupDue = 0;
 function backupSoon(ms = 60e3) {
-  if (backupTimer) return;
+  if (backupTimer && backupDue <= Date.now() + ms) return;
+  clearTimeout(backupTimer);
+  backupDue = Date.now() + ms;
   backupTimer = setTimeout(() => backupNow().catch(e => { bridge.lastBackup = { ok: false, error: String(e.message || e) }; }), ms);
 }
 browser.storage.onChanged.addListener((changes, area) => { if (area === "local") backupSoon(); });
