@@ -19,7 +19,7 @@
 
 const GROUPS = ["stash", "domain", "tag", "day", "month", "newest", "oldest"];
 const GROUP_KEY = "listGroup";
-const FILTERS = ["all", "uncaptured"];
+const FILTERS = ["all", "uncaptured", "filtered"];
 
 let data = { links: [], stashes: [], all: { links: [], stashes: [] }, sources: new Set(), byKey: new Map() };
 let settings = { afterStash: "show", afterRestore: "keep", exclude: [] };
@@ -78,7 +78,10 @@ function togglePane(on = !pane) {
 function say(text) { $("msg").textContent = text; }
 
 async function load() {
-  const [d, { settings: st }, stored] = await Promise.all([loadLinks(), send({ type: "stash-settings" }), browser.storage.local.get(PREVIEW_KEY)]);
+  const [d, { settings: st }, stored] = await Promise.all([loadLinks({ keepFiltered: true }), send({ type: "stash-settings" }), browser.storage.local.get(PREVIEW_KEY)]);
+  // The pile, and apart from it the filtered-out links, which only the Filtered out filter shows.
+  d.filteredLinks = d.links.filter(l => l.tags.includes(FILTER_TAG));
+  d.links = d.links.filter(l => !l.tags.includes(FILTER_TAG));
   data = d;
   settings = st;
   previewMode = stored[PREVIEW_KEY] ? "keep" : previewMode === "keep" ? "off" : previewMode;
@@ -726,6 +729,7 @@ function renderRows() {
   const counts = {
     all: total,
     uncaptured: data.links.filter(l => isWeb(l.url) && !l.cap).length,
+    filtered: data.filteredLinks.length,
     captured: data.links.filter(l => l.cap).length,
     untagged: data.links.filter(l => !l.tags.length).length,
   };
@@ -734,16 +738,13 @@ function renderRows() {
     ? `${plural(total, "link")} · ${counts.captured} captured · ${counts.untagged} untagged${stashBit}`
     : "Nothing to show";
   $("bar-captured").style.width = total ? `${counts.captured / total * 100}%` : "0";
-  const names = { all: "All", uncaptured: "Not captured" };
+  const names = { all: "All", uncaptured: "Not captured", filtered: "Filtered out" };
   for (const f of FILTERS) $(`f-${f}`).replaceChildren(`${names[f]} `, el("span", { className: "n", textContent: counts[f] }));
-  // Filtered out: a toggle beside the filters, counted whether shown or not.
-  $("t-filtered").replaceChildren("Filtered out ", el("span", { className: "n", textContent: data.filtered?.count || 0 }));
-  $("t-filtered").setAttribute("aria-pressed", String(FilteredOut.shown()));
   $("groupby").value = group;
 
   const out = $("out");
   out.textContent = "";
-  const visible = data.links.filter(l => matches(l, term));
+  const visible = (filter === "filtered" ? data.filteredLinks : data.links).filter(l => matches(l, term));
 
   if (!data.sources.size) {
     out.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: "No source chosen" }),
@@ -986,7 +987,6 @@ function renderSettings() {
   }
 }
 
-$("t-filtered").onclick = () => { FilteredOut.set(!FilteredOut.shown()); load(); };
 
 /* The filtered-out rules: read when Settings opens, saved and applied to every link held. */
 async function loadFilterRules() {

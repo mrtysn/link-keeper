@@ -68,14 +68,10 @@ const SOURCE_NAMES = { tabs: "Stashed", import: "Imported", list: "Reading list"
 /* The dataset, cut down to the chosen sources: a link shows if any source holding it is chosen, a
  * stash if its own source is. byKey finds a link from a stash tab's key. */
 /* Links tagged filtered-out — a site's main page, by the rules in Settings (background.js) — stay
- * out of the main pile unless the page is asked to show them. The choice is per browser. */
+ * out of the main pile. */
 const FILTER_TAG = "filtered-out";
-const FilteredOut = {
-  shown() { try { return localStorage.getItem("showFiltered") === "1"; } catch (e) { return false; } },
-  set(on) { try { localStorage.setItem("showFiltered", on ? "1" : "0"); } catch (e) { /* storage blocked */ } },
-};
 
-/* keepFiltered: the Tags page shows the filtered-out tag's links like any tag's. hidden is the keys
+/* keepFiltered: Links (which shows them under its own filter) and Tags keep them. hidden is the keys
  * left out, for pages that draw from a stash's tabs directly; count is how many links were. */
 async function loadLinks({ keepFiltered = false } = {}) {
   const [data, chosen, { tagDefs, favicons }] = await Promise.all([send({ type: "links" }), window.LinkSources.ready, browser.storage.local.get(["tagDefs", "favicons"])]);
@@ -89,7 +85,7 @@ async function loadLinks({ keepFiltered = false } = {}) {
   const on = new Set(sources);
   const onShow = data.links.filter(l => l.sources.some(s => on.has(s)));
   const filtered = onShow.filter(l => l.tags.includes(FILTER_TAG));
-  const hide = !keepFiltered && !FilteredOut.shown();
+  const hide = !keepFiltered;
   const hidden = new Set(hide ? filtered.map(l => l.key) : []);
   const links = hide ? onShow.filter(l => !hidden.has(l.key)) : onShow;
   const stashes = data.stashes.filter(s => on.has(s.source));

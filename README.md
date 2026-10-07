@@ -204,8 +204,9 @@ letter.
 
 **Filtered out.** Some pages are tools, not reading: an inbox, a home feed, Drive's home, your own
 profile. They are still stashed with the rest, but a rule in **Settings → Filtered out** tags them
-**filtered-out**, and Links and Cards keep them out of the pile and its counts; the **Filtered out**
-chip on Links shows them again, and Tags lists them like any tag. A rule is one site's main page —
+**filtered-out**, and Links and Cards keep them out of the pile and its counts; Links' filters
+are **All** (the pile), **Not captured** and **Filtered out**, which shows only these; Tags lists them
+like any tag. A rule is one site's main page —
 `reddit.com` is Reddit's front page and never a post; `*` stands for anything, as in
 `mail.google.com/mail/u/*/#inbox`, which is the inbox but not an email under it. Saving applies the
 rules to everything held, and new links are matched as they arrive; a rule taken away untags what

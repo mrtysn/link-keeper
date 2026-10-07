@@ -248,7 +248,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "preview: no errors " + p.errs.join("; "));
   await p.close();
 }
-// Filtered out: a rule hides a site's main page from the pile; the chip shows it again
+// Filtered out: a rule hides a site's main page from the pile; its filter shows only those
 {
   const p = await page("list.html");
   const rows = () => p.$$eval(".rows > li", l => l.length);
@@ -256,10 +256,11 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.evaluate(() => browser.runtime.sendMessage({ type: "set-filter-rules", rules: ["news.ycombinator.com/item"] }));
   await p.waitForTimeout(800);   // the page reloads itself on the tag change
   ok(await rows() === n0 - 1, `filtered: the matching link leaves the pile (${n0} → ${await rows()})`);
-  ok(/Filtered out\s*1/.test(await p.$eval("#t-filtered", e => e.textContent)), "filtered: the chip counts it");
-  await p.click("#t-filtered"); await p.waitForTimeout(400);
-  ok(await rows() === n0, "filtered: the chip shows it again");
-  await p.click("#t-filtered"); await p.waitForTimeout(300);
+  ok(/Filtered out\s*1/.test(await p.$eval("#f-filtered", e => e.textContent)), "filtered: the filter counts it");
+  await p.click("#f-filtered"); await p.waitForTimeout(400);
+  ok(await rows() === 1, "filtered: the filter shows only the filtered-out links");
+  await p.click("#f-all"); await p.waitForTimeout(300);
+  ok(await rows() === n0 - 1, "filtered: All is the pile without them");
   ok(!p.errs.length, "filtered: no errors " + p.errs.join("; "));
   await p.close();
 }
