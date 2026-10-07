@@ -1198,32 +1198,31 @@ async function importStashes(stashes, format) {
 }
 
 /* --- live preview ---------------------------------------------------------------
- * The explore page shows a stashed tab in a frame. Most sites forbid framing with X-Frame-Options or
- * a CSP frame-ancestors directive, so for frames whose parent is that page — and nothing else — both
- * are removed from the response. The frame is sandboxed without top navigation, so a framed page
- * cannot navigate the extension page away. Runs only for sites the user has granted access to.
+ * The explore page shows a link's page in a frame. Most sites forbid framing with X-Frame-Options or
+ * a CSP frame-ancestors directive, so for frames opened from this extension's own pages — and
+ * nothing else — both headers are removed. A declarativeNetRequest rule does it: Firefox enforces
+ * the headers after webRequest listeners run, so removing them there has no effect (checked with
+ * tools/test-preview-frames.zsh). The CSP header goes whole, since a rule cannot edit one
+ * directive; the frame is sandboxed, logged out and cannot navigate the extension page away. The
+ * rule acts only on sites the user has granted access to.
  */
 
-const PREVIEW_PAGE = () => browser.runtime.getURL("stash-cards.html");
-
-function unframeHeaders(details) {
-  if (details.type !== "sub_frame" || !String(details.documentUrl || "").startsWith(PREVIEW_PAGE())) return {};
-  const responseHeaders = [];
-  for (const h of details.responseHeaders || []) {
-    const name = h.name.toLowerCase();
-    if (name === "x-frame-options") continue;
-    if (name === "content-security-policy" || name === "content-security-policy-report-only") {
-      const kept = String(h.value || "").split(";").filter(d => !/^\s*frame-ancestors\b/i.test(d)).join(";").trim();
-      if (kept) responseHeaders.push({ name: h.name, value: kept });
-      continue;
-    }
-    responseHeaders.push(h);
-  }
-  return { responseHeaders };
+const PREVIEW_RULE = 1;
+async function allowPreviewFrames() {
+  if (!browser.declarativeNetRequest) return;
+  await browser.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: [PREVIEW_RULE],
+    addRules: [{
+      id: PREVIEW_RULE, priority: 1,
+      action: { type: "modifyHeaders", responseHeaders: [
+        { header: "x-frame-options", operation: "remove" },
+        { header: "content-security-policy", operation: "remove" },
+      ] },
+      condition: { resourceTypes: ["sub_frame"], initiatorDomains: [new URL(browser.runtime.getURL("")).host] },
+    }],
+  });
 }
-
-browser.webRequest?.onHeadersReceived.addListener(unframeHeaders,
-  { urls: ["<all_urls>"], types: ["sub_frame"] }, ["blocking", "responseHeaders"]);
+allowPreviewFrames().catch(e => console.error("preview frames:", e));
 
 /* Every source joined into one dataset for the pages; joinLinks in links.js does the joining. */
 async function getLinks() {

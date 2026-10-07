@@ -707,27 +707,18 @@ await check("after a reinstall the stashes are found by folder name; bookmarks e
   assert.equal([...bm.nodes.values()].filter(n => n.title === "Link Keeper stashes").length, 1, "no second root");
 });
 
-await check("frame headers are stripped only for frames inside the explore page", async () => {
+await check("frame headers are removed only for frames opened from the extension's pages", async () => {
+  // Whether Firefox then shows the frame is tools/preview-frames/test-preview-frames.zsh's to check.
   const { browser } = makeBrowser([]);
-  let listener;
-  browser.webRequest = { onHeadersReceived: { addListener(fn) { listener = fn; } } };
+  let rules = null;
+  browser.declarativeNetRequest = { updateSessionRules: async u => { rules = u; } };
   await load(browser);
-  const headers = () => [
-    { name: "X-Frame-Options", value: "DENY" },
-    { name: "Content-Security-Policy", value: "default-src 'self'; frame-ancestors 'none'; img-src *" },
-    { name: "Content-Type", value: "text/html" },
-  ];
-  const ours = listener({ type: "sub_frame", documentUrl: "moz-extension://fake-uuid/stash-cards.html?stash=a", responseHeaders: headers() });
-  assert.deepEqual(plain(ours.responseHeaders), [
-    { name: "Content-Security-Policy", value: "default-src 'self'; img-src *" },
-    { name: "Content-Type", value: "text/html" },
-  ]);
-  const only = listener({ type: "sub_frame", documentUrl: "moz-extension://fake-uuid/stash-cards.html",
-    responseHeaders: [{ name: "content-security-policy", value: "frame-ancestors 'self'" }] });
-  assert.deepEqual(plain(only.responseHeaders), [], "a CSP that was only frame-ancestors goes entirely");
-  assert.deepEqual(plain(listener({ type: "sub_frame", documentUrl: "https://evil.example/", responseHeaders: headers() })), {});
-  assert.deepEqual(plain(listener({ type: "sub_frame", documentUrl: "moz-extension://fake-uuid/list.html", responseHeaders: headers() })), {});
-  assert.deepEqual(plain(listener({ type: "main_frame", documentUrl: "moz-extension://fake-uuid/stash-cards.html", responseHeaders: headers() })), {});
+  await new Promise(r => setTimeout(r, 0));
+  const [rule] = plain(rules.addRules);
+  assert.deepEqual(plain(rules.removeRuleIds), [rule.id], "registering again replaces it");
+  assert.deepEqual(rule.condition, { resourceTypes: ["sub_frame"], initiatorDomains: ["fake-uuid"] });
+  assert.deepEqual(rule.action.responseHeaders.map(h => [h.header, h.operation]),
+    [["x-frame-options", "remove"], ["content-security-policy", "remove"]]);
 });
 
 await check("links: one row per URL across stashes and the reading list, captures joined by visited or canonical URL", async () => {
