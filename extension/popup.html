@@ -100,12 +100,12 @@
   #note-row { margin-top: 6px; }
   .unsaved { margin: 8px 0 0; color: var(--dim); font-size: 12px; }
 
-  section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
-  .tabsrow { display: flex; gap: 6px; }
-  .tabsrow .split { flex: 1; }
-
-  /* --- the viewers, a line of links at the foot --- */
-  .viewers { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  /* --- the foot: the viewers as links, and Stash for the window --- */
+  .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .foot .split.small { margin-left: auto; }
+  .foot .split.small button { min-height: 26px; padding: 3px 9px; font-size: 12px; }
+  .foot .split.small button.arrow { width: 22px; padding: 0; }
+  .viewers { display: flex; flex-wrap: wrap; gap: 2px 14px; }
   .viewers button { min-height: 0; padding: 2px 0; border: 0; background: none; color: var(--accent); font-weight: 600; }
   @media (hover: hover) { .viewers button:hover { text-decoration: underline; } }
 
@@ -153,12 +153,17 @@
     <div class="menu" id="remove-menu" popover></div>
   </div>
 
-  <section aria-label="Tabs">
-    <div class="tabsrow">
-      <div class="split">
-        <button id="stash" title="Stash the selected tabs, or the whole window, and close them">Stash window <kbd aria-hidden="true">&#8963;&#8679;S</kbd></button>
-        <button class="arrow" id="stash-more" popovertarget="stash-menu" aria-label="Stash only some tabs">&#9662;</button>
-      </div>
+  <!-- The foot: the viewers, and Stash for the window's tabs, which is not about this page. -->
+  <div class="foot">
+    <nav class="viewers" aria-label="Open a page">
+      <button data-open="open-list">List</button>
+      <button data-open="open-cards">Cards</button>
+      <button data-open="open-explore">Explore</button>
+      <button data-open="open-tags">Tags</button>
+    </nav>
+    <div class="split small">
+      <button id="stash" title="Stash the selected tabs, or the whole window, and close them (&#8963;&#8679;S)">Stash window</button>
+      <button class="arrow" id="stash-more" popovertarget="stash-menu" aria-label="Stash only some tabs">&#9662;</button>
     </div>
     <div class="menu" id="stash-menu" popover>
       <button data-scope="window">All tabs in this window</button>
@@ -167,14 +172,7 @@
       <button data-scope="others">All except this one</button>
       <button data-scope="all-windows">Every window, one stash each</button>
     </div>
-  </section>
-
-  <nav class="viewers" aria-label="Open a page">
-    <button data-open="open-list">List</button>
-    <button data-open="open-cards">Cards</button>
-    <button data-open="open-explore">Explore</button>
-    <button data-open="open-tags">Tags</button>
-  </nav>
+  </div>
 
   <div class="msg">
     <p id="msg" role="status"></p>

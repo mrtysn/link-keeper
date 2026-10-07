@@ -286,6 +286,15 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 {
+  const same = await page("popup.html?msg&tab=about");
+  ok(/captured/.test(await same.$eval("#msg", e => e.textContent)), "popup: the last message shows again on the page it was about");
+  await same.close();
+  const other = await page("popup.html?msg");
+  ok(await other.$eval("#msg", e => e.textContent) === "", "popup: but not on another page");
+  ok(!!(await other.$(".foot #stash")), "popup: Stash window sits in the foot");
+  await other.close();
+}
+{
   const p = await page("popup.html?tab=new");
   ok(/not saved yet/.test(await p.$eval("#where", e => e.textContent)), "popup: a new page says it is not saved");
   ok(await p.$eval("#queue", e => e.classList.contains("primary")), "popup: + List is the filled next step");

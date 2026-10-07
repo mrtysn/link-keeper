@@ -111,8 +111,10 @@ yet — and, if you do, its tags with nine of the palette, your most used first,
 page you do not hold, **Capture** for one held without its text. Then what to do with it: **Capture** (its ▾
 captures with a full-page screenshot, or with a note), **Remove** — one copy; held in several places,
 its menu names each and you pick one, with **Undo** after — and, for a page not saved yet, **+ List**
-and **Stash tab**. Below, **Stash window** (its ▾ holds the other scopes), and a line of links to
-List, Cards, Explore and Tags, each switching to the viewer's tab if one is open. Adding links in
+and **Stash tab**. The foot holds links to List, Cards, Explore and Tags, each switching to the
+viewer's tab if one is open, and a small **Stash window** (its ▾ holds the other scopes). The last
+action's message comes back when the popup reopens only on the page it was about, within ten
+minutes. Adding links in
 bulk, exports and settings live on the List page.
 
 ### Viewers and sources

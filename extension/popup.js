@@ -7,10 +7,12 @@
  */
 
 /* A popup is destroyed the moment it closes, so a note half-typed and the result of the last
- * action would vanish with it. Both are mirrored into storage and restored on open — the message
- * matters most, because an action's outcome is otherwise unknowable after the fact. */
+ * action would vanish with it. Both are mirrored into storage and restored on open. The message
+ * comes back only on the page it was about, and only for a while — after that it is old news about
+ * another page. */
 const UI_KEY = "popupUi";
-let ui = { note: "", noting: false, msg: "", msgClass: "" };
+const MSG_FOR = 10 * 60 * 1000;
+let ui = { note: "", noting: false, msg: "", msgClass: "", url: "", at: 0 };
 let uiTimer = null;
 
 function saveUi() {
@@ -23,7 +25,7 @@ function say(text, cls = "") {
   $("msg").className = cls;
   $("copy-msg").hidden = !text;
   $("undo").hidden = !LinkActions.canUndo();
-  Object.assign(ui, { msg: text, msgClass: cls });
+  Object.assign(ui, { msg: text, msgClass: cls, url: tab?.url || "", at: Date.now() });
   saveUi();
 }
 
@@ -249,18 +251,20 @@ for (const b of document.querySelectorAll(".viewers [data-open]")) {
   };
 }
 
-/* Restore what the last popup session had in flight. */
-browser.storage.local.get(UI_KEY).then(got => {
+/* Restore what the last popup session had in flight: the note, and the message if it is about
+ * this page and recent. */
+async function restoreUi() {
+  const got = await browser.storage.local.get(UI_KEY).catch(() => ({}));
   ui = { ...ui, ...(got[UI_KEY] || {}) };
   if (ui.noting) {
     $("note-row").hidden = false;
     $("note").value = ui.note || "";
   }
-  if (ui.msg) {
+  if (ui.msg && ui.url === (tab?.url || "") && Date.now() - (ui.at || 0) < MSG_FOR) {
     $("msg").textContent = ui.msg;
     $("msg").className = ui.msgClass || "";
     $("copy-msg").hidden = false;
   }
-}).catch(() => {});
+}
 
-load();
+load().then(restoreUi);

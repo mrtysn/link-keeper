@@ -25,6 +25,8 @@
         note: "",
         noting: params.has("note"),
         msg: "captured (+3 links)\npng 1346×32000 from 31 tiles → link-keeper/x-preview.png",
+        // About the about: page the ?tab=about state shows, and recent, as one just made.
+        url: "about:preferences", at: Date.now(),
         msgClass: "ok",
       }
       : undefined,
