@@ -23,5 +23,12 @@ release, not a release per change.
 ## Before a release
 
 Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tools/test-stash.mjs`,
-and for stashing or the live preview `tools/run-in-headless-firefox.zsh --extension extension
-tools/e2e-stash.js` and `tools/preview-frames/test-preview-frames.zsh`.
+`node tools/test-bridge.mjs`, for stashing or the live preview `tools/run-in-headless-firefox.zsh
+--extension extension tools/e2e-stash.js` and `tools/preview-frames/test-preview-frames.zsh`, and
+for the bridge or storage `tools/test-bridge-firefox.zsh`.
+
+## Reading the owner's links
+
+Use `link-keeper` (tools/link-keeper.mjs; `--help`), never the Firefox profile's files: it reads
+the live add-on, or the latest backup when Firefox is closed. A change through it is journaled;
+`link-keeper undo` reverts the last one. Remove one copy at a time unless the owner asks for more.
