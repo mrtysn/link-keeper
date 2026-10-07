@@ -816,14 +816,17 @@ async function showPage(page, windowId, suffix = "") {
 }
 
 /* What the popup knows about the page you are on: the link as the pages see it (its tags, its
- * capture, its reading-list entry), and each stash holding a copy, whole, so the popup can remove
- * one copy and put it back. link is null when the URL is held nowhere. */
+ * capture, its reading-list entry), each stash holding a copy, whole, so the popup can remove one
+ * copy and put it back, and how many links carry each tag. link is null when the URL is held nowhere. */
 async function pageInfo(url) {
   if (!url) return { link: null, stashes: [] };
   const { links, stashes } = await getLinks();
   const link = links.find(l => l.key === keyOf(url)) || null;
   const held = link ? stashes.filter(s => link.copies.some(c => c.stash === s.id)) : [];
-  return { link, stashes: held };
+  // How many links carry each tag, so the popup can offer the most used first.
+  const tagUse = {};
+  for (const l of links) for (const t of l.tags) tagUse[t] = (tagUse[t] || 0) + 1;
+  return { link, stashes: held, tagUse };
 }
 
 /* What the popup shows on its view buttons, counted in the background so the popup never holds

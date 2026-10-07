@@ -266,9 +266,14 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const before = await places();
   ok(before.length >= 2, `popup: says where the page is held (${before.join(", ")})`);
   ok(await p.evaluate(() => !!document.activeElement.closest("#tagbox .tagger")), "popup: opens with the tag field ready");
+  ok(await p.$$eval("#tagbox .palette .tag.pick", l => l.length) === 9, "popup: the palette offers nine tags");
+  ok(await p.$eval("#tagbox .palette .tag.pick", e => e.textContent) === "1ai tools", "popup: the most used first");
+  ok(/^Captured/.test(await p.$eval("#captured", e => e.textContent)), "popup: whether it is captured, on its own line");
+  ok((await places()).every(t => /tabs?$|^Reading list$/.test(t)), `popup: each stash as day and tab count (${(await places()).join(", ")})`);
   const first = await p.$eval("#tagbox .palette .tag.pick", e => e.textContent.replace(/^\d/, ""));
+  const had = (await p.$eval("#tagbox .chips", e => e.textContent)).includes(first);
   await key(p, "1");
-  ok((await p.$eval("#tagbox .chips", e => e.textContent)).includes(first), `popup: 1 tags the page ${first}`);
+  ok((await p.$eval("#tagbox .chips", e => e.textContent)).includes(first) !== had, `popup: 1 toggles ${first} on the page`);
   await p.click("#remove"); await p.waitForTimeout(150);
   const items = await p.$$eval("#remove-menu button", l => l.map(b => b.textContent));
   ok(items.length === before.length, `popup: Remove names each place to pick one (${items.join(" · ")})`);
@@ -282,7 +287,8 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 }
 {
   const p = await page("popup.html?tab=new");
-  ok(/Not saved yet/.test(await p.$eval("#where", e => e.textContent)), "popup: a new page says it is not saved");
+  ok(/not saved yet/.test(await p.$eval("#where", e => e.textContent)), "popup: a new page says it is not saved");
+  ok(await p.$eval("#queue", e => e.classList.contains("primary")), "popup: + List is the filled next step");
   ok(await p.$eval("#queue", e => !e.hidden) && await p.$eval("#stash-tab", e => !e.hidden) && await p.$eval("#remove", e => e.hidden), "popup: and offers + List and Stash tab, no Remove");
   await p.close();
 }

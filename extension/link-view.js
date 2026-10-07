@@ -277,10 +277,11 @@ function suggestField(input, exclude = () => []) {
 /* The editor for one link's tags. Guesses start as dimmed chips; the first change saves what is
  * shown, so a guess that is kept becomes a tag, and removing every tag brings the guesses back.
  * Under the field, a palette of every tag toggles them with a click, or 1–9 on an empty field.
+ * order() replaces the palette's order, and limit shows only that many until something is typed.
  * Enter on the empty field or Escape is "done": the box fires "tagdone", its detail saying which
  * ({ next: true } for Enter, which pages take as "on to the next link"; { escape: true } for Escape). onSaved(tags) follows a
  * save; link.tags is updated in place. */
-function tagEditor(link, onSaved) {
+function tagEditor(link, onSaved, { order = null, limit = 0 } = {}) {
   const start = shownTags(link);
   let tags = start.tags.slice();
   let guessed = start.guessed && tags.length > 0;
@@ -306,8 +307,9 @@ function tagEditor(link, onSaved) {
   const drawPalette = () => {
     palette.textContent = "";
     const q = flat(typed());
-    const pool = tagPool();
-    offered = q ? [...pool.filter(n => flat(n).startsWith(q)), ...pool.filter(n => !flat(n).startsWith(q) && flat(n).includes(q))] : pool;
+    const pool = order ? order() : tagPool();
+    offered = q ? [...pool.filter(n => flat(n).startsWith(q)), ...pool.filter(n => !flat(n).startsWith(q) && flat(n).includes(q))]
+      : limit ? pool.slice(0, limit) : pool;
     offered.forEach((t, i) => {
       const b = el("button", { type: "button", className: "tag pick", title: has(t) ? `Take ${t} off` : `Tag it ${t}` },
         !q && i < 9 ? el("kbd", { textContent: i + 1 }) : null, t);

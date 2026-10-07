@@ -71,6 +71,12 @@
   }
   .pagehead .host { grid-column: 2; color: var(--dim); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .where { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 8px 0 0; color: var(--dim); font-size: 12px; }
+  .where + .where { margin-top: 4px; }
+  .where .lbl { width: 4.6rem; flex: none; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+  .where .none { font-style: italic; }
+  .where { align-items: baseline; flex-wrap: nowrap; }
+  .where .vals { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+  .where .val { color: var(--ink); }
   .where .place { padding: 0 7px; border-radius: 999px; background: var(--chip); color: var(--ink); font-size: 11.5px; line-height: 1.7; }
   #tagbox { margin-top: 8px; }
   #tagbox .tagger { min-width: 0; }
@@ -82,6 +88,7 @@
   .split { display: flex; }
   .split > button:first-child { flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; }
   .split > button.arrow { width: 26px; padding: 0; border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .split > button.primary + button.arrow { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: inset 1px 0 0 rgb(0 0 0 / .15); }
   .menu {
     position: fixed; inset: auto; margin: 0; min-width: 11rem; padding: 4px;
     background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 10px;
@@ -124,6 +131,7 @@
   <div id="page" aria-live="polite">
     <div class="pagehead"><span class="src" id="page-icon"></span><div class="ttl" id="page-title">—</div><div class="host" id="page-host"></div></div>
     <p class="where" id="where"></p>
+    <p class="where" id="captured"></p>
     <div id="tagbox"></div>
     <div class="pageacts" id="pageacts">
       <div class="split" id="capture-split">

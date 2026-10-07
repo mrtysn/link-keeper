@@ -59,18 +59,32 @@ async function load() {
   render();
 }
 
-/* Where it is held: each stash by name, and the reading list. */
+/* A stash as a short label: its name, or its day, with how many tabs it holds — "Oct 6 · 82 tabs". */
+const dayShort = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); };
+const stashLabel = s => `${renamed(s) ? s.name : dayShort(s.created_at)} · ${plural(s.tabs.length, "tab")}`;
+
+/* Where it is held: each stash, and the reading list. */
 function copies() {
   const link = info.link;
   if (!link) return [];
   const out = link.copies.map(c => {
     const stash = info.stashes.find(s => s.id === c.stash);
-    const t = stash?.tabs.find(x => x.id === c.tab);
-    return stash && t ? { name: stashName(stash), locked: stash.locked, target: { link, stash, tab: t } } : null;
+    const i = stash ? stash.tabs.findIndex(x => x.id === c.tab) : -1;
+    return i === -1 ? null : {
+      label: stashLabel(stash), title: `${stashName(stash)}: tab ${i + 1} of ${stash.tabs.length}`,
+      menu: `${stashLabel(stash)}, tab ${i + 1}`, name: stashName(stash),
+      locked: stash.locked, target: { link, stash, tab: stash.tabs[i] },
+    };
   }).filter(Boolean);
-  if (link.list && !link.list.loose) out.push({ name: "the reading list", list: true, target: { link } });
+  if (link.list && !link.list.loose) out.push({ label: "Reading list", title: "On the reading list", menu: "Reading list", name: "the reading list", list: true, target: { link } });
   return out;
 }
+
+/* The palette offers the most used tags first, so 1–9 reach the ones you use. */
+const byUse = () => {
+  const use = info.tagUse || {};
+  return [...new Set([...tagPool(), ...Object.keys(use)])].map((t, i) => [t, i]).sort((a, b) => (use[b[0]] || 0) - (use[a[0]] || 0) || a[1] - b[1]).map(([t]) => t);
+};
 
 function render() {
   const web = isWeb(tab?.url || "");
@@ -79,29 +93,38 @@ function render() {
   $("page-title").textContent = (link && labelOf(link)) || tab?.title || "This tab";
   $("page-host").textContent = web ? hostOf(tab.url) : "a browser page";
 
-  const where = $("where");
+  // Two lines: where it is held, and whether its text is captured.
+  const where = $("where"), cap = $("captured");
   where.textContent = "";
+  cap.textContent = "";
   const held = copies();
+  cap.hidden = !web;
   if (!web) where.append("Browser pages cannot be saved; Stash still takes the tabs around it.");
-  else if (!link) where.append("Not saved yet");
   else {
-    where.append(held.length ? "In" : "Captured, on no list or stash");
-    for (const c of held) where.append(el("span", { className: "place", textContent: c.name === "the reading list" ? "Reading list" : c.name }));
-    const badge = readBadge(link);
-    if (badge) where.append(badge);
+    // Each line: its label, then its values wrapping beside it rather than under it.
+    const vals = el("span", { className: "vals" });
+    if (!held.length) vals.append(el("span", { className: "none", textContent: link ? "on no list or stash" : "not saved yet" }));
+    for (const c of held) vals.append(el("span", { className: "place", textContent: c.label, title: c.title }));
+    where.append(el("span", { className: "lbl", textContent: "Held" }), vals);
+    const at = link && readAt(link);
+    cap.append(el("span", { className: "lbl", textContent: "Captured" }), el("span", { className: "vals" },
+      at ? el("span", { className: "val", textContent: dayOf(at), title: whenOf(at) }) : el("span", { className: "none", textContent: link?.cap ? "yes" : "not yet" })));
   }
 
   // Tags: only a link that is held has a place to show them.
   const box = $("tagbox");
   box.textContent = "";
   if (link) {
-    const editor = tagEditor(link, () => {});
+    const editor = tagEditor(link, () => {}, { order: byUse, limit: 9 });
     box.append(editor);
     if (!document.activeElement || document.activeElement === document.body) editor.querySelector("input").focus();
   }
 
   $("capture-split").hidden = !web;
   $("keep").firstChild.textContent = link?.cap ? "Capture again " : "Capture ";
+  // The likely next step is filled: save a page you do not hold, capture one you hold without its text.
+  $("queue").classList.toggle("primary", web && !link);
+  $("keep").classList.toggle("primary", web && !!link && !link.cap);
   $("queue").hidden = !web || !!link?.list;
   $("stash-tab").hidden = !web || link?.copies.length > 0;
   const remove = $("remove");
@@ -121,8 +144,8 @@ $("remove").onclick = () => {
   const menu = $("remove-menu");
   menu.textContent = "";
   for (const c of held) {
-    const b = el("button", { type: "button", className: "danger", textContent: `From ${c.name}`, disabled: !!c.locked,
-      title: c.locked ? "That stash is locked" : "" });
+    const b = el("button", { type: "button", className: "danger", textContent: `From ${c.menu}`, disabled: !!c.locked,
+      title: c.locked ? "That stash is locked" : c.title });
     b.onclick = () => { menu.hidePopover(); removeCopy(c); };
     menu.append(b);
   }

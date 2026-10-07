@@ -104,9 +104,11 @@ in `about:addons` → gear → *Manage Extension Shortcuts*.
 
 Opening or capturing a reading-list link marks it **seen** (opened).
 
-The **popup** is about the page you are on. It says whether you hold it already — in which stashes,
-on the reading list, captured or not — and, if you do, shows its tags with the palette, the field
-ready, so `1`–`9` or typing tags it then and there. Then what to do with it: **Capture** (its ▾
+The **popup** is about the page you are on. Two lines say whether you hold it already — **Held**:
+each stash as its day (or name) and tab count, and the reading list; **Captured**: the day, or not
+yet — and, if you do, its tags with nine of the palette, your most used first, the field ready, so
+`1`–`9` or typing tags it then and there. The likely next step is the filled button: **+ List** for a
+page you do not hold, **Capture** for one held without its text. Then what to do with it: **Capture** (its ▾
 captures with a full-page screenshot, or with a note), **Remove** — one copy; held in several places,
 its menu names each and you pick one, with **Undo** after — and, for a page not saved yet, **+ List**
 and **Stash tab**. Below, **Stash window** (its ▾ holds the other scopes), and a line of links to

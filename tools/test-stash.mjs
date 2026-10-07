@@ -920,7 +920,8 @@ await check("page-info: the page you are on, with each stash that holds it, or n
   assert.deepEqual(info.link.copies.length, 2);
   assert.deepEqual(info.stashes.map(s => s.tabs.length).sort(), [1, 2], "each holding stash, whole");
   assert.deepEqual(!!info.link.list, true, "and its reading-list entry");
-  assert.deepEqual(plain(await browser.handle({ type: "page-info", url: "https://nowhere.example/" })), { link: null, stashes: [] });
+  const none = plain(await browser.handle({ type: "page-info", url: "https://nowhere.example/" }));
+  assert.deepEqual([none.link, none.stashes], [null, []]);
 });
 
 await check("tags travel in exports and come back with imports", async () => {

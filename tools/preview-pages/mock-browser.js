@@ -160,7 +160,9 @@
           case "page-info": {
             const { links, stashes } = await window.browser.runtime.sendMessage({ type: "links" });
             const link = links.find(l => l.key === keyOf(msg.url)) || null;
-            return { link, stashes: link ? stashes.filter(s => link.copies.some(c => c.stash === s.id)) : [] };
+            const tagUse = {};
+            for (const l of links) for (const t of l.tags) tagUse[t] = (tagUse[t] || 0) + 1;
+            return { link, stashes: link ? stashes.filter(s => link.copies.some(c => c.stash === s.id)) : [], tagUse };
           }
           case "set-tags": {
             const tags = [...new Set((msg.tags || []).map(t => String(t).toLowerCase().trim()).filter(Boolean))];
