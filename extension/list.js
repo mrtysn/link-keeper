@@ -19,7 +19,9 @@
 
 const GROUPS = ["stash", "domain", "tag", "day", "month", "newest", "oldest"];
 const GROUP_KEY = "listGroup";
-const FILTERS = ["all", "uncaptured", "filtered"];
+// All is the pile; captured, uncaptured and local split it with nothing left over. Filtered out is
+// apart from the pile.
+const FILTERS = ["all", "captured", "uncaptured", "local", "filtered"];
 
 let data = { links: [], stashes: [], all: { links: [], stashes: [] }, sources: new Set(), byKey: new Map() };
 let settings = { afterStash: "show", afterRestore: "keep", exclude: [] };
@@ -106,7 +108,9 @@ const siteOf = url => ({ web: () => hostOf(url), file: () => "Local files", othe
 
 function matches(link, term) {
   if (stashOnly === "list" ? !link.list : stashOnly && !link.copies.some(c => c.stash === stashOnly)) return false;
+  if (filter === "captured" && !(isWeb(link.url) && link.cap)) return false;
   if (filter === "uncaptured" && !(isWeb(link.url) && !link.cap)) return false;
+  if (filter === "local" && isWeb(link.url)) return false;
   if (domainSel.size && !domainSel.has(siteOf(link.url))) return false;
   if (tagSel.size && ![...tagSel].some(t => (t === UNTAGGED ? !link.tags.length : shownTags(link).tags.includes(t)))) return false;
   if (!term) return true;
@@ -729,8 +733,9 @@ function renderRows() {
   const counts = {
     all: total,
     uncaptured: data.links.filter(l => isWeb(l.url) && !l.cap).length,
+    local: data.links.filter(l => !isWeb(l.url)).length,
     filtered: data.filteredLinks.length,
-    captured: data.links.filter(l => l.cap).length,
+    captured: data.links.filter(l => isWeb(l.url) && l.cap).length,
     untagged: data.links.filter(l => !l.tags.length).length,
   };
   const stashBit = data.stashes.length ? ` · ${data.stashes.length === 1 ? "1 stash" : `${data.stashes.length} stashes`}` : "";
@@ -738,7 +743,7 @@ function renderRows() {
     ? `${plural(total, "link")} · ${counts.captured} captured · ${counts.untagged} untagged${stashBit}`
     : "Nothing to show";
   $("bar-captured").style.width = total ? `${counts.captured / total * 100}%` : "0";
-  const names = { all: "All", uncaptured: "Not captured", filtered: "Filtered out" };
+  const names = { all: "All", captured: "Captured", uncaptured: "Not captured", local: "Local & browser", filtered: "Filtered out" };
   for (const f of FILTERS) $(`f-${f}`).replaceChildren(`${names[f]} `, el("span", { className: "n", textContent: counts[f] }));
   $("groupby").value = group;
 

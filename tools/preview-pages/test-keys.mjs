@@ -261,6 +261,9 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await rows() === 1, "filtered: the filter shows only the filtered-out links");
   await p.click("#f-all"); await p.waitForTimeout(300);
   ok(await rows() === n0 - 1, "filtered: All is the pile without them");
+  const n = id => p.$eval(`#f-${id} .n`, e => +e.textContent);
+  ok(await n("captured") + await n("uncaptured") + await n("local") === await n("all"),
+    `filters: Captured + Not captured + Local & browser make All (${await n("captured")} + ${await n("uncaptured")} + ${await n("local")} = ${await n("all")})`);
   ok(!p.errs.length, "filtered: no errors " + p.errs.join("; "));
   await p.close();
 }
