@@ -787,6 +787,7 @@ browser.runtime.onInstalled.addListener(() => applyDataPatches().catch(() => {})
 // The tag library is written on the first install or update that has one: the presets and the tags in use.
 browser.runtime.onInstalled.addListener(() => editTags(() => {}).catch(() => {}));
 browser.runtime.onStartup.addListener(() => applyDataPatches().catch(() => {}));
+for (const ev of [browser.runtime.onStartup, browser.runtime.onInstalled]) ev.addListener(() => iconsFromOpenTabs().catch(() => {}));
 
 /* There is one List tab to show stashes in, like OneTab's tab: every way in switches to the open
  * one — in this window if it has one, else in any window, pinned or not — grouped by stash, and a
@@ -927,6 +928,8 @@ async function stashTabs({ windowId, scope = "auto", tabId } = {}) {
     for (const id of written) await removeStashFolder(id);
     return { ok: false, error: `${e.message}; no tab was closed` };
   }
+  // Each site's icon, read off its tab before the tab goes; the stash does not wait for it.
+  saveFavicons(plans.flatMap(p => p.closing)).catch(() => {});
 
   // Closing a window's last tab closes the window, so whatever stays on screen opens first: the
   // List page grouped by stash (here, unless it is open elsewhere, in which case this window may close as
@@ -942,6 +945,60 @@ async function stashTabs({ windowId, scope = "auto", tabId } = {}) {
   const stashed = plans.reduce((n, p) => n + p.tabs.length, 0);
   const closed = plans.reduce((n, p) => n + p.closing.length, 0);
   return { ok: true, stashed, closed, stashes: plans.length, left: stayed.length, why };
+}
+
+/* --- site icons ------------------------------------------------------------------
+ * favicons: { [host]: { icon, src, at } } — each site's own icon, taken from its tab when the tab
+ * is stashed, and on startup from open tabs of sites already held. icon is a data: URL when
+ * Firefox hands one over or the image can be read; otherwise it is the icon's address, which the
+ * pages show like any image (the browser's cache usually has it). The pages fall back to the
+ * drawn icons in icons.js for a site with none. */
+const iconQueue = serial();
+const ICON_MAX = 64 * 1024;
+async function iconData(src) {
+  if (src.startsWith("data:")) return src.length <= ICON_MAX ? src : null;
+  try {
+    const res = await fetch(src, { credentials: "omit" });
+    const blob = res.ok ? await res.blob() : null;
+    if (!blob || blob.size > ICON_MAX || !blob.type.startsWith("image/")) return src;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return `data:${blob.type};base64,${btoa(bin)}`;
+  } catch (e) {
+    // No permission to read that site's files: keep the address.
+    return src;
+  }
+}
+function saveFavicons(tabs) {
+  const want = new Map();
+  for (const t of tabs) {
+    if (!/^https?:/.test(t.url || "") || !/^(data:image\/|https:)/.test(t.favIconUrl || "")) continue;
+    const host = hostOfUrl(t.url);
+    if (host && !want.has(host)) want.set(host, t.favIconUrl);
+  }
+  if (!want.size) return Promise.resolve(0);
+  return iconQueue(async () => {
+    const all = await read("favicons", {});
+    let saved = 0;
+    for (const [host, src] of want) {
+      if (all[host]?.src === src) continue;
+      const icon = await iconData(src);
+      if (!icon) continue;
+      all[host] = { icon, src, at: new Date().toISOString() };
+      saved++;
+    }
+    if (saved) await browser.storage.local.set({ favicons: all });
+    return saved;
+  });
+}
+/* Sites held before icons were saved get theirs from any tab of them open now. */
+async function iconsFromOpenTabs() {
+  const held = new Set([...(await getSessions()).flatMap(s => s.tabs.map(t => hostOfUrl(t.url))),
+    ...(await getItems()).map(i => hostOfUrl(i.url))]);
+  const known = await read("favicons", {});
+  const tabs = (await browser.tabs.query({})).filter(t => held.has(hostOfUrl(t.url)) && !known[hostOfUrl(t.url)]);
+  return saveFavicons(tabs);
 }
 
 /* "2 pinned, 1 empty tab, 3 never-stash sites" — what stayed open, by the reason it stayed. */

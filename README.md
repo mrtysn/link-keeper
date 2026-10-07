@@ -197,6 +197,12 @@ is let go. `?` shows and hides
 it until the page loads again: every page opens with it shown. It floats over the
 page, which does not move when it shows or hides.
 
+**Site icons** are each site's own favicon, saved from its tab when the tab is stashed, and on
+the add-on's start from any open tab of a site already held (`favicons` in storage). Firefox's icon
+is kept as data when it can be read, else as its address, which the page shows like any image. A
+site with none saved yet shows a drawn icon: six common sites have one in `icons.js`, the rest a
+letter.
+
 **Hover previews.** Anything that names something held elsewhere previews it after a moment's
 hover, in a card you can move into and click: a stash (its name, when it was stashed, its tabs, and
 where this link sits among them), the other stashes holding a link, a tag (its newest links), a

@@ -27,10 +27,21 @@ function brandOf(host) {
   return null;
 }
 
+/* Each site's own icon, saved when its tabs were stashed (background.js, favicons); loadLinks fills
+ * this. A site with none gets the drawn one below. */
+const SITE_ICONS = new Map();
+
 function srcIcon(url) {
   const icon = document.createElement("span");
   icon.className = "src";
   const host = hostOf(url);
+  const own = /^https?:/.test(url) && SITE_ICONS.get(host);
+  if (own) {
+    icon.classList.add("own");
+    icon.style.backgroundImage = `url("${own.replace(/"/g, "%22")}")`;
+    icon.setAttribute("aria-hidden", "true");
+    return icon;
+  }
   const glyph = BRAND_ICONS[brandOf(host)] ||
     `<rect width="24" height="24" rx="6" fill="#5a5f6a"/><text x="12" y="17" font-family="Verdana,sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#fff">${(host[0] || "•").toUpperCase()}</text>`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${glyph}</svg>`;

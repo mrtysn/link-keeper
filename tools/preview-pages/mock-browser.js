@@ -31,6 +31,8 @@
   };
 
   if (!params.has("notags")) library();
+  // One site with its own icon saved, as a stash leaves them (background.js, favicons).
+  store.favicons = { "gamejams.example": { icon: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#2a9d8f"/></svg>')}`, src: "https://gamejams.example/favicon.ico" } };
 
   // The background hands the list ISO dates; mirror that for records that only carry X's format.
   const toIso = value => {
@@ -282,7 +284,7 @@
     },
     storage: {
       local: {
-        get: async key => ({ [key]: store[key] }),
+        get: async key => Object.fromEntries((Array.isArray(key) ? key : [key]).map(k => [k, store[k]])),
         set: async obj => {
           const changes = Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, { oldValue: store[k], newValue: v }]));
           Object.assign(store, obj);

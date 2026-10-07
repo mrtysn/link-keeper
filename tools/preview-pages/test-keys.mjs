@@ -156,6 +156,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const p = await page("list.html");
   ok(await p.$eval('#key-guide [data-cmd="preview"]', e => e.classList.contains("idle")), "guide: P is faint where it does nothing");
   ok(!(await p.$('.app-pages a[href="tag.html"]')), "nav: no Untagged page");
+  ok(await p.$$eval(".src.own", l => l.length) > 0, "icons: a site's saved icon is drawn in place of the made-up one");
   // List's editor is a popover: Enter on it empty closes it and opens the next row's.
   const cur = () => p.$eval(".lk-cursor .ttl", e => e.textContent).catch(() => null);
   await key(p, "s"); const r0 = await cur();

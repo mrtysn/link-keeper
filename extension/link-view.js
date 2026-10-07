@@ -68,8 +68,10 @@ const SOURCE_NAMES = { tabs: "Stashed", import: "Imported", list: "Reading list"
 /* The dataset, cut down to the chosen sources: a link shows if any source holding it is chosen, a
  * stash if its own source is. byKey finds a link from a stash tab's key. */
 async function loadLinks() {
-  const [data, chosen, { tagDefs }] = await Promise.all([send({ type: "links" }), window.LinkSources.ready, browser.storage.local.get("tagDefs")]);
+  const [data, chosen, { tagDefs, favicons }] = await Promise.all([send({ type: "links" }), window.LinkSources.ready, browser.storage.local.get(["tagDefs", "favicons"])]);
   setTagLibrary(tagDefs);
+  SITE_ICONS.clear();
+  for (const [host, f] of Object.entries(favicons || {})) if (f?.icon) SITE_ICONS.set(host, f.icon);
   const sources = window.LinkSources.get() || chosen;
   const counts = { tabs: 0, import: 0, list: 0 };
   for (const l of data.links) for (const s of l.sources) counts[s]++;
@@ -94,7 +96,7 @@ function reloadOnChanges(load, busy = () => false) {
     timer = setTimeout(() => (busy() || editing() || window.LinkActions?.saving() ? soon() : load()), 150);
   };
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagDefs"].some(k => changes[k])) soon();
+    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagDefs", "favicons"].some(k => changes[k])) soon();
   });
   for (const ev of ["onCreated", "onRemoved", "onChanged", "onMoved"]) browser.bookmarks?.[ev].addListener(soon);
   window.LinkSources.onChange(load);

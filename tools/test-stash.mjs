@@ -199,7 +199,7 @@ function makeTabs(n, windowId = 1, idBase = 0) {
 }
 
 async function load(browser) {
-  const ctx = vm.createContext({ browser, console, crypto, structuredClone, setTimeout, clearTimeout, URL, URLSearchParams, fetch });
+  const ctx = vm.createContext({ browser, console, crypto, structuredClone, setTimeout, clearTimeout, URL, URLSearchParams, fetch, btoa });
   vm.runInContext(source, ctx);
   return ctx;
 }
@@ -895,6 +895,26 @@ await check("capturing a link is not keeping it: the queue moves on, every check
   await bg.applyDataPatches();
   assert.deepEqual(old.store.items.map(i => i.status), ["seen", "kept", "kept"]);
   assert.equal(old.store.dataPatches["2026-10-07-capture-is-not-keep"].reset, 1);
+});
+
+await check("site icons: saved from tabs as they are stashed, as data when readable, else as their address", async () => {
+  const tabs = makeTabs(4);
+  tabs[2].favIconUrl = "data:image/png;base64,AAAA";
+  tabs[3].favIconUrl = "https://cdn.example/icon.png";
+  const [withData, withHttps] = [tabs[2], tabs[3]];
+  const { browser, store } = makeBrowser(tabs);
+  const bg = await load(browser);
+  // No network in a test: one icon reads, the next is refused as an unpermitted site's would be.
+  let calls = 0;
+  bg.fetch = async () => { if (calls++) throw new TypeError("NetworkError"); return { ok: true, blob: async () => new Blob(["x"], { type: "image/png" }) }; };
+  await bg.stashTabs();
+  await new Promise(r => setTimeout(r, 50));
+  const host = u => new URL(u).hostname;
+  assert.equal(store.favicons[host(withData.url)].icon, "data:image/png;base64,AAAA", "a data: icon is kept as it is");
+  assert.match(store.favicons[host(withHttps.url)].icon, /^data:image\/png;base64,/, "a readable https icon is stored as data");
+  await bg.saveFavicons([{ ...withHttps, favIconUrl: "https://cdn.example/other.png" }]);
+  assert.equal(store.favicons[host(withHttps.url)].icon, "https://cdn.example/other.png", "an unreadable one keeps its address");
+  assert.equal(Object.keys(store.favicons).length, 2, "tabs without an icon add nothing");
 });
 
 await check("tags travel in exports and come back with imports", async () => {
