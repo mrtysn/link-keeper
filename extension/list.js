@@ -1006,6 +1006,35 @@ $("filter-save").onclick = async () => {
   load();
 };
 
+/* Backups: what the bridge last wrote, and the files to restore from. */
+async function loadBackups() {
+  const st = await send({ type: "bridge-status" });
+  const last = st.lastBackup;
+  $("backup-status").textContent = st.state !== "on" ? `Not backing up: ${st.error || "the helper is not running"}.`
+    : st.error ? `Not backing up: ${st.error}.`
+    : last?.ok ? `Backed up to ${st.folder} at ${new Date(last.at).toLocaleString()}, about a minute after each change.`
+    : last ? `The last backup failed: ${last.error}` : `Backing up to ${st.folder}, about a minute after each change.`;
+  const list = st.state === "on" ? await send({ type: "list-backups" }) : { backups: [] };
+  const pick = $("backup-pick");
+  pick.textContent = "";
+  for (const b of list.backups || []) pick.append(el("option", { value: b.name, textContent: `${b.name} · ${new Date(b.modified).toLocaleString()} · ${Math.round(b.bytes / 1024)} KB` }));
+  pick.disabled = $("backup-restore").disabled = !pick.options.length;
+  $("backup-now").disabled = st.state !== "on";
+}
+$("backup-now").onclick = async () => {
+  const res = await send({ type: "backup-now" });
+  say(res.ok ? `Backed up to ${res.file}` : `Not backed up: ${res.error}`);
+  loadBackups();
+};
+$("backup-restore").onclick = async () => {
+  const name = $("backup-pick").value;
+  if (!name || !confirm(`Replace tags, captures, the reading list and settings with ${name}? What is here now is saved to a pre-restore file first.`)) return;
+  const res = await send({ type: "restore-backup", name });
+  say(res.ok ? `Restored the backup of ${new Date(res.backup_at).toLocaleString()}${res.stashes ? `, and wrote ${plural(res.stashes, "stash")} again` : ""}` : `Not restored: ${res.error}`);
+  loadBackups();
+  load();
+};
+
 for (const r of document.querySelectorAll('input[name="after-stash"]')) r.onchange = () => act({ type: "set-stash-settings", afterStash: r.value });
 for (const r of document.querySelectorAll('input[name="after-restore"]')) r.onchange = () => act({ type: "set-stash-settings", afterRestore: r.value });
 $("exclude-form").onsubmit = e => {
@@ -1021,7 +1050,7 @@ $("exclude-form").onsubmit = e => {
 function openPanel(which) {
   for (const id of ["settings-panel", "import-panel", "dups-panel"]) $(id).hidden = id !== which || !$(id).hidden;
   $("settings").setAttribute("aria-expanded", String(!$("settings-panel").hidden));
-  if (!$("settings-panel").hidden) loadFilterRules();
+  if (!$("settings-panel").hidden) { loadFilterRules(); loadBackups(); }
   $("import").setAttribute("aria-expanded", String(!$("import-panel").hidden));
   $("dups").setAttribute("aria-expanded", String(!$("dups-panel").hidden));
   if (!$("import-panel").hidden) $("import-text").focus();

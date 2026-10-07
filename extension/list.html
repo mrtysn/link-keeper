@@ -247,6 +247,7 @@
     color: var(--ink); background: var(--bg); border: 1px solid var(--field); border-radius: 8px;
   }
   fieldset p.hint { margin: 6px 0 0; font-size: .8125rem; text-wrap: pretty; }
+  #backup-pick { flex: 1 1 12rem; min-width: 0; max-width: 100%; }
 
   /* tags */
   .domains .rowlabel { align-self: center; margin-right: 2px; color: var(--dim); font-size: .8125rem; }
@@ -462,6 +463,16 @@
         <p class="hint">One site's main page per line, without https:// — <code>reddit.com</code> is Reddit's front page only, never a post; <code>*</code> stands for anything, as in <code>mail.google.com/mail/u/*/#inbox</code>. Right-click a page → <i>Filter out this page</i> adds it. Matching links get the <b>filtered-out</b> tag.</p>
         <textarea id="filter-rules" rows="7" spellcheck="false" aria-label="Pages to filter out, one per line"></textarea>
         <div class="row"><button type="button" class="small" id="filter-save">Save and apply</button> <span id="filter-msg" class="hint" role="status"></span></div>
+      </fieldset>
+      <fieldset>
+        <legend>Backups</legend>
+        <p class="hint" id="backup-status">…</p>
+        <div class="row"><button type="button" class="small" id="backup-now">Back up now</button></div>
+        <div class="row">
+          <select id="backup-pick" aria-label="Backup to restore"></select>
+          <button type="button" class="small" id="backup-restore">Restore…</button>
+        </div>
+        <p class="hint">Restoring replaces tags, captures, the reading list and settings with the file's; what is here now is saved first. Stashes are bookmarks and stay as they are.</p>
       </fieldset>
       <fieldset>
         <legend>Never stash these sites</legend>

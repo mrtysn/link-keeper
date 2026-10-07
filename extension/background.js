@@ -1611,7 +1611,8 @@ browser.menus.onClicked.addListener(onMenuClicked);
 
 /* --- messaging ------------------------------------------------------------------ */
 
-browser.runtime.onMessage.addListener(async msg => {
+/* Every page's requests, and the agents' through the bridge (bridge.js), which may send only some. */
+async function handleMessage(msg) {
   switch (msg.type) {
     case "status": {
       const items = await getItems();
@@ -1930,9 +1931,24 @@ browser.runtime.onMessage.addListener(async msg => {
     case "export-list":
       return { items: await getItems() };
 
+    case "bridge-status":
+      return bridgeStatus();
+
+    case "backup-now":
+      return backupNow("by hand");
+
+    case "list-backups":
+      return hostCall("list-backups").catch(e => ({ ok: false, error: String(e.message || e) }));
+
+    case "restore-backup": {
+      const res = await hostCall("read-backup", { name: String(msg.name || "") }).catch(e => ({ ok: false, error: String(e.message || e) }));
+      return res.ok ? restoreBackup(res.data, "chosen in Settings") : res;
+    }
+
     default:
       return { ok: false, error: `unknown message ${msg.type}` };
   }
-});
+}
+browser.runtime.onMessage.addListener(msg => handleMessage(msg));
 
 paintBadge().catch(() => {});

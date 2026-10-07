@@ -36,7 +36,8 @@
   "background": {
     "scripts": [
       "links.js",
-      "background.js"
+      "background.js",
+      "bridge.js"
     ]
   },
   "action": {

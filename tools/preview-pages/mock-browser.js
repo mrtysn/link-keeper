@@ -304,6 +304,12 @@
           case "stash-settings":
             return { settings: { afterStash: "show", afterRestore: "keep", exclude: ["mail.google.com", "calendar.google.com"] } };
           case "get-folder": return { folder: "link-keeper", fallback: "link-keeper" };
+          case "bridge-status": return { ok: true, state: "on", error: null, folder: "~/backups/link-keeper",
+            lastBackup: { ok: true, at: new Date().toISOString(), file: "~/backups/link-keeper/latest.json" } };
+          case "list-backups": return { ok: true, backups: [
+            { name: "latest.json", bytes: 812000, modified: new Date().toISOString() },
+            { name: "backup-2026-10-06.json", bytes: 798000, modified: "2026-10-06T09:12:00" }] };
+          case "backup-now": return { ok: true, file: "~/backups/link-keeper/latest.json" };
           case "fetch-pending": return { ok: false, quiet: true };
           default: return { ok: true, remaining: 0, added: 0, total: M.status.total };
         }
