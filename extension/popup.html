@@ -105,9 +105,12 @@
   .foot .split.small { margin-left: auto; }
   .foot .split.small button { min-height: 26px; padding: 3px 9px; font-size: 12px; }
   .foot .split.small button.arrow { width: 22px; padding: 0; }
-  .viewers { display: flex; flex-wrap: wrap; gap: 2px 14px; }
-  .viewers button { min-height: 0; padding: 2px 0; border: 0; background: none; color: var(--accent); font-weight: 600; }
-  @media (hover: hover) { .viewers button:hover { text-decoration: underline; } }
+  /* The viewers: four small cards across the whole row. */
+  .viewers { flex-basis: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .viewers button {
+    min-height: 34px; padding: 6px 4px; border-radius: 8px; background: var(--panel);
+    color: var(--accent); font-weight: 600; font-size: 12.5px;
+  }
 
   .msg { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; }
   .msg:has(#msg:empty) { margin-top: 0; }
