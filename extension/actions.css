@@ -104,9 +104,10 @@
 .kc.idle { opacity: .4; }
 .kc.idle span { color: var(--dim); }
 /* Held: the cap sinks and takes its colour; let go, it rises and the colour fades. */
-.kc { transition: transform .18s ease-out, background-color .25s ease-out, border-bottom-width .18s ease-out, box-shadow .25s ease-out; }
+/* The cap keeps its size: it moves down a little and lights, its border unchanged. */
+.kc { transition: transform .18s ease-out, background-color .25s ease-out, box-shadow .25s ease-out; }
 .kc.down {
-  transform: translateY(2px); border-bottom-width: 1px; transition-duration: 40ms;
+  transform: translateY(1px); transition-duration: 40ms;
   background: color-mix(in srgb, var(--c) 16%, var(--bg)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent);
 }
 @media (prefers-reduced-motion: reduce) { .kc { transition: none; } .kc.down { transform: none; } }
