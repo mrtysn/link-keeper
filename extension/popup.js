@@ -82,6 +82,10 @@ function copies() {
   return out;
 }
 
+// A page held in many places shows the first few; "+N more" shows the rest.
+const PLACES_SHOWN = 4;
+let showAllPlaces = false;
+
 /* The palette offers the most used tags first, so 1–9 reach the ones you use. */
 const byUse = () => {
   const use = info.tagUse || {};
@@ -106,7 +110,23 @@ function render() {
     // Each line: its label, then its values wrapping beside it rather than under it.
     const vals = el("span", { className: "vals" });
     if (!held.length) vals.append(el("span", { className: "none", textContent: link ? "on no list or stash" : "not saved yet" }));
-    for (const c of held) vals.append(el("span", { className: "place", textContent: c.label, title: c.title }));
+    // One chip per place, with how many copies it holds; past a few places, the rest on request.
+    const places = new Map();
+    for (const c of held) {
+      const key = c.list ? "list" : c.target.stash.id;
+      const p = places.get(key) || places.set(key, { label: c.label, titles: [], n: 0 }).get(key);
+      p.n++;
+      p.titles.push(c.title);
+    }
+    const all = [...places.values()];
+    const shown = showAllPlaces ? all : all.slice(0, PLACES_SHOWN);
+    for (const p of shown) vals.append(el("span", { className: "place", textContent: p.n > 1 ? `${p.label} ×${p.n}` : p.label, title: p.titles.join("\n") }));
+    if (shown.length < all.length) {
+      const more = el("button", { type: "button", className: "place more-places", textContent: `+${all.length - shown.length} more`,
+        title: `${held.length} copies in ${all.length} places` });
+      more.onclick = () => { showAllPlaces = true; render(); };
+      vals.append(more);
+    }
     where.append(el("span", { className: "lbl", textContent: "Held" }), vals);
     const at = link && readAt(link);
     cap.append(el("span", { className: "lbl", textContent: "Captured" }), el("span", { className: "vals" },
@@ -143,10 +163,18 @@ function render() {
 $("remove").onclick = () => {
   const held = copies();
   if (held.length === 1) return removeCopy(held[0]);
+  // One item per place; a place holding several copies loses one, the first, per pick.
   const menu = $("remove-menu");
   menu.textContent = "";
+  const places = new Map();
   for (const c of held) {
-    const b = el("button", { type: "button", className: "danger", textContent: `From ${c.menu}`, disabled: !!c.locked,
+    const key = c.list ? "list" : c.target.stash.id;
+    (places.get(key) || places.set(key, []).get(key)).push(c);
+  }
+  for (const group of places.values()) {
+    const c = group[0];
+    const label = group.length > 1 ? `From ${c.label} (1 of ${group.length} copies)` : `From ${c.menu}`;
+    const b = el("button", { type: "button", className: "danger", textContent: label, disabled: !!c.locked,
       title: c.locked ? "That stash is locked" : c.title });
     b.onclick = () => { menu.hidePopover(); removeCopy(c); };
     menu.append(b);

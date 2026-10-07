@@ -77,6 +77,8 @@
   .where { align-items: baseline; flex-wrap: nowrap; }
   .where .vals { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
   .where .val { color: var(--ink); }
+  .where button.more-places { min-height: 0; padding: 0 7px; border: 1px dashed var(--line); background: none; color: var(--accent); font-size: 11.5px; line-height: 1.6; }
+  #remove-menu { max-height: 60vh; overflow-y: auto; }
   .where .place { padding: 0 7px; border-radius: 999px; background: var(--chip); color: var(--ink); font-size: 11.5px; line-height: 1.7; }
   #tagbox { margin-top: 8px; }
   #tagbox .tagger { min-width: 0; }
@@ -106,7 +108,7 @@
   .foot .split.small button { min-height: 26px; padding: 3px 9px; font-size: 12px; }
   .foot .split.small button.arrow { width: 22px; padding: 0; }
   /* The viewers: four small cards across the whole row. */
-  .viewers { flex-basis: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .viewers { flex-basis: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .viewers button {
     min-height: 34px; padding: 6px 4px; border-radius: 8px; background: var(--panel);
     color: var(--accent); font-weight: 600; font-size: 12.5px;
@@ -159,9 +161,8 @@
   <!-- The foot: the viewers, and Stash for the window's tabs, which is not about this page. -->
   <div class="foot">
     <nav class="viewers" aria-label="Open a page">
-      <button data-open="open-list">List</button>
+      <button data-open="open-list">Links</button>
       <button data-open="open-cards">Cards</button>
-      <button data-open="open-explore">Explore</button>
       <button data-open="open-tags">Tags</button>
     </nav>
     <div class="split small">
