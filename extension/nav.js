@@ -112,3 +112,21 @@
     },
   };
 })();
+
+/* A sticky side pane marked data-fit-window="<gap px>" ends at the window's bottom edge. Its CSS
+ * max-height assumes it sticks at the top, but at scroll 0 it starts lower, below the bar above. */
+(() => {
+  const fit = () => {
+    for (const el of document.querySelectorAll("[data-fit-window]")) {
+      const gap = Number(el.dataset.fitWindow) || 0;
+      if (getComputedStyle(el).position !== "sticky") { el.style.removeProperty("max-height"); continue; }
+      const top = Math.max(parseFloat(getComputedStyle(el).top) || 0, el.getBoundingClientRect().top);
+      el.style.maxHeight = `${Math.max(160, window.innerHeight - top - gap)}px`;
+    }
+  };
+  addEventListener("scroll", fit, { passive: true });
+  addEventListener("resize", fit);
+  addEventListener("load", fit);
+  document.addEventListener("DOMContentLoaded", fit);
+  new MutationObserver(fit).observe(document.documentElement, { childList: true, subtree: true });
+})();

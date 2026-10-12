@@ -22,6 +22,7 @@
 .more { width: 28px; padding: 0; justify-content: center; font-size: 1rem; letter-spacing: .05em; }
 .menu {
   position: fixed; inset: auto; margin: 0; min-width: 12rem; padding: 4px;
+  max-height: calc(100vh - 16px); overflow-y: auto;
   background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 10px;
   box-shadow: var(--shadow);
 }
@@ -70,6 +71,7 @@
    over the page, which does not move for it; ? hides it. */
 .key-guide {
   position: fixed; z-index: 40; right: 16px; bottom: 16px; width: 22.5rem; max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px); overflow-y: auto;
   padding: 10px 12px 12px; background: var(--panel); color: var(--ink); border: 1px solid var(--line);
   border-radius: 12px; box-shadow: var(--shadow); font: 12px/1.2 ui-sans-serif, -apple-system, sans-serif;
   --k-go: var(--accent); --k-keep: var(--ok, var(--keep)); --k-drop: var(--bad, var(--skip));

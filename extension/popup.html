@@ -93,6 +93,7 @@
   .split > button.primary + button.arrow { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: inset 1px 0 0 rgb(0 0 0 / .15); }
   .menu {
     position: fixed; inset: auto; margin: 0; min-width: 11rem; padding: 4px;
+    max-height: calc(100vh - 8px); overflow-y: auto;
     background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 10px;
     box-shadow: 0 8px 24px rgb(0 0 0 / .25);
   }
