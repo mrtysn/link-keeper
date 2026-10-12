@@ -300,7 +300,7 @@
   body.pane .wrap { max-width: none; }
   body.pane .panes { display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr); gap: 0 24px; align-items: start; margin-top: 8px; }
   body.pane #out, body.pane #detail {
-    position: sticky; top: 64px; max-height: calc(100vh - 72px); overflow-y: auto; overscroll-behavior: contain;
+    position: sticky; top: 64px; max-height: var(--pane-h, calc(100vh - 72px)); overflow-y: auto; overscroll-behavior: contain;
   }
   body.pane #out { padding-right: 8px; border-right: 1px solid var(--line); }
   body.pane #out .group:first-child { margin-top: 8px; }

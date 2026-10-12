@@ -69,7 +69,19 @@ function applyView() {
   $("t-compact").setAttribute("aria-pressed", String(compactNow()));
   $("t-tools").setAttribute("aria-pressed", String(pref(TOOLS_KEY, true)));
   $("detail").hidden = !pane;
+  fitPanes();
 }
+// The side panes stick 64px down and must end at the window's bottom edge. At scroll 0 they start
+// lower than that (nav and filter bar above), so their height is what is left from where they are.
+function fitPanes() {
+  const panes = $("panes");
+  if (!pane || !panes) return document.body.style.removeProperty("--pane-h");
+  const top = Math.max(64, panes.getBoundingClientRect().top);
+  document.body.style.setProperty("--pane-h", `${Math.max(160, window.innerHeight - top - 8)}px`);
+}
+window.addEventListener("scroll", fitPanes, { passive: true });
+window.addEventListener("resize", fitPanes);
+
 function togglePane(on = !pane) {
   pane = on;
   setPref(PANE_KEY, on);
