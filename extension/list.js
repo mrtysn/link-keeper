@@ -374,9 +374,9 @@ function rowEl(link, ctx) {
   if (cap?.links?.length) {
     main.append(el("div", { className: "inner" }, ...cap.links.slice(0, 5).map(url => linkChip(url, shortUrl(url), url))));
   }
-  // Links harvested from the replies — the author's own reply is the one that usually matters.
-  if (cap?.reply_links?.length) {
-    main.append(el("div", { className: "inner replies" }, ...cap.reply_links.slice(0, 6).map(l => linkChip(l.href, `↩ ${shortUrl(l.href)}`,
+  // How many replies were kept, and the links among them — the author's own reply is the one that usually matters.
+  if (cap?.reply_links?.length || cap?.reply_count) {
+    main.append(el("div", { className: "inner replies" }, cap.reply_count ? el("span", { className: "badge", textContent: `${cap.reply_count} ${cap.reply_count === 1 ? "reply" : "replies"} kept` }) : null, ...(cap.reply_links || []).slice(0, 6).map(l => linkChip(l.href, `↩ ${shortUrl(l.href)}`,
       l.self ? `From the author's own reply (${l.from || "?"})` : `From a reply by ${l.from || "?"}`, l.self ? "from-author" : ""))));
   }
   // Actual thumbnails, not URLs — the point of keeping image links is to see them.
@@ -876,6 +876,7 @@ function knownBox(row) {
   const facts = el("ul", { className: "facts" });
   if (c?.captured_at) facts.append(el("li", { textContent: `Captured ${whenOf(c.captured_at)}` }));
   else if (isWeb(link.url)) facts.append(el("li", { textContent: "Not captured yet. Capture saves its text and images." }));
+  if (c?.reply_count) facts.append(el("li", { textContent: `${c.reply_count} ${c.reply_count === 1 ? "reply" : "replies"} captured` }));
   if (link.list) facts.append(el("li", { textContent: `On the reading list: ${LIST_STATUS[link.list.status] || link.list.status}` }));
   for (const copy of link.copies) {
     if (stash && copy.stash === stash.id) continue;

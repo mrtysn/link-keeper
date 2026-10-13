@@ -67,6 +67,7 @@ def cap(c: dict, i: int) -> dict:
         "title": c.get("title"), "handle": handle(c), "text": c.get("text"), "kind": c.get("kind"),
         "links": links[:3] or ([f"https://github.com/example/tool-{i}"] if i % 5 == 1 else []),
         "reply_links": [{"href": "https://github.com/author/repo", "from": "@author", "self": True}] if i == 3 else [],
+        "reply_count": 4 if i == 1 else 0,
         "images": [IMAGE, "missing.png"] if i in (0, 4) else [],
         "screenshot": "link-keeper/x-preview.png" if i == 2 else None,
         "shotThumb": THUMB if i == 2 else None,

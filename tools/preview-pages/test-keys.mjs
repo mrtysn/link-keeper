@@ -353,6 +353,20 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.$eval("#queue", e => !e.hidden) && await p.$eval("#stash-tab", e => !e.hidden) && await p.$eval("#remove", e => e.hidden), "popup: and offers + List and Stash tab, no Remove");
   await p.close();
 }
+// A capture that kept replies says how many on its Links row and in the detail pane.
+{
+  const p = await page("list.html?group=newest");
+  ok(await p.$$eval(".inner.replies .badge", l => l.some(e => e.textContent === "4 replies kept")), "replies: a Links row says how many replies were kept");
+  await p.close();
+  const d = await page("list.html?group=newest&pane=1");
+  while (!/4 replies captured/.test(await d.$eval("#detail", e => e.textContent))) {
+    const before = await d.$eval(".lk-cursor .ttl", e => e.textContent);
+    await key(d, "2");
+    if (before === await d.$eval(".lk-cursor .ttl", e => e.textContent)) break;
+  }
+  ok(/4 replies captured/.test(await d.$eval("#detail", e => e.textContent)), "replies: the detail pane lists how many replies were captured");
+  await d.close();
+}
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

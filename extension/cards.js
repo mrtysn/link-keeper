@@ -63,6 +63,7 @@ function toCard(link) {
     images: cap.images || [],
     links: cap.links || [],
     reply_links: cap.reply_links || [],
+    reply_count: cap.reply_count || 0,
     shotThumb: cap.shotThumb || null,
     code_blocks: cap.code_blocks || 0,
     link,
@@ -189,9 +190,15 @@ function cardEl(card, top) {
     el.append(inner);
   }
 
-  if (card.reply_links?.length) {
+  if (card.reply_links?.length || card.reply_count) {
     const box = document.createElement("div");
     box.className = "inner replies";
+    if (card.reply_count) {
+      const count = document.createElement("span");
+      count.className = "count";
+      count.textContent = `${card.reply_count} ${card.reply_count === 1 ? "reply" : "replies"} kept`;
+      box.append(count);
+    }
     for (const l of card.reply_links.slice(0, 5)) {
       const a = document.createElement("a");
       a.href = l.href;

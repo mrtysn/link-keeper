@@ -84,6 +84,7 @@ const LinkActions = (() => {
       if (!res?.ok) return fail(res, "Unable to capture it");
       const r = res.record;
       const extra = [r.links?.length ? plural(r.links.length, "link") : null,
+        r.replies?.length ? plural(r.replies.length, "reply") : null,
         r.reply_links?.length ? `${r.reply_links.length} from replies` : null].filter(Boolean).join(", ");
       return { ok: true, say: `Captured ${r.title || hostOf(t.link.url)}${extra ? ` (${extra})` : ""}` };
     },
