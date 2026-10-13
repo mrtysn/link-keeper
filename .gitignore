@@ -28,3 +28,6 @@ tools/preview-pages/out/
 
 # Playwright for tools/preview-pages/test-keys.zsh, installed on first run.
 tools/preview-pages/.deps/
+
+# Link Refresh app build output (project-lifecycle -C mac build)
+mac/.build/

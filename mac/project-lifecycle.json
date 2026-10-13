@@ -1,0 +1,17 @@
+{
+  "kind": "mac-app",
+  "name": "Link Refresh",
+  "version": "1.0",
+  "test": [
+    {"name": "runner help", "run": ["../tools/refresh.zsh", "--help"]}
+  ],
+  "mac_app": {
+    "bundle_id": "local.link-refresh",
+    "build_command": ["./write-launcher.zsh"],
+    "binary": ".build/launcher/refresh",
+    "executable": "refresh",
+    "icon": "AppIcon.icns",
+    "menu_bar_only": true,
+    "signing": "local-certificate"
+  }
+}
