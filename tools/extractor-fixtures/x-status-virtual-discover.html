@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Some One on X: "A thread with recommendations"</title>
+<style>body { margin: 0; } #list { position: relative; }</style></head>
+<body>
+<!-- Like x-status-virtual.html, only the cells near the viewport are in the document and each is 300px
+     tall: the post, 8 replies, a heading-only cell, then 4 recommended posts. The heading is in German
+     ("Entdecke mehr"), so only its position marks the end of the replies; it, and the posts below it,
+     appear only after scrolling. The author's own reply is the last reply. -->
+<div aria-label="Timeline: Conversation" id="list"></div>
+<script>
+const STEP = 300;
+const PRIMARY = "2009295329057702084";
+const items = [{ handle: "@somehandle", name: "Some One", id: PRIMARY, text: "A thread with recommendations. Repo in the comments." }];
+for (let i = 1; i <= 8; i++) {
+  const author = i === 8;
+  items.push({
+    handle: author ? "@somehandle" : `@fan${i}`, name: author ? "Some One" : `Fan ${i}`,
+    id: `20092960000001${String(i).padStart(4, "0")}`, text: `reply number ${i}`,
+    link: author ? "https://repo.dev/mine" : null,
+  });
+}
+items.push({ heading: "Entdecke mehr" });
+for (let i = 1; i <= 4; i++) {
+  items.push({
+    handle: `@stranger${i}`, name: `Stranger ${i}`, id: `20092970000001${String(i).padStart(4, "0")}`,
+    text: `recommended post ${i}`, link: i === 2 ? "https://elsewhere.dev/two" : null,
+  });
+}
+const list = document.getElementById("list");
+list.style.height = `${items.length * STEP}px`;
+const html = (it, i) => it.heading
+  ? `<div data-testid="cellInnerDiv" style="position:absolute;top:${i * STEP}px;height:${STEP}px;left:0;right:0"><h2 role="heading" aria-level="2"><span>${it.heading}</span></h2></div>`
+  : `<div data-testid="cellInnerDiv" style="position:absolute;top:${i * STEP}px;height:${STEP}px;left:0;right:0">
+<article data-testid="tweet" role="article">
+  <div data-testid="User-Name">
+    <div><a href="/${it.handle.slice(1)}"><span><span>${it.name}</span></span></a></div>
+    <div><a href="/${it.handle.slice(1)}"><span>${it.handle}</span></a><span>·</span>
+      <a href="/${it.handle.slice(1)}/status/${it.id}"><time datetime="2026-08-09T15:${String(i).padStart(2, "0")}:00.000Z">Aug 9</time></a></div>
+  </div>
+  <div data-testid="tweetText"><span>${it.text}</span>${it.link ? ` <a href="${it.link}">${it.link.slice(8)}</a>` : ""}</div>
+</article></div>`;
+function render() {
+  const top = window.scrollY, bottom = top + (window.innerHeight || 800);
+  list.innerHTML = items.map((it, i) => (i * STEP + STEP > top && i * STEP < bottom ? html(it, i) : "")).join("");
+}
+addEventListener("scroll", render);
+addEventListener("resize", render);
+addEventListener("load", render);
+render();
+</script>
+</body>
+</html>

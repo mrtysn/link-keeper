@@ -35,6 +35,7 @@ function render() {
   list.innerHTML = items.map((it, i) => (i * STEP + STEP > top && i * STEP < bottom ? html(it, i) : "")).join("");
 }
 addEventListener("scroll", render);
+addEventListener("resize", render);
 render();
 </script>
 </body></html>

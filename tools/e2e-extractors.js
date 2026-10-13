@@ -4,12 +4,29 @@
 const BASE = `http://127.0.0.1:${PORT}/somehandle/status`;
 const FLAT = `${BASE}/2009295329057702081`;
 const VIRTUAL = `${BASE}/2009295329057702082`;
+const DISCOVER = `${BASE}/2009295329057702083`;
+const VIRTUAL_DISCOVER = `${BASE}/2009295329057702084`;
 const PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 const loaded = async url => {
   const tab = await browser.tabs.create({ url, active: true });
-  await tabSettled(tab.id);
+  // A new tab reports "complete" for its initial about:blank before the navigation starts, and
+  // scripting into it is then refused; wait until the tab is on the page asked for and loaded.
+  for (let waited = 0; waited < 20000; waited += 100) {
+    const now = await browser.tabs.get(tab.id);
+    if (now.url === url && now.status === "complete") break;
+    await new Promise(r => setTimeout(r, 100));
+  }
   await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["extractors.js"] });
+  // The virtualised pages draw their articles from the viewport's height, which a fresh headless
+  // tab can report as zero for a moment; wait until a post is in the document.
+  for (let waited = 0; waited < 10000; waited += 100) {
+    const [{ result }] = await browser.scripting.executeScript({
+      target: { tabId: tab.id }, func: () => !!document.querySelector('article[data-testid="tweet"]'),
+    });
+    if (result) break;
+    await new Promise(r => setTimeout(r, 100));
+  }
   return tab;
 };
 const extract = async tab => (await browser.scripting.executeScript({
@@ -101,4 +118,54 @@ await check("Capture with a screenshot collects every reply the walk rendered, o
   eq(r.reply_links.map(l => [l.href, l.self]), [["https://repo.dev/final", true]], "reply_links from the walk");
   eq(r.replies[13].links[0].resolved, "https://repo.dev/final", "the reply's own link carries what was resolved");
   report("     walk saw", r.replies.length, "replies; plain read saw", plain.replies.length, "; screenshot:", r.screenshot ? `${r.screenshot.tiles} tiles` : r.screenshot_error);
+});
+
+/* The recommendation section under a thread ("Discover more") uses the same article elements as the
+ * replies, and none of its posts may reach `replies`, `reply_links` or `replies_scanned`. */
+const RECOMMENDED = /stranger|recommended post|elsewhere\.dev/i;
+const noRecommended = (r, what) => {
+  const leaked = [...r.replies.map(x => `${x.handle} ${x.text}`), ...r.reply_links.map(l => `${l.from} ${l.href}`)]
+    .filter(s => RECOMMENDED.test(s));
+  if (leaked.length) throw new Error(`${what}: recommended posts among the replies: ${JSON.stringify(leaked)}`);
+  eq(r.replies_scanned, r.replies.length, `${what}: replies_scanned`);
+};
+
+await check("a capture stops at the Discover more heading: recommended posts are not replies", async () => {
+  const tab = await loaded(DISCOVER);
+  const r = await extract(tab);
+  await browser.tabs.remove(tab.id);
+  eq(r.text, "A short thread. Repo in the comments.", "the post's own text");
+  eq(r.replies.map(x => x.handle), ["@somehandle", "@fan1"], "reply handles");
+  eq(r.replies_scanned, 2, "replies_scanned");
+  eq(r.reply_links.map(l => [l.href, l.self]), [["https://t.co/mine", true]], "reply_links");
+  noRecommended(r, "plain read");
+});
+
+await check("a plain read above the heading holds replies only", async () => {
+  const tab = await loaded(VIRTUAL_DISCOVER);
+  const r = await extract(tab);
+  await browser.tabs.remove(tab.id);
+  if (!r.replies.length) throw new Error("no replies on screen");
+  noRecommended(r, "plain read at the top");
+});
+
+await check("a screenshot walk ignores everything after a heading that appears only once scrolled to", async () => {
+  const tab = await loaded(VIRTUAL_DISCOVER);
+  const real = { runExtractor, captureVisibleTab: browser.tabs.captureVisibleTab };
+  runExtractor = async function () { return LK.extract("x.com"); };
+  browser.tabs.captureVisibleTab = async () => PIXEL;
+  let res;
+  try {
+    res = await captureActive("", true);
+  } finally {
+    runExtractor = real.runExtractor;
+    browser.tabs.captureVisibleTab = real.captureVisibleTab;
+    await browser.tabs.remove(tab.id);
+  }
+  if (!res.ok) throw new Error(JSON.stringify(res));
+  const r = res.record;
+  eq(r.replies.map(x => x.text), Array.from({ length: 8 }, (_, i) => `reply number ${i + 1}${i === 7 ? " repo.dev/mine" : ""}`), "replies in page order");
+  eq(r.replies_scanned, 8, "replies_scanned");
+  eq(r.reply_links.map(l => [l.href, l.self]), [["https://repo.dev/mine", true]], "reply_links from the walk");
+  noRecommended(r, "walk");
 });

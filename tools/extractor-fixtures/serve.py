@@ -1,7 +1,7 @@
 """Serve the saved x.com status pages for test-extractors.zsh.
 
-/somehandle/status/2009295329057702081 is x-status.html and /somehandle/status/2009295329057702082
-is x-status-virtual.html. Both answer to any handle.
+/somehandle/status/<id> serves the page PAGES names for that id, whatever the handle: ...081 x-status.html,
+...082 x-status-virtual.html, ...083 x-status-discover.html, ...084 x-status-virtual-discover.html.
 Usage: serve.py <port>
 """
 import http.server
@@ -10,7 +10,12 @@ import re
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
-PAGES = {"2009295329057702081": "x-status.html", "2009295329057702082": "x-status-virtual.html"}
+PAGES = {
+    "2009295329057702081": "x-status.html",
+    "2009295329057702082": "x-status-virtual.html",
+    "2009295329057702083": "x-status-discover.html",
+    "2009295329057702084": "x-status-virtual-discover.html",
+}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
