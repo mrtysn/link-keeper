@@ -308,6 +308,8 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 - Pinned tabs, empty tabs and never-stash sites stay open; everything else is stashed. Stashing
   only this tab takes it whatever it is. Duplicate tabs all close and are recorded once; a URL
   already in another stash is recorded again and marked *Also in N other stashes*.
+- Stashes run one at a time: a key, menu item or button that fires twice runs the second after the
+  first has closed its tabs, so it finds them gone instead of recording them again.
 - Only the URL, the tab title and the tab's container are recorded. Nothing runs inside the tabs.
 - A stash is the only record of the tabs it closes (Firefox remembers 25 closed tabs), so no tab
   closes until every bookmark has been read back and found present. If writing fails partway, the

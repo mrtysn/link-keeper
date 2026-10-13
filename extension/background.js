@@ -1000,8 +1000,15 @@ const SCOPE_WORDS = {
 };
 
 /* Stash tabs and close them. { windowId, scope, tabId } — tabId is the tab a scope is relative to,
- * the active one by default; scope "all-windows" makes one stash per window. */
-async function stashTabs({ windowId, scope = "auto", tabId } = {}) {
+ * the active one by default; scope "all-windows" makes one stash per window. One at a time: a
+ * command, menu item or button that fires twice would otherwise read the same tabs twice and write
+ * the stash twice; the second run starts after the first has closed its tabs and finds them gone. */
+const stashQueue = serial();
+function stashTabs(opts = {}) {
+  return stashQueue(() => stashTabsNow(opts));
+}
+
+async function stashTabsNow({ windowId, scope = "auto", tabId } = {}) {
   await migrateStashes();
   const settings = await getStashSettings();
   const excluded = t => settings.exclude.includes(hostOfUrl(t.url));

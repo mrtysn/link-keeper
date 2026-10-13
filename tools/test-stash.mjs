@@ -248,6 +248,20 @@ await check(`whole window of ${N}: every closed tab is a bookmark, the rest stay
   console.log(`     ${res.closed} closed, ${res.stashed} recorded, ${res.left} left open, ${cont.length} in a container`);
 });
 
+await check("a stash command that fires twice at once writes one stash, not two", async () => {
+  const tabs = makeTabs(60);
+  const { browser, closed } = makeBrowser(tabs);
+  const bg = await load(browser);
+  const [first, second] = await Promise.all([bg.stashTabs(), bg.stashTabs()]);
+  assert.equal(first.ok, true, first.error);
+  const all = await stashes(bg);
+  const recorded = all.flatMap(s => s.tabs.map(t => t.url));
+  assert.equal(new Set(recorded).size, recorded.length, `a tab is recorded twice across ${all.length} stashes`);
+  assert.equal(all.length, 1, "one stash");
+  assert.equal(second.ok, false, "the second finds nothing left to stash");
+  assert.equal(closed.length, first.closed, "each tab closed once");
+});
+
 await check("bookmarks that silently do not land close nothing", async () => {
   const tabs = makeTabs(N);
   const { browser, closed } = makeBrowser(tabs, { bookmarks: { fail: "silent" } });
