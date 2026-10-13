@@ -79,13 +79,32 @@ EOF
 const __lines = [];
 let __failed = 0;
 function report(...parts) { __lines.push(parts.join(" ")); }
+// A check that never settles fails after __CHECK_MS instead of leaving the run without a report.
+const __CHECK_MS = 90000;
 async function check(name, fn) {
-  try { await fn(); report("ok  ", name); }
+  let timer;
+  const stuck = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`no result within ${__CHECK_MS / 1000}s`)), __CHECK_MS); });
+  try { await Promise.race([fn(), stuck]); report("ok  ", name); }
   catch (e) { __failed++; report("FAIL", `${name}: ${e.message}`); }
+  finally { clearTimeout(timer); }
 }
-// A fresh profile builds its bookmark tree after start-up; until then a folder can vanish mid-write.
+// Polls until fn() returns something truthy; throws with `what` after `ms`.
+async function __until(what, fn, ms = 60000) {
+  for (const end = Date.now() + ms; ; await new Promise(r => setTimeout(r, 50))) {
+    if (await fn().catch(() => false)) return;
+    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+  }
+}
+// The script starts once bookmarks can be written: a fresh profile builds its tree after start-up,
+// and a folder written before then can vanish or fail. Judged by making and removing one, not by a
+// delay. A script that needs more (an extension's own start-up settled) waits for that itself.
 async function __ready() {
-  await new Promise(r => setTimeout(r, 6000));
+  if (!browser.bookmarks) return;
+  await __until("bookmarks to be writable", async () => {
+    const probe = await browser.bookmarks.create({ parentId: "unfiled_____", title: "headless-probe" });
+    await browser.bookmarks.removeTree(probe.id);
+    return true;
+  });
 }
 async function __finish() {
   const body = __lines.join("\n") + `\n__DONE__ ${__failed}\n`;
