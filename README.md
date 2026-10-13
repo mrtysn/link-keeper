@@ -22,7 +22,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `native/` | the helpers Firefox starts for the add-on, registered by `native/install.zsh`: `open-local-files.py` reopens stashed local-file tabs; `link-keeper-bridge.py` backs the add-on's storage up to disk and lets local agents reach it (see *Backups and agents*) |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`link-keeper.mjs` — the agents' CLI: read and change links, tags, captures and stashes, live from Firefox or from the latest backup (`--help`)<br>`test-bridge.mjs` — check the bridge and the CLI against a stand-in extension<br>`test-bridge-firefox.zsh` — check backups, restore, agent undo and the CLI in a headless Firefox<br>`release.zsh` — ship a batch: bump the version, sign on AMO, open it in Firefox, commit the release (once per finished batch; AMO allows 24 signings a day)<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`survey-stashed-sites.py` — count stashed links per site, and show which pages of a site are main pages or items (for the filtered-out rules)<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, Links, Cards and Tags in any browser with a fake extension API and real capture text<br>`preview-frames/test-preview-frames.zsh` — check in headless Firefox that the Links detail pane's live preview frames sites that forbid framing, and nothing else can<br>`preview-pages/test-keys.zsh` — drive Links (with and without its detail pane), Cards, Tags and the popup in that preview with the shared keys and check each action and its undo, the tag library, the tag palette and the hover previews<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`link-keeper.mjs` — the agents' CLI: read and change links, tags, captures and stashes, live from Firefox or from the latest backup (`--help`)<br>`test-bridge.mjs` — check the bridge and the CLI against a stand-in extension<br>`test-bridge-firefox.zsh` — check backups, restore, agent undo and the CLI in a headless Firefox<br>`release.zsh` — ship a batch: bump the version, sign on AMO, open it in Firefox, commit the release (once per finished batch; AMO allows 24 signings a day)<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`survey-stashed-sites.py` — count stashed links per site, and show which pages of a site are main pages or items (for the filtered-out rules)<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks<br>`test-extractors.zsh` — check in headless Firefox that an x.com capture holds every rendered reply, and that a page walk gathers the ones x.com drops while scrolling, against the saved pages in `extractor-fixtures/`<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, Links, Cards and Tags in any browser with a fake extension API and real capture text<br>`preview-frames/test-preview-frames.zsh` — check in headless Firefox that the Links detail pane's live preview frames sites that forbid framing, and nothing else can<br>`preview-pages/test-keys.zsh` — drive Links (with and without its detail pane), Cards, Tags and the popup in that preview with the shared keys and check each action and its undo, the tag library, the tag palette and the hover previews<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`make-app.zsh` — wrap the refresh in a Spotlight-launchable macOS app |
 
 ## Backups and agents
 
@@ -537,19 +537,48 @@ with the key its own pages embed, and Rotten Tomatoes' search page. A score is o
 the title, the type (film or series) and the year all agree with IMDb's, so *Chernobyl* the
 mini-series does not inherit a same-named film's rating.
 
-### Links from the replies
+### The replies
 
-Keeping an x.com post also harvests links out of the replies rendered below it, into `reply_links`.
-Half the reason a tweet gets saved is a tool it names but does not link — "repo in the comments" —
-and no API exposes reply bodies. They exist only in a rendered, logged-in page, so this is the one
-thing scraping does that fetching cannot.
+Keeping an x.com post also stores every reply rendered below it, in `replies`. Half the reason a tweet
+gets saved is a tool it names but does not link — "repo in the comments" — and no API exposes reply
+bodies. They exist only in a rendered, logged-in page, so this is the one thing scraping does that
+fetching cannot.
 
-A reply from the post's own author is marked `self` and sorted first, because that is where an author
-parks the link. In the list and the deck those chips are outlined in green and prefixed `↩`.
+One entry per reply, the post itself left out:
 
-x.com renders replies lazily, so a plain **Capture** sees only what has scrolled into view. **Capture
-with a screenshot** walks the entire page to stitch its screenshot and therefore sees far more of them — worth
-using on anything flagged `needs_replies`.
+```json
+{
+  "handle": "@somehandle", "name": "Some One",
+  "text": "Repo: github.com/a/b and docs a.dev/docs",
+  "posted": "2026-08-09T14:52:00.000Z",
+  "url": "https://x.com/somehandle/status/2009295999999999901",
+  "likes": 30, "replies": 1, "reposts": 4, "views": 2400,
+  "self": true,
+  "images": ["https://pbs.twimg.com/media/AAAA?format=jpg&name=orig"],
+  "video": false, "video_posters": [],
+  "links": [{ "href": "https://t.co/repo1", "display": "github.com/a/b", "resolved": "https://github.com/a/b" }]
+}
+```
+
+`text` is whole, with its line breaks and emoji. The four counts are integers read from the action
+buttons, the views link and the action group's label (`1.2K` is 1200), and null where the page shows
+none of them. `self` marks a reply by the post's own author; `images` are rewritten to `name=orig` as
+in the post's own `images`; a reply with a video has `video: true` and the still frame it shows in
+`video_posters`.
+
+`reply_links` stays beside it: the links among the replies, repeats dropped, the author's own reply
+first because that is where an author parks the link, each with `from`, `self` and the first 160
+characters of its reply as `context`. `replies_scanned` is the number of replies. In the list and the
+deck those chips are outlined in green and prefixed `↩`, under a count of the replies kept.
+
+x.com renders replies lazily and drops the ones scrolled out of view, so a plain **Capture** holds only
+what is on screen. **Capture with a screenshot** walks the entire page to stitch its screenshot and reads
+the replies at every stop of the walk, so the ones x.com unloads while scrolling are kept too, each once
+by its own address — worth using on anything flagged `needs_replies`. `link-keeper capture URL` prints
+them one to a line, and `--json` returns the whole list.
+
+`tools/test-extractors.zsh` checks all of this in headless Firefox against saved pages in
+`tools/extractor-fixtures/`, one of which unloads its replies as it scrolls.
 
 ### Getting the data out
 
@@ -564,7 +593,7 @@ nothing degrades to the generic result rather than failing the capture.
 
 | Site | Beyond title and description |
 |---|---|
-| x.com, twitter.com | author, handle, full tweet text, posted time, quoted tweet, media kinds, embedded links |
+| x.com, twitter.com | author, handle, full tweet text, posted time, quoted tweet, media kinds, embedded links, every rendered reply |
 | x.com Articles | the headline and the whole long-form body with its line breaks intact, plus each code block separately. These live in different nodes from a normal tweet and have no `tweetText` at all |
 | github.com | repo or issue, owner, description, stars, language |
 | news.ycombinator.com | the story's own outbound URL, points, submitter |
