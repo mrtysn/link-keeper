@@ -296,7 +296,10 @@ async function fullPageShot(tab, slug, walk = null) {
   try {
     const { w, h, vh, dpr } = page || {};
     if (!w || !h || !vh) throw new Error("could not measure the page");
-    if (walk) await inject(tab.id, () => LK.startReplyWalk());
+    // The reply walk ends where x.com's "Discover more" section begins (replyBoundary in
+    // extractors.js); the scroll goes on for the screenshot, but nothing more is read.
+    let repliesEnded = false;
+    if (walk) repliesEnded = !!(await inject(tab.id, () => LK.startReplyWalk()))?.ended;
 
     const scale = Math.min(dpr, SHOT_MAX_DEVICE_PX / h);
     const scaledDown = scale < dpr;   // the page was too tall to render at full resolution
@@ -304,7 +307,7 @@ async function fullPageShot(tab, slug, walk = null) {
     for (let y = 0, n = 0; y < h && n < SHOT_MAX_TILES; y += vh, n++) {
       const at = await inject(tab.id, yy => { window.scrollTo(0, yy); return window.scrollY; }, [y]);
       await sleep(TILE_SETTLE_MS);
-      if (walk) await inject(tab.id, () => LK.noteReplies());
+      if (walk && !repliesEnded) repliesEnded = !!(await inject(tab.id, () => LK.noteReplies()))?.ended;
       tiles.push({ y: at, dataUrl: await browser.tabs.captureVisibleTab(tab.windowId, { format: "png" }) });
       if (at + vh >= h) break;
     }

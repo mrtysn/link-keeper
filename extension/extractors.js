@@ -205,11 +205,51 @@ const LK = (() => {
     };
   }
 
-  /* Every article but the post itself, which is the one at `primary` or the one with its address. */
-  function readReplies(primary, primaryHandle, primaryId) {
-    return [...document.querySelectorAll('article[data-testid="tweet"]')]
-      .filter(art => art !== primary && !(primaryId && articleStatusId(art) === primaryId))
-      .map(art => readReply(art, primaryHandle));
+  /* Where the replies end. Below a thread's replies x.com draws a recommendation section
+   * ("Discover more", "More posts", "Sourced from across X") of unrelated posts, in the same
+   * timeline and with the same <article data-testid="tweet"> elements, so an article being there
+   * does not make it a reply. The section starts at a cell of the conversation list
+   * (`div[data-testid="cellInnerDiv"]`, inside the `[aria-label^="Timeline: Conversation"]`
+   * timeline when the page has one) that holds a heading (`h2` or `[role="heading"]`) and no post.
+   * The cell is the boundary when either holds:
+   *   - its heading reads as one of SECTION_HEADINGS (English wording, matched exactly); or
+   *   - structure alone: the replies run on as one unbroken list of post cells, so a heading-only
+   *     cell that follows a post is a section break whatever language its heading is in.
+   * The structural test is an assumption about x.com's markup, not something read from its
+   * documentation: it takes a heading cell below a post as the end of the replies, and needs a
+   * post above the cell (in the document, or already gathered by a walk). Only articles before
+   * the boundary are replies. */
+  const SECTION_HEADINGS = /^(discover more|more posts|sourced from across x)$/i;
+  const POST = 'article[data-testid="tweet"]';
+
+  function replyBoundary(postSeen = false) {
+    const timeline = document.querySelector('[aria-label^="Timeline: Conversation"]');
+    const cells = (timeline || document).querySelectorAll('div[data-testid="cellInnerDiv"]');
+    const articles = [...document.querySelectorAll(POST)];
+    for (const cell of cells) {
+      if (cell.querySelector(POST)) continue;
+      const title = txt(cell.querySelector('h2, [role="heading"]'));
+      if (!title) continue;
+      if (SECTION_HEADINGS.test(title)) return cell;
+      if (postSeen || articles.some(a => a.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING)) return cell;
+    }
+    return null;
+  }
+
+  const isBefore = (boundary, art) =>
+    !boundary || !(boundary.compareDocumentPosition(art) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  /* The replies on screen: every article above the boundary but the post itself, which is the one
+   * at `primary` or the one with its address. `ended` says the boundary was in view. */
+  function readReplies(primary, primaryHandle, primaryId, postSeen = false) {
+    const boundary = replyBoundary(postSeen);
+    return {
+      ended: !!boundary,
+      replies: [...document.querySelectorAll(POST)]
+        .filter(art => isBefore(boundary, art))
+        .filter(art => art !== primary && !(primaryId && articleStatusId(art) === primaryId))
+        .map(art => readReply(art, primaryHandle)),
+    };
   }
 
   const postId = primary => statusId(location.pathname) || (primary && articleStatusId(primary)) || null;
@@ -244,19 +284,25 @@ const LK = (() => {
   let walk = null;
 
   /* The post's own article is not always rendered mid-walk, so it is told apart by its address
-   * and its author's handle is kept from the start. */
+   * and its author's handle is kept from the start. Once the boundary (replyBoundary) has been in
+   * view the replies are complete: later calls read nothing, and the result says `ended` so the
+   * caller can stop asking. Null when no walk is running. */
   function noteReplies() {
-    if (!walk) return false;
-    for (const r of readReplies(null, walk.handle, walk.id)) {
-      const key = replyKey(r);
-      walk.found.set(key, walk.found.has(key) ? mergeReply(walk.found.get(key), r) : r);
+    if (!walk) return null;
+    if (!walk.ended) {
+      const read = readReplies(null, walk.handle, walk.id, walk.found.size > 0 || walk.posted);
+      for (const r of read.replies) {
+        const key = replyKey(r);
+        walk.found.set(key, walk.found.has(key) ? mergeReply(walk.found.get(key), r) : r);
+      }
+      walk.ended = read.ended;
     }
-    return true;
+    return { ended: walk.ended };
   }
 
   function startReplyWalk() {
     const primary = primaryArticle();
-    walk = { handle: handleOf(primary), id: postId(primary), found: new Map() };
+    walk = { handle: handleOf(primary), id: postId(primary), posted: !!primary, found: new Map(), ended: false };
     return noteReplies();
   }
 
@@ -287,7 +333,7 @@ const LK = (() => {
     const quotedBlock = [...article.querySelectorAll('div[role="link"]')]
       .find(d => d.querySelector('div[data-testid="User-Name"]'));
 
-    const replies = replySet(readReplies(article, handle, postId(article)));
+    const replies = replySet(readReplies(article, handle, postId(article)).replies);
     const articleTitle = txt(article.querySelector(ARTICLE_TITLE));
     const articleBody = article.querySelector(ARTICLE_BODY);
     const isLongform = !!(articleTitle || articleBody);

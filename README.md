@@ -577,8 +577,15 @@ the replies at every stop of the walk, so the ones x.com unloads while scrolling
 by its own address — worth using on anything flagged `needs_replies`. `link-keeper capture URL` prints
 them one to a line, and `--json` returns the whole list.
 
+Replies end where x.com's recommendation section begins ("Discover more", "More posts", "Sourced from
+across X"), which uses the same post elements in the same timeline: the first conversation cell that
+holds a heading and no post marks it, by its English wording or, in any language, by being a heading
+cell below a post. Posts after it are never stored as replies or reply links, and the walk stops
+reading once it has been in view.
+
 `tools/test-extractors.zsh` checks all of this in headless Firefox against saved pages in
-`tools/extractor-fixtures/`, one of which unloads its replies as it scrolls.
+`tools/extractor-fixtures/`: one unloads its replies as it scrolls, and two end in a recommendation
+section, one of them showing its heading only after scrolling.
 
 ### Getting the data out
 
