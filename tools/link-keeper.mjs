@@ -153,6 +153,17 @@ const json = v => out(JSON.stringify(v, null, 2));
 const day = iso => (iso ? String(iso).slice(0, 10) : "          ");
 const isWeb = url => /^(https?|ftp):/.test(url);
 const hostOf = url => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } };
+/* One reply on a line: who, when, the counts it carried, its text clipped, and what it attached. */
+const replyLine = r => {
+  const counts = [["likes", r.likes], ["replies", r.replies], ["reposts", r.reposts], ["views", r.views]]
+    .filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(", ");
+  const text = (r.text || "").replace(/\s+/g, " ");
+  return "  " + [r.handle || "(unknown)", r.self ? "[author]" : "", r.posted ? day(r.posted) : "", counts,
+    `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"`,
+    r.images?.length ? `${r.images.length} images` : "", r.video ? "video" : "",
+    r.links?.length ? `${r.links.length} links` : "", r.url || ""].filter(Boolean).join("  ");
+};
+
 const linkLine = l => [day(l.date), l.tags.length ? `[${l.tags.join(",")}]` : "[]", l.cap ? "captured" : "",
   l.copies.length > 1 ? `×${l.copies.length}` : "", l.title || l.cap?.title || "", l.url].filter(Boolean).join("  ");
 function note() { if (source && source !== "live") process.stderr.write(`(from the ${source}; Firefox is not running Link Keeper)\n`); }
@@ -203,7 +214,7 @@ const commands = {
     }).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     const shown = opt.all ? hits : hits.slice(0, +(opt.limit || 50));
     note();
-    if (opt.json) return json({ total: hits.length, links: shown.map(l => (opt.text ? l : { ...l, cap: l.cap && { ...l.cap, text: undefined } })) });
+    if (opt.json) return json({ total: hits.length, links: shown.map(l => (opt.text ? l : { ...l, cap: l.cap && { ...l.cap, text: undefined, replies: undefined } })) });
     for (const l of shown) out(linkLine(l));
     if (shown.length < hits.length) out(`… ${hits.length - shown.length} more (--limit N or --all)`);
   },
@@ -213,7 +224,7 @@ const commands = {
     const l = findLink(d, need(pos[0], "URL"));
     const names = new Map(d.stashes.map(s => [s.id, s]));
     const view = { ...l, copies: l.copies.map(c => ({ ...c, stash_name: names.get(c.stash)?.name, stash_date: names.get(c.stash)?.created_at })) };
-    if (view.cap && !opt.text) view.cap = { ...view.cap, text: view.cap.text ? `${view.cap.text.length} characters (--text to show)` : null };
+    if (view.cap && !opt.text) view.cap = { ...view.cap, text: view.cap.text ? `${view.cap.text.length} characters (--text to show)` : null, replies: undefined };
     note();
     if (opt.json) return json(view);
     out([`${l.title || l.cap?.title || "(no title)"}`, l.url, `tags: ${l.tags.join(", ") || "none"}`,
@@ -230,7 +241,8 @@ const commands = {
     note();
     if (opt.json) return json({ url: l.url, ...l.cap });
     out([l.cap.title || l.title || l.url, l.url, l.cap.captured_at ? `captured ${l.cap.captured_at}` : "", "", l.cap.text || "(no text)",
-      ...(l.cap.links?.length ? ["", "links:", ...l.cap.links] : [])].join("\n"));
+      ...(l.cap.links?.length ? ["", "links:", ...l.cap.links] : []),
+      ...(l.cap.replies?.length ? ["", `replies (${l.cap.replies.length}):`, ...l.cap.replies.map(replyLine)] : [])].join("\n"));
   },
 
   async stashes({ opt }) {

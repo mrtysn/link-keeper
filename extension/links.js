@@ -86,6 +86,8 @@ function capView(c, thumbs = {}) {
     captured_at: c.captured_at || null,
     links: (c.links || []).map(hrefOf).filter(Boolean),
     reply_links: (c.reply_links || []).map(l => ({ href: hrefOf(l), from: l.from || null, self: !!l.self })).filter(l => l.href),
+    reply_count: (c.replies || []).length,
+    replies: c.replies || [],
     images: c.images || [],
     screenshot: c.screenshot?.filename || null,
     shotThumb: thumbs[c.screenshot?.filename] || null,

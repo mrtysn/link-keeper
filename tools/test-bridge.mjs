@@ -30,7 +30,10 @@ const LINKS = vm.createContext({ URL, console });
 vm.runInContext(fs.readFileSync(path.join(REPO, "extension/links.js"), "utf8"), LINKS);
 const storage = {
   items: [{ url: "https://example.org/a", status: "pending", added_at: "2026-10-01T10:00:00Z" }],
-  captures: [{ url: "https://example.org/b", title: "Bee", text: "the text of b", captured_at: "2026-10-02T10:00:00Z" }],
+  captures: [{ url: "https://example.org/b", title: "Bee", text: "the text of b", captured_at: "2026-10-02T10:00:00Z",
+    replies: [{ handle: "@author", name: "A", text: "repo is github.com/a/b", posted: "2026-10-02T09:00:00.000Z", url: "https://x.com/author/status/2",
+      replies: 0, reposts: 1, likes: 12, views: 340, self: true, images: [], video: false, video_posters: [],
+      links: [{ href: "https://t.co/x", display: "github.com/a/b", resolved: "https://github.com/a/b" }] }] }],
   linkTags: { [LINKS.keyOf("https://example.org/b")]: ["ai"] },
   tagDefs: { seeded: true, list: [{ name: "ai", hue: null }, { name: "dev", hue: null }] },
 };
@@ -178,6 +181,8 @@ await check("CLI status and links read live through the socket", async () => {
   const got = JSON.parse(s.out);
   assert(got.total === 3, `${got.total} links`);
   assert(got.links.every(l => !l.cap?.text), "capture text came along without --text");
+  assert(got.links.every(l => !l.cap?.replies), "replies came along without --text");
+  assert(got.links.find(l => l.url.endsWith("/b")).cap.reply_count === 1, "the reply count is missing");
   const t = await cli("links", "--tag", "ai");
   assert(t.code === 0 && t.out.includes("https://example.org/b") && !t.out.includes("/c"), t.out);
 });
@@ -212,6 +217,9 @@ await check("with the bridge gone, the CLI reads the latest backup and refuses c
   assert(r.code === 0 && r.out.includes("https://example.org/b") && /from the backup of/.test(r.out), r.out);
   const c = await cli("capture", "https://example.org/b");
   assert(c.code === 0 && c.out.includes("the text of b"), c.out);
+  assert(/replies \(1\):\n  @author  \[author\]  2026-10-02  12 likes, 1 reposts, 340 views  "repo is github.com\/a\/b"  1 links  https:\/\/x.com\/author\/status\/2/.test(c.out), c.out);
+  const cj = JSON.parse((await cli("capture", "https://example.org/b", "--json")).out.replace(/\(from the[^\n]*\n/, ""));
+  assert(cj.replies.length === 1 && cj.replies[0].likes === 12 && cj.replies[0].self === true, JSON.stringify(cj.replies));
   const w = await cli("tag", "https://example.org/b", "--add", "x");
   assert(w.code === 1 && /not running/.test(w.out), w.out);
 });
