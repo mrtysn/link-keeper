@@ -24,7 +24,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/lk-bridge-ff.XXXXXX")
 export LINK_KEEPER_BACKUP_DIR=$work/backups LINK_KEEPER_STATE_DIR=$work/state
 trap 'kill $run 2>/dev/null; wait $run 2>/dev/null; rm -rf "$work"' EXIT INT TERM
 
-"$here/run-in-headless-firefox.zsh" --timeout 240 --extension "$repo/extension" "$here/e2e-bridge.js" > "$work/report" 2>&1 &
+"$here/run-in-headless-firefox.zsh" --timeout 240 --backup-dir "$LINK_KEEPER_BACKUP_DIR" --state-dir "$LINK_KEEPER_STATE_DIR" --extension "$repo/extension" "$here/e2e-bridge.js" > "$work/report" 2>&1 &
 run=$!
 
 lk() { node "$here/link-keeper.mjs" "$@" }

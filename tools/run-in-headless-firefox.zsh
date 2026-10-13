@@ -10,7 +10,13 @@
 #   run-in-headless-firefox.zsh probe.js                         # bare extension
 #   run-in-headless-firefox.zsh --permissions bookmarks,tabs probe.js
 #   run-in-headless-firefox.zsh --extension extension/ e2e.js    # beside the real extension
-#   run-in-headless-firefox.zsh --timeout 180 ...                # seconds, default 120
+#   run-in-headless-firefox.zsh --timeout 180 ...                # seconds, default 300
+#   run-in-headless-firefox.zsh --backup-dir D --state-dir S ...  # where the extension's bridge helper writes
+#
+# The bridge helper the extension starts reads LINK_KEEPER_BACKUP_DIR and LINK_KEEPER_STATE_DIR from
+# the environment, else config.local.sh. Left alone, a throwaway profile would restore the owner's real
+# backup into itself and write its test data over that backup, so both default to folders in the
+# throwaway work directory.
 #
 # In the script: report(...parts) prints a line; await check(name, async () => {...}) prints
 # "ok name" or "FAIL name: why". Exits 1 if any check failed or the script threw.
@@ -19,16 +25,18 @@ set -euo pipefail
 setopt nullglob
 
 if [[ ${1:-} == -h || ${1:-} == --help || $# -eq 0 ]]; then
-  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
-ext="" perms="" timeout=120
+ext="" perms="" timeout=300 backup_dir="" state_dir=""
 while [[ $# -gt 1 ]]; do
   case $1 in
     --extension) ext=${2:A}; shift 2 ;;
     --permissions) perms=$2; shift 2 ;;
     --timeout) timeout=$2; shift 2 ;;
+    --backup-dir) backup_dir=${2:A}; shift 2 ;;
+    --state-dir) state_dir=${2:A}; shift 2 ;;
     *) print -u2 "unknown argument: $1 (see --help)"; exit 2 ;;
   esac
 done
@@ -38,6 +46,7 @@ script=${1:A}
 work=$(mktemp -d "${TMPDIR:-/tmp}/headless-firefox.XXXXXX")
 src=$work/ext out=$work/out
 mkdir -p "$out"
+export LINK_KEEPER_BACKUP_DIR=${backup_dir:-$work/backups} LINK_KEEPER_STATE_DIR=${state_dir:-$work/state}
 web_ext_pid=""
 cleanup() {
   [[ -n $web_ext_pid ]] && kill -INT "$web_ext_pid" 2>/dev/null && sleep 2
