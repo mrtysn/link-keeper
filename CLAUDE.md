@@ -27,6 +27,14 @@ Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tool
 --extension extension tools/e2e-stash.js` and `tools/preview-frames/test-preview-frames.zsh`, and
 for the bridge or storage `tools/test-bridge-firefox.zsh`.
 
+## The Link Refresh app
+
+`mac/` holds a project-lifecycle `mac-app` manifest (the repo root is not one: it is the extension
+and its tools). Rebuild and reinstall `~/Applications/Link Refresh.app` with
+`project-lifecycle -C mac install`; `-C mac test` runs `tools/refresh.zsh --help` only, never the
+refresh itself. `mac/write-launcher.zsh` writes the launcher into the gitignored `mac/.build/`.
+Reinstall after changing the launcher or moving `tools/refresh.zsh`.
+
 ## Reading the owner's links
 
 Use `link-keeper` (tools/link-keeper.mjs; `--help`), never the Firefox profile's files: it reads
