@@ -88,58 +88,183 @@ const LK = (() => {
     return out;
   }
 
+  /* The unresized original of an X CDN image: the src in the DOM is whatever size the layout
+   * happened to need, and `name=orig` asks for the full one. */
+  const originalSize = src =>
+    (/[?&]name=/.test(src) ? src.replace(/([?&])name=[^&]*/, "$1name=orig") : src);
+
   /* Content images only — avatars live under /profile_images/ and emoji under /emoji/, and
-   * neither is worth keeping. `name=orig` asks X's CDN for the unresized original, since the
-   * src in the DOM is whatever size the layout happened to need. */
+   * neither is worth keeping. */
   function tweetImages(root) {
     const urls = [...root.querySelectorAll("img[src]")]
       .map(img => img.src)
       .filter(src => /pbs\.twimg\.com\/(media|card_img)\//.test(src))
-      .map(src => (/[?&]name=/.test(src) ? src.replace(/([?&])name=[^&]*/, "$1name=orig") : src));
+      .map(originalSize);
     return [...new Set(urls)];
   }
 
-  /* Links from the replies below the post.
+  /* The still frame a video shows before it plays. */
+  function videoPosters(root) {
+    const urls = [...root.querySelectorAll("video[poster]")]
+      .map(v => v.poster)
+      .filter(src => /pbs\.twimg\.com\//.test(src))
+      .map(originalSize);
+    return [...new Set(urls)];
+  }
+
+  /* Text with its line breaks, and emoji (X draws them as <img alt>) put back as characters. */
+  function richText(node) {
+    if (!node) return null;
+    let out = "";
+    const walk = n => {
+      if (n.nodeType === 3) out += n.data;
+      else if (n.nodeName === "IMG") out += n.getAttribute("alt") || "";
+      else if (n.nodeName === "BR") out += "\n";
+      else for (const child of n.childNodes) walk(child);
+    };
+    walk(node);
+    return out.replace(/[ \t]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim() || null;
+  }
+
+  /* "1,234", "1.2K" and "3M" as numbers. */
+  function parseCount(raw) {
+    const m = String(raw ?? "").trim().match(/^(\d[\d,]*(?:\.\d+)?)\s*([KMB])?$/i);
+    if (!m) return null;
+    const scale = { K: 1e3, M: 1e6, B: 1e9 }[(m[2] || "").toUpperCase()] || 1;
+    return Math.round(parseFloat(m[1].replace(/,/g, "")) * scale);
+  }
+
+  /* The counts under a post. Each action button's aria-label opens with its count ("12 Likes.
+   * Like") and carries none when the count is zero; the views link works the same way. The action
+   * group's own label ("5 replies, 12 likes, 340 views") fills any the buttons do not give. */
+  function tweetCounts(article) {
+    const lead = el => parseCount((el.getAttribute("aria-label") || "").match(/^\s*([\d.,]+\s*[KMB]?)(?=\s|$)/i)?.[1]);
+    const button = ids => article.querySelector(ids.map(id => `[data-testid="${id}"]`).join(", "));
+    const fromButton = ids => { const b = button(ids); return b ? lead(b) ?? 0 : null; };
+    const views = article.querySelector('a[href$="/analytics"]');
+    const counts = {
+      replies: fromButton(["reply"]),
+      reposts: fromButton(["retweet", "unretweet"]),
+      likes: fromButton(["like", "unlike"]),
+      views: views ? lead(views) ?? 0 : null,
+    };
+    const label = article.querySelector('div[role="group"][aria-label]')?.getAttribute("aria-label") || "";
+    const words = { replies: /([\d.,]+\s*[KMB]?)\s+repl(?:y|ies)/i, reposts: /([\d.,]+\s*[KMB]?)\s+repost/i,
+      likes: /([\d.,]+\s*[KMB]?)\s+like/i, views: /([\d.,]+\s*[KMB]?)\s+view/i };
+    for (const [key, re] of Object.entries(words)) {
+      if (counts[key] == null) counts[key] = parseCount(label.match(re)?.[1]);
+    }
+    return counts;
+  }
+
+  /* --- replies -----------------------------------------------------------------
    *
    * Half the reason a tweet gets saved is a tool it names but does not link — "repo in the
    * comments". No API exposes reply bodies; they exist only in this rendered, logged-in page, so
    * this is the one thing scraping can do that fetching cannot.
    *
-   * x.com renders replies lazily, so only what has actually scrolled into view is here. `Keep +
-   * shot` walks the whole page to stitch its screenshot and therefore sees far more of them.
-   * A reply from the post's own author is marked `self` — that is where an author parks the link.
+   * Every rendered reply is kept whole in `replies`; `reply_links` is the links among them, the
+   * author's own reply first, because that is where "link below" points.
+   *
+   * x.com renders replies lazily and drops the ones scrolled out of view, so a plain read holds
+   * only what is on screen. A page walk (startReplyWalk, noteReplies at each stop, endReplyWalk)
+   * gathers them across the scroll and drops repeats by the reply's own address.
    */
-  function replyLinks(primary, primaryHandle) {
-    const out = [];
+
+  const articleStatusId = article =>
+    statusId(article.querySelector('a[href*="/status/"] time')?.closest("a")?.getAttribute("href"));
+
+  const handleOf = article => {
+    const spans = [...(article?.querySelectorAll('div[data-testid="User-Name"] span') || [])].map(s => s.textContent.trim());
+    return spans.find(s => /^@\w+$/.test(s)) || null;
+  };
+
+  function readReply(art, primaryHandle) {
+    const spans = [...art.querySelectorAll('div[data-testid="User-Name"] span')].map(s => s.textContent.trim());
+    const handle = spans.find(s => /^@\w+$/.test(s)) || null;
+    const body = art.querySelector('div[data-testid="tweetText"]');
+    const stamp = art.querySelector("time[datetime]");
+    const links = [];
+    for (const a of body?.querySelectorAll("a[href]") || []) {
+      const href = a.href;
+      if (!href || /^https?:\/\/(x|twitter)\.com\//.test(href)) continue;   // in-app navigation
+      if (!links.some(l => l.href === href)) links.push({ href, display: txt(a), resolved: null });
+    }
+    return {
+      handle,
+      name: spans.find(s => s && !s.startsWith("@") && s !== "·") || null,
+      text: richText(body),
+      posted: stamp?.getAttribute("datetime") || null,
+      url: stamp?.closest("a")?.href?.split(/[?#]/)[0] || null,
+      ...tweetCounts(art),
+      self: !!handle && handle === primaryHandle,
+      images: tweetImages(art),
+      video: !!art.querySelector("video"),
+      video_posters: videoPosters(art),
+      links,
+    };
+  }
+
+  /* Every article but the post itself, which is the one at `primary` or the one with its address. */
+  function readReplies(primary, primaryHandle, primaryId) {
+    return [...document.querySelectorAll('article[data-testid="tweet"]')]
+      .filter(art => art !== primary && !(primaryId && articleStatusId(art) === primaryId))
+      .map(art => readReply(art, primaryHandle));
+  }
+
+  const postId = primary => statusId(location.pathname) || (primary && articleStatusId(primary)) || null;
+
+  /* The record's three reply fields from the replies gathered. */
+  function replySet(replies) {
+    const links = [];
     const seen = new Set();
-    let scanned = 0;
-
-    for (const art of document.querySelectorAll('article[data-testid="tweet"]')) {
-      if (art === primary) continue;
-      scanned++;
-      const spans = [...art.querySelectorAll('div[data-testid="User-Name"] span')].map(s => s.textContent.trim());
-      const handle = spans.find(s => /^@\w+$/.test(s)) || null;
-      const body = art.querySelector('div[data-testid="tweetText"]');
-      if (!body) continue;
-
-      for (const a of body.querySelectorAll("a[href]")) {
-        const href = a.href;
-        if (!href || seen.has(href)) continue;
-        if (/^https?:\/\/(x|twitter)\.com\//.test(href)) continue;   // in-app navigation
-        seen.add(href);
-        out.push({
-          href,
-          display: txt(a),
-          resolved: null,
-          from: handle,
-          self: !!handle && handle === primaryHandle,
-          context: txt(body)?.slice(0, 160) || null,
-        });
+    for (const r of replies) {
+      for (const l of r.links) {
+        if (seen.has(l.href)) continue;
+        seen.add(l.href);
+        links.push({ ...l, from: r.handle, self: r.self, context: (r.text || "").replace(/\s+/g, " ").slice(0, 160) || null });
       }
     }
-    // The author's own reply first: that is where "link below" points.
-    out.sort((a, b) => Number(b.self) - Number(a.self));
-    return { links: out, scanned };
+    links.sort((a, b) => Number(b.self) - Number(a.self));
+    return { replies, reply_links: links, replies_scanned: replies.length };
+  }
+
+  const replyKey = r => r.url || `${r.handle}|${r.text}`;
+
+  /* A reply seen again keeps what it had and takes what the new render knows. */
+  function mergeReply(old, next) {
+    const pick = (a, b) => (b == null || (Array.isArray(b) && !b.length) ? a : b);
+    return {
+      ...old, ...Object.fromEntries(Object.entries(next).map(([k, v]) => [k, pick(old[k], v)])),
+      text: (next.text || "").length > (old.text || "").length ? next.text : old.text,
+      video: old.video || next.video,
+    };
+  }
+
+  let walk = null;
+
+  /* The post's own article is not always rendered mid-walk, so it is told apart by its address
+   * and its author's handle is kept from the start. */
+  function noteReplies() {
+    if (!walk) return false;
+    for (const r of readReplies(null, walk.handle, walk.id)) {
+      const key = replyKey(r);
+      walk.found.set(key, walk.found.has(key) ? mergeReply(walk.found.get(key), r) : r);
+    }
+    return true;
+  }
+
+  function startReplyWalk() {
+    const primary = primaryArticle();
+    walk = { handle: handleOf(primary), id: postId(primary), found: new Map() };
+    return noteReplies();
+  }
+
+  function endReplyWalk() {
+    if (!walk) return null;
+    const set = replySet([...walk.found.values()]);
+    walk = null;
+    return set;
   }
 
   /* Long-form "Articles" reuse the tweet element for author and timestamp but put the title
@@ -162,7 +287,7 @@ const LK = (() => {
     const quotedBlock = [...article.querySelectorAll('div[role="link"]')]
       .find(d => d.querySelector('div[data-testid="User-Name"]'));
 
-    const replies = replyLinks(article, handle);
+    const replies = replySet(readReplies(article, handle, postId(article)));
     const articleTitle = txt(article.querySelector(ARTICLE_TITLE));
     const articleBody = article.querySelector(ARTICLE_BODY);
     const isLongform = !!(articleTitle || articleBody);
@@ -182,8 +307,9 @@ const LK = (() => {
       code_blocks: [...article.querySelectorAll('[data-testid="markdown-code-block"]')]
         .map(blockText).filter(Boolean),
       images: tweetImages(article),
-      reply_links: replies.links,
-      replies_scanned: replies.scanned,
+      replies: replies.replies,
+      reply_links: replies.reply_links,
+      replies_scanned: replies.replies_scanned,
       posted: timeEl?.getAttribute("datetime") || null,
       links: tweetLinks(article),
       quoted: quotedBlock && {
@@ -290,8 +416,8 @@ const LK = (() => {
   ];
 
   /* The site handler wins field by field; generic() fills the gaps. */
-  function extract() {
-    const host = location.hostname.toLowerCase();
+  function extract(hostname = location.hostname) {
+    const host = hostname.toLowerCase();
     const handler = REGISTRY.find(entry => entry.hosts.test(host));
     const base = generic();
     let specific = null;
@@ -310,5 +436,5 @@ const LK = (() => {
     return merged;
   }
 
-  return { extract, hasHandler: () => REGISTRY.some(e => e.hosts.test(location.hostname.toLowerCase())) };
+  return { extract, startReplyWalk, noteReplies, endReplyWalk, hasHandler: () => REGISTRY.some(e => e.hosts.test(location.hostname.toLowerCase())) };
 })();

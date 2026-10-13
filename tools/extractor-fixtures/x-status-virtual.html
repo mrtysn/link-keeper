@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Some One on X: "A long thread"</title>
+<style>body { margin: 0; } #list { position: relative; }</style></head>
+<body>
+<!-- An x.com status page that, like the real one, keeps only the articles near the viewport in the
+     document: the post and 14 replies of 300px each, drawn as the page scrolls and removed when
+     they leave. The author's own reply is the last one. -->
+<div id="list"></div>
+<script>
+const STEP = 300;
+const PRIMARY = "2009295329057702082";
+const items = [{ handle: "@somehandle", name: "Some One", id: PRIMARY, text: "A long thread. Repo in the comments." }];
+for (let i = 1; i <= 14; i++) {
+  const author = i === 14;
+  items.push({
+    handle: author ? "@somehandle" : `@fan${i}`, name: author ? "Some One" : `Fan ${i}`,
+    id: `20092960000000${String(i).padStart(5, "0")}`, text: `reply number ${i}`,
+    link: author ? "https://repo.dev/final" : null,
+  });
+}
+const list = document.getElementById("list");
+list.style.height = `${items.length * STEP}px`;
+const html = (it, i) => `
+<article data-testid="tweet" role="article" style="position:absolute;top:${i * STEP}px;height:${STEP}px;left:0;right:0">
+  <div data-testid="User-Name">
+    <div><a href="/${it.handle.slice(1)}"><span><span>${it.name}</span></span></a></div>
+    <div><a href="/${it.handle.slice(1)}"><span>${it.handle}</span></a><span>·</span>
+      <a href="/${it.handle.slice(1)}/status/${it.id}"><time datetime="2026-08-09T15:${String(i).padStart(2, "0")}:00.000Z">Aug 9</time></a></div>
+  </div>
+  <div data-testid="tweetText"><span>${it.text}</span>${it.link ? ` <a href="${it.link}">repo.dev/final</a>` : ""}</div>
+  <div role="group" aria-label="0 replies, 0 reposts, ${i * 10} likes, 0 bookmarks, ${i * 100} views"></div>
+</article>`;
+function render() {
+  const top = window.scrollY, bottom = top + window.innerHeight;
+  list.innerHTML = items.map((it, i) => (i * STEP + STEP > top && i * STEP < bottom ? html(it, i) : "")).join("");
+}
+addEventListener("scroll", render);
+render();
+</script>
+</body></html>

@@ -153,6 +153,17 @@ async function resolveLinks(links) {
   );
 }
 
+/* The links among a capture's replies, resolved once and written back onto the replies that hold
+ * them, so a t.co address is looked up a single time. */
+async function resolveReplyLinks(record) {
+  if (!record.reply_links?.length) return;
+  record.reply_links = await resolveLinks(record.reply_links);
+  const resolved = new Map(record.reply_links.map(l => [l.href, l.resolved]));
+  for (const reply of record.replies || []) {
+    reply.links = (reply.links || []).map(l => ({ ...l, resolved: resolved.get(l.href) ?? l.resolved }));
+  }
+}
+
 /* Images stay beside the text, never inside it — a base64 PNG in the JSONL would make the log
  * unreadable and ungreppable, which defeats the point of keeping text at all. Only the filename
  * is recorded.
@@ -247,7 +258,10 @@ async function saveThumb(filename, dataUrl) {
   await browser.storage.local.set({ thumbs });
 }
 
-async function fullPageShot(tab, slug) {
+/* `walk`, when given, gathers the replies the page shows at each stop of the scroll: x.com drops
+ * the ones scrolled out of view, so they are read as they pass. Its `result` holds them afterwards,
+ * even when the screenshot itself fails. */
+async function fullPageShot(tab, slug, walk = null) {
   if (!browser.downloads) throw new Error("no downloads permission; reload the extension");
   if (!browser.tabs.captureVisibleTab) {
     throw new Error(await hasSiteAccess()
@@ -282,6 +296,7 @@ async function fullPageShot(tab, slug) {
   try {
     const { w, h, vh, dpr } = page || {};
     if (!w || !h || !vh) throw new Error("could not measure the page");
+    if (walk) await inject(tab.id, () => LK.startReplyWalk());
 
     const scale = Math.min(dpr, SHOT_MAX_DEVICE_PX / h);
     const scaledDown = scale < dpr;   // the page was too tall to render at full resolution
@@ -289,6 +304,7 @@ async function fullPageShot(tab, slug) {
     for (let y = 0, n = 0; y < h && n < SHOT_MAX_TILES; y += vh, n++) {
       const at = await inject(tab.id, yy => { window.scrollTo(0, yy); return window.scrollY; }, [y]);
       await sleep(TILE_SETTLE_MS);
+      if (walk) await inject(tab.id, () => LK.noteReplies());
       tiles.push({ y: at, dataUrl: await browser.tabs.captureVisibleTab(tab.windowId, { format: "png" }) });
       if (at + vh >= h) break;
     }
@@ -329,6 +345,7 @@ async function fullPageShot(tab, slug) {
       via: "stitched",
     };
   } finally {
+    if (walk) walk.result = await inject(tab.id, () => LK.endReplyWalk()).catch(() => null);
     await restore();
   }
 }
@@ -407,7 +424,7 @@ async function captureUrl(url, note = "") {
     record.via = "list";
     if (note) record.note = note;
     record.links = await resolveLinks(record.links);
-    if (record.reply_links?.length) record.reply_links = await resolveLinks(record.reply_links);
+    await resolveReplyLinks(record);
 
     const captures = await getCaptures();
     const key = keyOf(record.url);
@@ -454,15 +471,18 @@ async function captureActive(note = "", withShot = false) {
   record.captured_at = new Date().toISOString();
   if (note) record.note = note;
   record.links = await resolveLinks(record.links);
-  if (record.reply_links?.length) record.reply_links = await resolveLinks(record.reply_links);
 
   if (withShot) {
+    // The walk the screenshot makes is also how a post's replies are all seen.
+    const walk = Array.isArray(record.replies) ? { result: null } : null;
     try {
-      record.screenshot = await fullPageShot(tab, slugFor(record, tab));
+      record.screenshot = await fullPageShot(tab, slugFor(record, tab), walk);
     } catch (e) {
       record.screenshot_error = String(e.message || e);
     }
+    if (walk?.result) Object.assign(record, walk.result);
   }
+  await resolveReplyLinks(record);
 
   // Or one you took yourself with Firefox's own tool, waiting to be claimed.
   const { pendingShot } = await browser.storage.local.get("pendingShot");
@@ -525,8 +545,9 @@ function describe(res) {
     ? ` · png ${r.screenshot.width}×${r.screenshot.height}${r.screenshot.truncated ? " (cut short)" : ""}`
     : r.screenshot_error ? ` · screenshot failed: ${r.screenshot_error}` : "";
   const links = r.links?.length ? ` · +${r.links.length} link${r.links.length > 1 ? "s" : ""}` : "";
+  const replies = r.replies?.length ? ` · ${r.replies.length} repl${r.replies.length > 1 ? "ies" : "y"}` : "";
   const fromReplies = r.reply_links?.length ? ` · ${r.reply_links.length} from replies` : "";
-  return `kept ${summarise(r)}${links}${fromReplies}${shot}`;
+  return `kept ${summarise(r)}${links}${replies}${fromReplies}${shot}`;
 }
 
 async function queueActiveTab() {

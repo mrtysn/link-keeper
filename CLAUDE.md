@@ -22,7 +22,7 @@ release, not a release per change.
 
 ## Before a release
 
-Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tools/test-stash.mjs`,
+Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tools/test-stash.mjs`, `tools/test-extractors.zsh` (for the extractors or a capture),
 `node tools/test-bridge.mjs`, for stashing or the live preview `tools/run-in-headless-firefox.zsh
 --extension extension tools/e2e-stash.js` and `tools/preview-frames/test-preview-frames.zsh`, and
 for the bridge or storage `tools/test-bridge-firefox.zsh`.
