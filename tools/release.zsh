@@ -8,6 +8,7 @@
 # Usage:
 #   tools/release.zsh            # 5.45 → 5.46: sign, fetch, open in Firefox, commit "ship 5.46 …", push
 #   tools/release.zsh --dry-run  # say what it would do, change nothing
+#   tools/release.zsh --no-open  # the same release, the signed xpi's path printed instead of opened
 #
 # Needs a clean tree (the batch committed) and Doppler's firefox-signing project for AMO's keys.
 # If AMO's approval outlasts web-ext's wait, the version is submitted but not downloaded: the script
@@ -21,11 +22,13 @@ ext=$repo/extension
 manifest=$ext/manifest.json
 
 if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-  sed -n '4,15p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 dry=0
+no_open=0
 [[ ${1:-} == --dry-run ]] && dry=1
+[[ ${1:-} == --no-open ]] && no_open=1
 
 if [[ -n $(git -C "$repo" status --porcelain) ]]; then
   print -u2 "the tree has uncommitted changes; commit the batch first"
@@ -58,9 +61,14 @@ xpis=("$ext"/web-ext-artifacts/*-"$next".xpi(N))
 print "signed: ${xpis[1]}"
 
 # In front, so Firefox's install prompt is on screen.
-open -a Firefox "${xpis[1]}"
+(( no_open )) || open -a Firefox "${xpis[1]}"
 
 git -C "$repo" add extension/manifest.json
 git -C "$repo" commit -qm "ship $next as a signed release"
 git -C "$repo" push -q
-print "committed and pushed; click Add in Firefox to install $next"
+if (( no_open )); then
+  print "committed and pushed; open this in Firefox to install $next:"
+  print "${xpis[1]:A}"
+else
+  print "committed and pushed; click Add in Firefox to install $next"
+fi
