@@ -41,3 +41,8 @@ SERVE_PORT=8790
 # Where the bridge keeps its socket for tools/link-keeper.mjs and the agents' undo journal.
 # Optional; defaults to ~/.local/state/link-keeper.
 #LINK_KEEPER_STATE_DIR="$HOME/.local/state/link-keeper"
+
+# Where gutsy-inference is installed (its folder holds .venv/ and models.json). The tag suggestions
+# (tools/tag-model) ask its server, started for the run on 127.0.0.1:8765, beside system-one's. Unset,
+# the gutsy pass is skipped.
+#GUTSY_DIR="$HOME/dev/gutsy/gutsy-inference"

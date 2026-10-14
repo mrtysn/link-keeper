@@ -13,7 +13,7 @@ The first batch (up to 10 links) is timed and the estimate for the whole run is 
 rest is asked. Without --out nothing is written anywhere; the top suggestions are printed.
 
     suggest_system_one.py --limit 10
-    suggest_system_one.py --out suggestions.json --threshold 0.7
+    suggest_system_one.py --out suggestions.json --threshold 0.85
 """
 
 from __future__ import annotations
@@ -27,17 +27,19 @@ import re
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 import tagdata
 from tagdata import Link, Suggestion
 
-DEFAULT_THRESHOLD = 0.7
+DEFAULT_THRESHOLD = 0.85
 TIMING_BATCH = 10
 MAX_FAILURES_IN_A_ROW = 5
 ASK_TIMEOUT_SECONDS = 120
 START_WAIT_SECONDS = 60
+HTTP_500_RETRY_SECONDS = 2
 
 
 def _env() -> dict:
@@ -107,11 +109,20 @@ def ask(request: dict, port: int) -> dict[str, float]:
     body = json.dumps({**request, "model": "english"}).encode()
     req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/systemone", body,
                                  {"content-type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=ASK_TIMEOUT_SECONDS) as resp:
-            answers = json.load(resp).get("answers", {})
-    except (OSError, ValueError) as err:
-        raise RuntimeError(f"system-one did not answer: {err}") from err
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=ASK_TIMEOUT_SECONDS) as resp:
+                answers = json.load(resp).get("answers", {})
+            break
+        except urllib.error.HTTPError as err:
+            # A Metal command-buffer error makes the model return NaN, which the server cannot serialise
+            # and answers 500; the same request succeeds when asked again.
+            if err.code == 500 and attempt == 1:
+                time.sleep(HTTP_500_RETRY_SECONDS)
+                continue
+            raise RuntimeError(f"the server on port {port} did not answer: {err}") from err
+        except (OSError, ValueError) as err:
+            raise RuntimeError(f"the server on port {port} did not answer: {err}") from err
     return {tag: float(a["noul"]) for tag, a in answers.items() if "noul" in a}
 
 
@@ -144,9 +155,10 @@ class AnswerCache:
 
 def score_links(links: list[Link], tags: list[str], meanings: dict[str, str], threshold: float,
                 ask_fn=ask, report=print, total: int | None = None,
-                cache: AnswerCache | None = None) -> dict[str, list[Suggestion]]:
-    """P(yes) per link and tag; keeps those at or above `threshold`. `ask_fn` is replaceable for tests.
-    With a cache, only the (link, tag) pairs it lacks are asked; the speed line counts those links."""
+                cache: AnswerCache | None = None, source: str = tagdata.SOURCE_SYSTEM_ONE) -> dict[str, list[Suggestion]]:
+    """P(yes) per link and tag; keeps those at or above `threshold`, labelled `source`. `ask_fn` is
+    replaceable for tests. With a cache, only the (link, tag) pairs it lacks are asked; the speed line
+    counts those links."""
     found: dict[str, list[Suggestion]] = {}
     started = time.time()
     asked = 0
@@ -169,11 +181,11 @@ def score_links(links: list[Link], tags: list[str], meanings: dict[str, str], th
                 # One link the server cannot answer is skipped; several in a row mean the server is down.
                 failed.append(link.url)
                 in_a_row += 1
-                report(f"skipped {link.url}: {err}")
+                report(f"{source}: skipped {link.url}: {err}")
                 if in_a_row >= MAX_FAILURES_IN_A_ROW:
                     if cache:
                         cache.save()
-                    raise RuntimeError(f"system-one failed {in_a_row} links in a row; stopping") from err
+                    raise RuntimeError(f"{source} failed {in_a_row} links in a row; stopping") from err
                 continue
             in_a_row = 0
             probs.update(answers)
@@ -185,15 +197,15 @@ def score_links(links: list[Link], tags: list[str], meanings: dict[str, str], th
                 cache.save()
             if asked == TIMING_BATCH or (asked == 1 and len(links) == 1):
                 per_link = (time.time() - started) / asked
-                report(f"speed: {per_link:.2f} s per link over {asked} links; "
+                report(f"{source} speed: {per_link:.2f} s per link over {asked} links; "
                        f"estimate for {total or len(links)} links: {per_link * (total or len(links)) / 60:.1f} min")
-        found[link.url] = [Suggestion(tag, p, tagdata.SOURCE_SYSTEM_ONE) for tag, p in probs.items() if p >= threshold]
+        found[link.url] = [Suggestion(tag, p, source) for tag, p in probs.items() if p >= threshold]
     if cache:
         cache.save()
     if failed:
-        report(f"system-one could not answer {len(failed)} links; they get no suggestions this run")
+        report(f"{source} could not answer {len(failed)} links; they get no suggestions this run")
     if asked < TIMING_BATCH:
-        report(f"asked about {asked} of {len(links)} links ({len(links) - asked} answered from the cache)"
+        report(f"{source}: asked about {asked} of {len(links)} links ({len(links) - asked} answered from the cache)"
                + (f"; {(time.time() - started) / asked:.2f} s per link" if asked else ""))
     return found
 

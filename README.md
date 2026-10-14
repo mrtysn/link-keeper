@@ -204,12 +204,14 @@ come back with an import.
 ### Tag suggestions
 
 `tools/tag-model/` learns the tags you set and suggests them for links with none. Until a tag has
-at least 50 links, the local **system-one** model guesses it: one yes/no question per tag about the
-link's title, site and the first 1,500 characters of its captured text. Once a tag has the examples,
+at least 50 links, two local decision servers guess it, each asked the same one yes/no question per
+tag about the link's title, site and the first 1,500 characters of its captured text: **system-one**
+(Laya backend; `by: "system-one"`, kept at P(yes) 0.85) and **gutsy-inference** (`by: "gutsy"`, kept
+at 0.50). A link can carry the same tag from both; each source keeps up to four tags per link. Once a tag has the examples,
 a **Jeffy** classifier (a frozen English sentence encoder, `BAAI/bge-large-en-v1.5`, about 1.3 GB
 downloaded once, with a logistic-regression head per tag) trained on your own tagging takes over for
 that tag. A head is kept only if its held-out precision is at least 0.7; otherwise system-one keeps
-that tag. Links carrying `filtered-out` are ignored. Personal tags — what you mean to do with a link
+that tag, for both servers. Links carrying `filtered-out` are ignored. Personal tags — what you mean to do with a link
 (`to-read`, `to-try`, `reference`, …) or an idea of yours (`leverage`, `numbness`, …), listed in
 `PERSONAL_TAGS` in `tagdata.py` — are never asked of system-one, since a page's text cannot show
 them; they are suggested only once a head trained on your tagging holds them.
@@ -220,15 +222,19 @@ them; they are suggested only once a head trained on your tagging holds them.
 
 or step by step, from `tools/tag-model/` with `uv run python`: `train.py` (`--min-positives`,
 `--min-precision`, `--threshold`), `suggest.py` (`--limit N` for a trial, `--system-one-only`,
-`--write`), `suggest_system_one.py --limit 10` (times system-one on ten links and prints the
+`--no-gutsy`, `--system-one-threshold`, `--gutsy-threshold`, `--write`), `suggest_system_one.py --limit 10` (times system-one on ten links and prints the
 estimate for all). `tools/refresh.zsh` runs `run.zsh` in the background after each refresh when the
 environment is set up, and says so when it is not. system-one is globally disabled; the scripts
 start it for the run only if it is not running and stop it afterwards only if they started it.
+gutsy-inference is found through `GUTSY_DIR` in `config.local.sh` (its install folder, with `.venv/`
+and `models.json`); the run starts `gutsy-inference serve` on 127.0.0.1:8765 when nothing listens
+there, waits for `/health`, and stops it only if it started it. With `GUTSY_DIR` unset the gutsy pass
+is skipped with one line. About 3 s per link on CPU, so the first full run takes over an hour.
 
 Everything they write sits in `<data dir>/tag-model/` (`DATA_DIR`, else this repo's `data/`):
 `embeddings.npz` (encoder output per link text), `heads/<tag>/` (the Jeffy model packs),
 `metrics.json` (per tag: positives, held-out precision and recall, enabled or why not),
-`system-one-answers.json` (so a rerun asks only about new links), and `suggestions.json`, the
+`system-one-answers.json` and `gutsy-answers.json` (so a rerun asks only about new links), and `suggestions.json`, the
 file sent to the add-on. A one-line meaning for an abstract tag (the question system-one is asked)
 comes from `tag-meanings.json` in that folder when you add one, else from a built-in list in
 `tagdata.py`. Tests: `cd tools/tag-model && uv run pytest test_tag_model.py`.

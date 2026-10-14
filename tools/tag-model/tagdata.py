@@ -20,8 +20,9 @@ LINK_KEEPER = REPO / "tools" / "link-keeper.mjs"
 # The internal tag that marks a link the owner's filter rules threw out; never learned, never suggested.
 INTERNAL_TAG = "filtered-out"
 CAPTURE_TEXT_CHARS = 1500
-MAX_SUGGESTIONS_PER_LINK = 4
+MAX_SUGGESTIONS_PER_SOURCE = 4
 SOURCE_SYSTEM_ONE = "system-one"
+SOURCE_GUTSY = "gutsy"
 SOURCE_MODEL = "model"
 
 # One line per tag whose name alone does not say what belongs under it. The owner's own list lives in
@@ -61,22 +62,28 @@ DEFAULT_TAG_MEANINGS = {
 }
 
 
+def config_value(name: str) -> str | None:
+    """A machine value: the environment variable `name`, else its value in config.local.sh; None when unset."""
+    if os.environ.get(name):
+        return os.environ[name]
+    config = REPO / "config.local.sh"
+    if config.is_file():
+        got = subprocess.run(
+            ["zsh", "-c", 'source "$1" >/dev/null 2>&1; print -r -- "${(P)2:-}"', "zsh", str(config), name],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        if got:
+            return got
+    return None
+
+
 def data_dir(override: str | None = None) -> Path:
     """The folder the refresh writes to: --data-dir, else $DATA_DIR, else config.local.sh's DATA_DIR,
     else this repo's gitignored data/."""
     if override:
         return Path(override).expanduser().resolve()
-    if os.environ.get("DATA_DIR"):
-        return Path(os.environ["DATA_DIR"]).expanduser().resolve()
-    config = REPO / "config.local.sh"
-    if config.is_file():
-        got = subprocess.run(
-            ["zsh", "-c", 'source "$1" >/dev/null 2>&1; print -r -- "${DATA_DIR:-}"', "zsh", str(config)],
-            capture_output=True, text=True,
-        ).stdout.strip()
-        if got:
-            return Path(got).expanduser().resolve()
-    return REPO / "data"
+    configured = config_value("DATA_DIR")
+    return Path(configured).expanduser().resolve() if configured else REPO / "data"
 
 
 def model_dir(override: str | None = None) -> Path:
@@ -185,10 +192,14 @@ class Suggestion:
 
 
 def finish_suggestions(per_link: dict[str, list[Suggestion]]) -> dict[str, list[dict]]:
-    """Sort each link's suggestions by p descending, keep the top few, drop links with none."""
+    """Per link, keep each source's top MAX_SUGGESTIONS_PER_SOURCE by p, sorted by p descending; drop links
+    with none. The same tag from two sources stays as two entries."""
     out = {}
     for url, found in per_link.items():
-        top = sorted(found, key=lambda s: -s.p)[:MAX_SUGGESTIONS_PER_LINK]
+        kept: list[Suggestion] = []
+        for source in dict.fromkeys(s.by for s in found):
+            kept += sorted((s for s in found if s.by == source), key=lambda s: -s.p)[:MAX_SUGGESTIONS_PER_SOURCE]
+        top = sorted(kept, key=lambda s: -s.p)
         if top:
             out[url] = [s.as_dict() for s in top]
     return out
