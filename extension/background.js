@@ -26,19 +26,10 @@ const getCurrent = () => read("current", null);
 
 async function setItems(items) {
   await browser.storage.local.set({ items });
-  await paintBadge(items);
 }
 
 async function setCaptures(captures) {
   await browser.storage.local.set({ captures });
-}
-
-/* The badge is the pending count — what is left to go through. */
-async function paintBadge(items) {
-  const pending = (items || await getItems()).filter(i => i.status === "pending").length;
-  await browser.action.setBadgeText({ text: pending ? String(pending) : "" });
-  await browser.action.setBadgeBackgroundColor({ color: "#6647e6" });
-  await browser.action.setBadgeTextColor({ color: "#ffffff" });
 }
 
 /* --- worklist ------------------------------------------------------------------- */
@@ -2010,4 +2001,5 @@ async function handleMessage(msg) {
 }
 browser.runtime.onMessage.addListener(msg => handleMessage(msg));
 
-paintBadge().catch(() => {});
+/* The toolbar icon carries no count; clear one an earlier version left on it. */
+browser.action.setBadgeText({ text: "" }).catch(() => {});

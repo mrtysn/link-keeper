@@ -178,7 +178,6 @@ async function restoreBackup(data, why) {
       stashes++;
     }
   }
-  await paintBadge();
   applyFilterRules().catch(() => {});
   return { ok: true, restored: Object.keys(data.storage).length, stashes, backup_at: data.at };
 }
@@ -330,7 +329,6 @@ async function agentUndo(force) {
   for (const { id, title } of st.renamed) await browser.bookmarks.update(id, { title }).catch(() => {});
   let back = 0;
   for (const { stash, tabs } of st.removed) back += (await putBack(stash, tabs)).ids?.length || 0;
-  await paintBadge();
   await hostCall("journal-drop", { entry_id: last.id });
   return { ok: true, undone: e.cmd, at: e.at, summary: e.summary, putBack: back };
 }
