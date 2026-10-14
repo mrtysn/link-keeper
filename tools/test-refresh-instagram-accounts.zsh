@@ -74,5 +74,12 @@ check "single-export setup still reads the self-thread" test "$(count '.url | te
 check "...and stamps no account" test "$(count '.account != null')" = 0
 check "...but still names the thread" test "$(count '.thread != null')" = "$(count 'true')"
 
+# One account, threads named with IG_THREADS.
+print 'IG_THREADS="bob_3"' >> "$fake/config.local.sh"
+"$fake/tools/refresh.zsh" --no-serve --no-open > /dev/null 2>&1
+check "IG_THREADS reads the named thread" test "$(count '(.url | test("CCC333")) and .thread == ["bob_3"]')" = 1
+check "...still without an account" test "$(count '.account != null')" = 0
+check "...and an unnamed thread stays out" test "$(count '.url | test("DDD444")')" = 0
+
 (( failed )) && { print "\nsome checks failed"; exit 1 }
 print "all passed"

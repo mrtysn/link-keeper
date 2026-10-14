@@ -566,7 +566,8 @@ the threads to read in `config.local.sh` (`config.local.sh.example` shows the la
     IG_ACCOUNTS[main]="alice_123 bob_456"
     IG_ACCOUNTS[side]=""                                          # self-thread only
 
-`refresh.zsh` then reads the newest export of each account. Links to other sites go through the enrichers
+With a single account and no folders, `IG_THREADS="alice_123 bob_456"` in `config.local.sh` names the threads to
+read. `refresh.zsh` then reads the newest export of each account. Links to other sites go through the enrichers
 as plain `URL<TAB>date`, which cannot carry the origin, so `importers/attach-dm-origin.py` puts `account`,
 `thread` and `senders` back on their records after the merge. A link two accounts both hold becomes
 one record naming both (`account` is then a list) with every sender and thread. Without `IG_ACCOUNTS` the old single-export setup is unchanged.

@@ -15,6 +15,8 @@ INSTAGRAM_EXPORT_DIR="$HOME/Downloads"
 # folder under INSTAGRAM_ACCOUNTS_DIR (an export does not say whose it is) and list the threads to
 # read besides the self-thread. Find a thread's slug with `importers/instagram.py <export> --list-threads`.
 # Setting IG_ACCOUNTS replaces INSTAGRAM_EXPORT_DIR; leave both commented out to keep the single export.
+# With one account and no IG_ACCOUNTS, name the threads to read besides the self-thread here:
+#IG_THREADS="alice_123 bob_456"
 #INSTAGRAM_ACCOUNTS_DIR="$HOME/Downloads/instagram-accounts"    # holds main/, side/, ...
 #IG_ACCOUNTS[main]="alice_123 bob_456"
 #IG_ACCOUNTS[side]=""                                            # self-thread only

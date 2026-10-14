@@ -115,13 +115,18 @@ else
   [[ -z $found ]] || { ig_accts+=("") ig_paths+=("$found") }
 fi
 
-# instagram.py's arguments for the account at index $1 -> $reply
+# instagram.py's arguments for the account at index $1 -> $reply. Without IG_ACCOUNTS there is one
+# unnamed account, and the threads to read besides the self-thread come from IG_THREADS.
 ig_account_args() {
-  local acct=${ig_accts[$1]} s
+  local acct=${ig_accts[$1]} s threads
   reply=()
-  [[ -n $acct ]] || return 0
-  reply+=(--account "$acct")
-  for s in ${=IG_ACCOUNTS[$acct]}; do reply+=(--thread "$s"); done
+  if [[ -n $acct ]]; then
+    reply+=(--account "$acct")
+    threads=${IG_ACCOUNTS[$acct]}
+  else
+    threads=${IG_THREADS:-}
+  fi
+  for s in ${=threads}; do reply+=(--thread "$s"); done
 }
 
 x_jsonl=$outdir/link-captures-x.jsonl
