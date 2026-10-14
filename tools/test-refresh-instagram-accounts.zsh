@@ -45,7 +45,9 @@ check "second account was found" grep -q "account side" <<< "$out"
 check "main reads its named threads (bob post present)" test "$(count '.account == "main" and (.url | test("CCC333"))')" = 1
 check "side reads no named threads (bob post absent)" test "$(count '.account == "side" and (.url | test("CCC333"))')" = 0
 check "an unnamed thread is never read" test "$(count '.url | test("DDD444")')" = 0
-check "both accounts keep the self-thread reel" test "$(count '.url | test("AAA111")')" = 2
+check "a reel both accounts hold is one record" test "$(count '.url | test("AAA111")')" = 1
+check "...naming both accounts" test "$(count '(.url | test("AAA111")) and .account == ["main","side"]')" = 1
+check "...with the senders of both" test "$(count '(.url | test("BBB222")) and .senders == ["Me","Alice"]')" = 1
 check "origin survives the merge (account and thread on every record)" test "$(count '.account != null and (.thread | length) > 0')" = "$(count 'true')"
 check "origins files written per account" test -s "$work/data/link-dm-origins-main.jsonl" -a -s "$work/data/link-dm-origins-side.jsonl"
 

@@ -213,6 +213,11 @@ if (( ${#ig_paths} )); then
     ig_account_args $i
     "$repo/importers/instagram.py" "${ig_paths[$i]}" --json "${reply[@]}" >> "$ig_jsonl"
   done
+  # The same reel read from two accounts is one record that names both, with every sender.
+  if (( ${#ig_paths} > 1 )); then
+    "$repo/importers/attach-dm-origin.py" --merge-duplicates --captures "$ig_jsonl" > "$ig_jsonl.tmp"
+    mv "$ig_jsonl.tmp" "$ig_jsonl"
+  fi
   print "  $(grep -c . "$ig_jsonl") captures → ${ig_jsonl:t} (no fetching — the export carries the content)"
 else
   print "  no instagram-* export under ${INSTAGRAM_EXPORT_DIR/#$HOME/~} — skipped"

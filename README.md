@@ -568,8 +568,8 @@ the threads to read in `config.local.sh` (`config.local.sh.example` shows the la
 
 `refresh.zsh` then reads the newest export of each account. Links to other sites go through the enrichers
 as plain `URL<TAB>date`, which cannot carry the origin, so `importers/attach-dm-origin.py` puts `account`,
-`thread` and `senders` back on their records after the merge. A link two accounts both hold keeps the
-first account's record on import. Without `IG_ACCOUNTS` the old single-export setup is unchanged.
+`thread` and `senders` back on their records after the merge. A link two accounts both hold becomes
+one record naming both (`account` is then a list) with every sender and thread. Without `IG_ACCOUNTS` the old single-export setup is unchanged.
 
 When an export will not do, `docs/browser-agent-dm-run.md` is the brief for a Chrome-agent run over named DM threads:
 the approval, request count and stop rules it needs first, and the records it returns, which the refresh

@@ -102,7 +102,7 @@ function capView(c, thumbs = {}) {
     posted: c.posted || null,
     captured_at: c.captured_at || null,
     // Where a DM link came from, when an importer recorded it (importers/instagram.py).
-    account: c.account || null,
+    account: Array.isArray(c.account) ? c.account.join(", ") : c.account || null,
     thread: Array.isArray(c.thread) ? c.thread : [],
     senders: Array.isArray(c.senders) ? c.senders : [],
     links: (c.links || []).map(hrefOf).filter(Boolean),

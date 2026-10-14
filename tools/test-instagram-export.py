@@ -148,6 +148,29 @@ def main() -> None:
         kept = json.loads(run(ATTACH, origins, stdin=keeps + "\n"))
         check("attach keeps a field the record already has", kept["account"] == "other", str(kept))
 
+        # The same link read from two accounts' exports.
+        recs_in = [
+            {"kind": "reel", "url": REEL_SHARED, "text": None, "account": "main", "thread": ["alice_2"], "senders": ["Alice"]},
+            {"kind": "reel", "url": REEL_SELF, "text": None, "account": "main", "thread": ["me_1"], "senders": ["Me"]},
+            {"kind": "reel", "url": REEL_SHARED, "text": "caption", "account": "side", "thread": ["me_1"], "senders": ["Me", "Alice"]},
+            {"kind": "page", "url": "https://x.test/"},
+            {"kind": "page", "url": "https://x.test/"},
+        ]
+        merged = [json.loads(l) for l in run(ATTACH, "--merge-duplicates",
+                                             stdin="".join(json.dumps(r) + "\n" for r in recs_in)).splitlines()]
+        check("merge collapses a link two accounts hold into one record", len(merged) == 4, str(merged))
+        both = merged[0]
+        check("...naming both accounts", both["account"] == ["main", "side"], str(both))
+        check("...with every thread and sender once", (both["thread"], both["senders"]) == (["alice_2", "me_1"], ["Alice", "Me"]), str(both))
+        check("...filling a missing field from the other record", both["text"] == "caption", str(both))
+        check("a link one account holds keeps its single account", merged[1]["account"] == "main", str(merged[1]))
+        check("records with no origin are never merged", [r["url"] for r in merged].count("https://x.test/") == 2)
+
+        side = Path(tmp) / "origins-side.jsonl"
+        side.write_text(json.dumps({"url": "https://example.com/article", "account": "side", "thread": ["me_1"], "senders": ["Me"]}) + "\n")
+        two = json.loads(run(ATTACH, origins, side, stdin=json.dumps({"url": "https://example.com/article"}) + "\n"))
+        check("attach names every account that holds a link", two["account"] == ["main", "side"] and two["senders"] == ["Alice", "Me"], str(two))
+
         check("--check still passes for an export with messages", subprocess.run([str(IMPORTER), str(export), "--check"]).returncode == 0)
 
     if failures:
