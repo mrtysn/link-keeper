@@ -821,6 +821,37 @@ const DATA_PATCHES = [
       return { added: rule, matched: res.matched };
     },
   },
+  {
+    // Opened marks, Keep and Drop verdicts and reading-list statuses went in 5.56; nothing reads
+    // them any more. Strips them from stored tabs, captures and reading-list entries. Irreversible,
+    // so it waits for the helper and a backup first; with no helper it throws and the next launch
+    // tries again.
+    id: "2026-10-15-purge-opened-marks-and-verdicts",
+    async run() {
+      if (typeof bridge !== "undefined") {
+        for (let i = 0; i < 20 && bridge.state !== "on"; i++) await new Promise(r => setTimeout(r, 500));
+        const saved = await backupNow("before-purge");
+        if (!saved?.ok) throw new Error(`no backup, so nothing purged: ${saved?.error || "the helper did not answer"}`);
+      }
+      const gone = { tabs: 0, captures: 0, items: 0 };
+      await editMeta(m => {
+        for (const t of Object.values(m.tabs || {})) {
+          if ("seen_at" in t || "verdict" in t || "judged_at" in t) {
+            delete t.seen_at; delete t.verdict; delete t.judged_at; gone.tabs++;
+          }
+        }
+      });
+      const captures = await getCaptures();
+      for (const c of captures) if ("verdict" in c || "judged_at" in c) { delete c.verdict; delete c.judged_at; gone.captures++; }
+      if (gone.captures) await setCaptures(captures);
+      const items = await getItems();
+      for (const i of items) {
+        if ("status" in i || "seen_at" in i || "kept_at" in i) { delete i.status; delete i.seen_at; delete i.kept_at; gone.items++; }
+      }
+      if (gone.items) await setItems(items);
+      return gone;
+    },
+  },
 ];
 
 let patching = null;

@@ -871,7 +871,7 @@ await check("capturing a link is not keeping it: the queue moves on, every check
   old.store.captures = [{ url: "https://a.example/", text: "x" }, { url: "https://b.example/", text: "y", verdict: "keep" }];
   const bg = await load(old.browser);
   await bg.applyDataPatches();
-  assert.deepEqual(old.store.items.map(i => i.status), ["seen", "kept", "kept"]);
+  assert.ok(old.store.items.every(i => i.status === undefined), "the later purge strips the statuses the first patch put right");
   assert.equal(old.store.dataPatches["2026-10-07-capture-is-not-keep"].reset, 1);
 });
 
@@ -1025,6 +1025,20 @@ await check("data patch: a fingerprint that does not match changes nothing and s
   fresh.browser.bookmarks.getSubTree = real;
   await bg2.applyDataPatches();
   assert.equal(fresh.store.dataPatches["2026-09-29-mark-onetab-import"].marked, 8, "and the next launch applies it");
+});
+
+await check("data patch: the opened marks, verdicts and statuses are stripped once, and nothing else is touched", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.items = [{ url: "https://a.example/", title: "A", status: "kept", kept_at: "2026-10-01T00:00:00Z", seen_at: "2026-10-02T00:00:00Z" }];
+  store.captures = [{ url: "https://a.example/", text: "x", verdict: "keep", judged_at: "2026-10-01T00:00:00Z" }];
+  store.stashMeta = { stashes: { s1: { created_at: "2026-10-01T00:00:00Z" } },
+    tabs: { t1: { container: "firefox-container-1", seen_at: "2026-10-01T00:00:00Z", verdict: "drop", judged_at: "2026-10-01T00:00:00Z" } } };
+  const bg = await load(browser);
+  await bg.applyDataPatches();
+  assert.deepEqual(store.dataPatches["2026-10-15-purge-opened-marks-and-verdicts"], { at: store.dataPatches["2026-10-15-purge-opened-marks-and-verdicts"].at, tabs: 1, captures: 1, items: 1 });
+  assert.deepEqual(store.items, [{ url: "https://a.example/", title: "A" }]);
+  assert.deepEqual(store.captures, [{ url: "https://a.example/", text: "x" }]);
+  assert.deepEqual(store.stashMeta.tabs, { t1: { container: "firefox-container-1" } });
 });
 
 await check("removing keeps a copy in the trash for 30 days, and restoring puts it back where it was", async () => {
