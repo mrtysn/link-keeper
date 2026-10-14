@@ -483,8 +483,8 @@ a 22rem popup.
 when, which stash, and its reading-list status, newest first; a card with more than five copies shows
 three and "+N more". Nothing starts ticked, and a locked stash's copy cannot be. A card's **Keep newest**
 and **Keep oldest** tick every other copy, **Tick all** every one; the same two for every card sit above
-the list. **Move N copies to Trash** needs no confirm, since the Trash undoes it; the footer counts what
-is ticked and says when a link would be left only in the Trash.
+the list. **Move N copies to Trash** needs no confirm, since the Trash undoes it, except when some link would
+be left with no copy outside the Trash; the footer counts what is ticked and says so.
 
 **Trash (N)…** lists what was removed, one card per removal, each row saying how many days remain.
 Everything removed from a stash or the reading list — Q, a stash's Delete, Duplicates, the CLI's

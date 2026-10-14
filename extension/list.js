@@ -1244,6 +1244,9 @@ $("dups-remove").onclick = async () => {
   const sets = duplicateSets();
   const chosen = sets.flatMap(s => s.copies.filter(c => picked.has(c.id) && !c.locked).map(c => ({ ...c, link: s.link })));
   if (!chosen.length) return;
+  // The Trash undoes a removal, so only the one that leaves a link with no live copy asks first.
+  const gone = sets.filter(s => s.copies.every(c => picked.has(c.id))).length;
+  if (gone && !confirm(`${gone === 1 ? "1 link" : `${gone} links`} would have no copy left outside the Trash. Move ${copiesWord(chosen.length)} to the Trash anyway?`)) return;
   const byStash = new Map();
   for (const c of chosen.filter(c => c.stash)) {
     if (!byStash.has(c.stash.id)) byStash.set(c.stash.id, []);
