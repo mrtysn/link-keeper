@@ -244,6 +244,18 @@ await check("links carry suggested; a link with tags of its own has none; sugges
   assert(/suggested: dev 82%, ai 40%/.test(one.out), one.out);
 });
 
+await check("suggestions keep system-one, gutsy and model as given, map any other source to system-one, and keep a tag from two sources", async () => {
+  const key = LINKS.keyOf("https://example.org/c");
+  storage.tagSuggestions[key] = { at: "x", tags: [{ tag: "dev", p: 0.9, by: "system-one" }, { tag: "dev", p: 0.6, by: "gutsy" },
+    { tag: "dev", p: 0.5, by: "gutsy" }, { tag: "ai", p: 0.4, by: "model" }, { tag: "video", p: 0.3, by: "nobody" }] };
+  const got = JSON.parse((await cli("links", "--json", "--all")).out);
+  const c = got.links.find(l => l.url.endsWith("/c")).suggested.map(s => `${s.tag}:${s.by}:${s.p}`).join(" ");
+  assert(c === "dev:system-one:0.9 dev:gutsy:0.6 ai:model:0.4 video:system-one:0.3", c);
+  const sj = JSON.parse((await cli("suggestions", "--json")).out);
+  assert(sj.links === 2 && sj.tags.dev === 2, "a tag from two sources counts once per link (links a and c): " + JSON.stringify(sj));
+  delete storage.tagSuggestions[key];
+});
+
 await check("agents may send set-tag-suggestions, and the journal covers the key it writes", async () => {
   const bridgeJs = fs.readFileSync(path.join(REPO, "extension/bridge.js"), "utf8");
   const writes = bridgeJs.match(/AGENT_WRITES = new Set\(\[([^\]]*)\]/s)?.[1] || "";

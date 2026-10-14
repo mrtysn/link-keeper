@@ -175,14 +175,36 @@ async function readLink(url) {
 
 /* What a link shows: its own tags; else the model's stored suggestions; else the guesses from its
  * site. Suggestions and guesses are flagged guessed, and `titles` says where each tag came from. */
-const SUGGESTERS = { "system-one": "system-one", model: "the tag model" };
-const suggestionTitle = s => `Suggested by ${SUGGESTERS[s.by] || s.by} (${Math.round(s.p * 100)}%)`;
+const SUGGESTERS = {
+  "system-one": { name: "Laya", mark: "L" },
+  gutsy: { name: "Gutsy", mark: "G" },
+  model: { name: "your tag model", mark: "M" },
+};
+const suggesterOf = by => SUGGESTERS[by] || { name: by, mark: String(by)[0]?.toUpperCase() || "?" };
+const percent = p => `${Math.round(p * 100)}%`;
+const joinNames = parts => (parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0] || "");
 const SITE_GUESS_TITLE = "Suggested from the site";
+
+/* A link's stored suggestions with each tag once: [{ tag, p, sources: [{ by, p }] }], the tag's
+ * highest p first among its sources and among the tags. */
+function mergedSuggestions(list = []) {
+  const byTag = new Map();
+  for (const s of list) {
+    const m = byTag.get(s.tag) || byTag.set(s.tag, { tag: s.tag, p: 0, sources: [] }).get(s.tag);
+    m.sources.push({ by: s.by, p: s.p });
+    m.p = Math.max(m.p, s.p);
+  }
+  for (const m of byTag.values()) m.sources.sort((a, b) => b.p - a.p);
+  return [...byTag.values()].sort((a, b) => b.p - a.p);
+}
+const suggestionTitle = m => `Suggested by ${joinNames(m.sources.map(s => `${suggesterOf(s.by).name} (${percent(s.p)})`))}`;
+
 function shownTags(link) {
   if (link.tags?.length) return { tags: link.tags, guessed: false, from: "own", titles: {} };
   if (link.suggested?.length) {
-    return { tags: link.suggested.map(s => s.tag), guessed: true, from: "suggested",
-      titles: Object.fromEntries(link.suggested.map(s => [s.tag, suggestionTitle(s)])) };
+    const merged = mergedSuggestions(link.suggested);
+    return { tags: merged.map(m => m.tag), guessed: true, from: "suggested", merged,
+      titles: Object.fromEntries(merged.map(m => [m.tag, suggestionTitle(m)])) };
   }
   return { tags: link.kinds || [], guessed: true, from: "site", titles: {} };
 }
@@ -224,6 +246,20 @@ function tagChip(tag, guessed = false, why = SITE_GUESS_TITLE) {
     if (typeof Peek !== "undefined") Peek.mark(chip, "tag", tag);
   }
   return chip;
+}
+/* Cards' labelled row for stored suggestions: each tag as a dimmed chip, with every source's mark
+ * and percentage beside it, and the key that accepts them. Null when the link shows none. */
+function suggestionRow(link) {
+  const { merged, from, guessed } = shownTags(link);
+  if (!guessed || from !== "suggested") return null;
+  const items = merged.map(m => el("span", { className: "sug" },
+    tagChip(m.tag, true, suggestionTitle(m)),
+    ...m.sources.map(s => el("span", { className: "sugby", title: suggesterOf(s.by).name },
+      el("b", { textContent: suggesterOf(s.by).mark }), ` ${percent(s.p)}`))));
+  return el("div", { className: "suggestrow" },
+    el("span", { className: "label", textContent: "Suggested" }),
+    el("span", { className: "tags" }, ...items),
+    el("span", { className: "hint" }, el("kbd", { textContent: "F" }), " to accept"));
 }
 function tagChips(link) {
   const { tags, guessed, titles } = shownTags(link);
@@ -296,10 +332,14 @@ function suggestField(input, exclude = () => []) {
     .observe(document.body, { childList: true, subtree: true });
 }
 
-/* The editor's status line for stored suggestions: who made them, and how sure. */
+/* The editor's status line for stored suggestions: who made them, and how sure. A tag several
+ * sources suggested lists each one's percentage. */
 function suggestionsLine(link) {
-  const by = [...new Set(link.suggested.map(s => SUGGESTERS[s.by] || s.by))].join(" and ");
-  return `Suggested by ${by}: ${link.suggested.map(s => `${s.tag} ${Math.round(s.p * 100)}%`).join(", ")}`;
+  const merged = mergedSuggestions(link.suggested);
+  const by = [...new Set(merged.flatMap(m => m.sources.map(s => suggesterOf(s.by).name)))];
+  const one = m => (m.sources.length === 1 ? `${m.tag} ${percent(m.p)}`
+    : `${m.tag} ${m.sources.map(s => `${percent(s.p)} (${suggesterOf(s.by).name})`).join(" + ")}`);
+  return `Suggested by ${joinNames(by)}: ${merged.map(one).join(", ")}`;
 }
 
 /* The editor for one link's tags. Suggestions and guesses start as dimmed chips; the first change

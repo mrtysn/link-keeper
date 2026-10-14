@@ -38,7 +38,7 @@ Changing (needs Firefox running; each change is journaled)
   tag URL --add a,b | --remove a | --set a,b | --clear
   tag-stash ID a,b                add tags to every tab of a stash
   suggest-set FILE [--replace]    store tag suggestions from FILE, JSON {url: [{tag, p, by}]} with p 0..1 and
-                                  by "system-one" or "model"; an empty list removes that link's entry, and
+                                  by "system-one" (shown as Laya), "gutsy" or "model"; an empty list removes that link's entry, and
                                   --replace drops every other link's. The pages show them dimmed, F accepts
   tag-create NAME [--hue 0-359]   tag-rename OLD NEW   tag-delete NAME   tag-recolor NAME HUE
   add URL... [--note TEXT]        put links on the reading list
@@ -288,7 +288,7 @@ const commands = {
     const d = await getData();
     const use = {};
     const withSome = d.links.filter(l => l.suggested?.length);
-    for (const l of withSome) for (const s of l.suggested) use[s.tag] = (use[s.tag] || 0) + 1;
+    for (const l of withSome) for (const t of new Set(l.suggested.map(s => s.tag))) use[t] = (use[t] || 0) + 1;
     const tags = Object.entries(use).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     note();
     if (opt.json) return json({ links: withSome.length, tags: Object.fromEntries(tags) });

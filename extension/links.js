@@ -15,7 +15,8 @@
  *   date    — when it was set aside: saved, added to the list, or stashed, whichever is known
  *   tags    — the tags set by hand, or [] (stored in linkTags, keyed like the link)
  *   suggested — a local model's stored suggestions [{ tag, p, by }], best first, while tags is empty, else []
- *               (stored in tagSuggestions, keyed like the link; by is "system-one" or "model")
+ *               (stored in tagSuggestions, keyed like the link; by is "system-one", "gutsy" or "model";
+ *               one tag may come from several sources, one entry each)
  *   kinds   — what kind of thing it is, read off its site or capture ("code", "video", …); never stored
  *   guessed — kinds while tags is empty, else []: what the pages show dimmed in place of tags
  */
@@ -73,14 +74,18 @@ function guessTags(url, cap) {
   return [];
 }
 
-/* A link's stored suggestions, cleaned: tags named, p within 0..1, best first. */
+/* The sources a suggestion may name; any other value is stored as "system-one". */
+const SUGGESTION_SOURCES = ["system-one", "gutsy", "model"];
+
+/* A link's stored suggestions, cleaned: tags named, p within 0..1, best first, one entry per tag
+ * and source. */
 function suggestionsFor(map, key) {
   const list = map?.[key]?.tags;
   if (!Array.isArray(list)) return [];
   const out = list.filter(s => s && cleanTag(s.tag))
-    .map(s => ({ tag: cleanTag(s.tag), p: Math.min(1, Math.max(0, Number(s.p) || 0)), by: s.by === "model" ? "model" : "system-one" }))
+    .map(s => ({ tag: cleanTag(s.tag), p: Math.min(1, Math.max(0, Number(s.p) || 0)), by: SUGGESTION_SOURCES.includes(s.by) ? s.by : "system-one" }))
     .sort((a, b) => b.p - a.p);
-  return out.filter((s, i) => out.findIndex(o => o.tag === s.tag) === i);
+  return out.filter((s, i) => out.findIndex(o => o.tag === s.tag && o.by === s.by) === i);
 }
 
 const hrefOf = l => (typeof l === "string" ? l : l?.resolved || l?.href) || null;

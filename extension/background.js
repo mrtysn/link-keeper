@@ -1368,7 +1368,7 @@ async function getLinks() {
  * and the name's own hue shows. Every tag in use is in it; the pages offer it to pick from.
  *
  * tagSuggestions: { [link key]: { at, tags: [{ tag, p, by }] } } — what a local model suggests for a
- * link, best first (p is 0..1; by is "system-one" or "model"). Written only by agents
+ * link, best first (p is 0..1; by is "system-one", "gutsy" or "model"). Written only by agents
  * (set-tag-suggestions). The pages show them dimmed in a link's place until it has tags of its own;
  * accepting them is an ordinary set-tags, and the entry stays in storage, unshown. */
 const PRESET_TAGS = ["to-read", "to-watch", "to-try", "reference", "inspiration", "work", "personal", "buy",
