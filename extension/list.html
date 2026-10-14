@@ -139,6 +139,13 @@
   }
   @media (hover: hover) { ul.rows > li:hover { background: var(--panel); } }
   ul.rows > li.current { box-shadow: inset 2px 0 0 var(--accent); }
+  /* A row's buttons show on the row under the pointer, the one the keys are on, or one holding focus;
+   * their room stays reserved so nothing shifts. Where there is no hover, they stay shown. */
+  @media (hover: hover) {
+    ul.rows > li > .lk-bar { opacity: 0; transition: opacity .1s; }
+    ul.rows > li:hover > .lk-bar, ul.rows > li.lk-cursor > .lk-bar, ul.rows > li:focus-within > .lk-bar,
+    ul.rows > li > .lk-bar:has(.open, [aria-expanded="true"]) { opacity: 1; }
+  }
 
   .src {
     display: inline-block; flex: none; width: 16px; height: 16px; margin-top: 4px;
