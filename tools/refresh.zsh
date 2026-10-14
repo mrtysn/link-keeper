@@ -276,3 +276,16 @@ else
 fi
 
 wait $serve_pid
+
+# --- tag suggestions ---------------------------------------------------------------
+# The extension now holds the new links. Train the tag heads on the owner's tags and send suggestions
+# for the untagged links (tools/tag-model/). It can take a long time the first time, so it runs
+# detached and logs beside the other output; skipped with a line when its environment is not set up.
+tag_model=$here/tag-model
+if [[ -x $tag_model/run.zsh && -d $tag_model/.venv ]]; then
+  mkdir -p "$outdir/tag-model"
+  print "\ntag suggestions: running in the background, log ${outdir/#$HOME/~}/tag-model/run.log"
+  DATA_DIR=$outdir "$tag_model/run.zsh" >> "$outdir/tag-model/run.log" 2>&1 &!
+else
+  print "\ntag suggestions: skipped, the tag model is not set up (run $tag_model/run.zsh --setup)"
+fi
