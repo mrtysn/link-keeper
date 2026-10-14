@@ -168,7 +168,16 @@
                 suggestions[keyOf(u)] = { at: "2026-10-14T00:00:00Z", tags };
               });
             }
-            return joinLinks({ items, captures, sessions, tags: mockTags, suggestions,
+            // ?agent: every second link carries tags a Claude agent wrote (haiku), as the stored map holds them;
+            // together with the seeded own tags and ?suggest, links show all three layers.
+            const agentTags = {};
+            if (params.has("agent")) {
+              const urls = [...items.map(i => i.url), ...captures.map(c => c.url), ...sessions.flatMap(s => s.tabs.map(x => x.url))];
+              urls.forEach((u, i) => {
+                if (i % 2 === 0) agentTags[keyOf(u)] = { at: "2026-10-14T00:00:00Z", by: "haiku", tags: i % 4 === 0 ? ["ai tools", "tutorial", "rust"] : ["tutorial", "game dev"] };
+              });
+            }
+            return joinLinks({ items, captures, sessions, tags: mockTags, suggestions, agentTags,
               currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
           }
           // Filtered out, as the background keeps it: rules on a page's address, tagging what matches.

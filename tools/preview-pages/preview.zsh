@@ -19,6 +19,7 @@
 #   tab=new|about|<url>   the popup's page: not saved, a browser page, or that URL (default: one
 #            held in two stashes)
 #   suggest  every link carries stored tag suggestions (dev 82% by the model, ai 64% by Laya; every third link also dev 90% by Laya and ai 60% by Gutsy)
+#   agent    every second link carries agent tags (a Claude agent's, from haiku): an outlined "agent" row after the owner's tags
 #   light    drop the dark-scheme rules to show the light palette
 #   empty    nothing stashed
 #   settings, import, dups   list.html with that panel open
@@ -37,7 +38,7 @@ ext=$repo/extension
 out=$here/out
 
 if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-  sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 

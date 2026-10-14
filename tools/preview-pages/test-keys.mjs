@@ -491,6 +491,110 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(/4 replies captured/.test(await d.$eval("#detail", e => e.textContent)), "replies: the detail pane lists how many replies were captured");
   await d.close();
 }
+// Agent tags: a third layer, apart from the owner's filled chips and the suggestions' dashed ones —
+// a labelled row of its own after them, outlined solid, on Links, List and Cards.
+{
+  /* How a chip looks: filled (a background), outlined solid, or dashed. */
+  const form = e => {
+    const cs = getComputedStyle(e);
+    const filled = cs.backgroundColor !== "rgba(0, 0, 0, 0)" && cs.backgroundColor !== "transparent";
+    const outlined = cs.borderTopStyle !== "none" && parseFloat(cs.borderTopWidth) >= 1;
+    return { filled, outlined, style: cs.borderTopStyle };
+  };
+  const styleOf = (p, sel) => p.$eval(sel, form);
+  const hasMark = p => p.$eval(".agentrow .tag.agent", e => e.title);
+
+  // List: a row with own tags and agent tags
+  {
+    const p = await page("list.html?agent&suggest");
+    const row = await p.evaluateHandle(() => [...document.querySelectorAll("#out ul.rows > li")]
+      .find(li => li.querySelector(".agentrow") && li.querySelector(".meta .tags .tag:not(.guess)")));
+    ok(!!row.asElement(), "agent tags: List has a row with own tags and an agent row");
+    const r = row.asElement();
+    const label = await r.$eval(".agentrow .label", e => e.textContent);
+    ok(label === "agent", `agent tags: List labels the row "agent" (${label})`);
+    const own = await r.$eval(".meta .tags .tag:not(.guess)", form), agent = await r.$eval(".agentrow .tag.agent", form);
+    ok(own.filled && !own.outlined, "agent tags: List: the owner's chips are filled, no outline");
+    ok(!agent.filled && agent.outlined && agent.style === "solid", `agent tags: List: agent chips are outlined solid, not filled (${agent.style})`);
+    const ownBox = await r.$eval(".meta .tags .tag:not(.guess)", e => { const b = e.getBoundingClientRect(); return { bottom: b.bottom }; });
+    const agentBox = await r.$eval(".agentrow", e => { const b = e.getBoundingClientRect(); return { top: b.top }; });
+    ok(agentBox.top >= ownBox.bottom, "agent tags: List: the agent row sits after the owner's tags, on its own line");
+    ok(/by haiku/.test(await r.$eval(".agentrow .tag.agent", e => e.title)), "agent tags: List: a chip says which model wrote it");
+    // A suggestion chip (a link with no own tags) is dashed, not outlined solid like an agent chip.
+    const sugg = await p.evaluate(() => { const e = document.querySelector("#out .meta .tags .tag.guess"); if (!e) return null;
+      const cs = getComputedStyle(e); return { style: cs.borderTopStyle }; });
+    ok(sugg?.style === "dashed", `agent tags: List: a suggestion chip is dashed, unlike an agent chip (${sugg?.style})`);
+    ok(await p.$$eval("#out li", l => l.some(li => !li.querySelector(".agentrow"))), "agent tags: List: a link with none shows no agent row");
+    ok(!p.errs.length, "agent tags: List: no errors " + p.errs.join("; "));
+    await p.close();
+  }
+
+  // Links (the detail pane): the editor carries the row, below the owner's chips and field
+  {
+    const p = await page("list.html?pane=1&agent&suggest");
+    for (let i = 0; i < 40 && !(await p.$("#detail .agentrow")); i++) await key(p, "s");
+    ok(!!(await p.$("#detail .agentrow")), "agent tags: Links shows the agent row in the detail pane");
+    ok(await p.$eval("#detail .agentrow .label", e => e.textContent) === "agent", "agent tags: Links labels the row \"agent\"");
+    const agent = await styleOf(p, "#detail .agentrow .tag.agent");
+    ok(!agent.filled && agent.outlined && agent.style === "solid", `agent tags: Links: agent chips are outlined solid (${agent.style})`);
+    const below = await p.evaluate(() => document.querySelector("#detail .agentrow").getBoundingClientRect().top >= document.querySelector("#detail .tagger input").getBoundingClientRect().bottom);
+    ok(below, "agent tags: Links: the agent row sits after the tag field");
+    // Editing the owner's tags leaves the agent row and the agent tags alone.
+    const url = await p.$eval("#detail .durl", e => e.textContent);
+    const agentOf = () => p.evaluate(async u => { const l = (await browser.runtime.sendMessage({ type: "links" })).links.find(x => x.url === u); return [l.agentTags.join(), l.tags.join()]; }, url);
+    const [agentBefore] = await agentOf();
+    await p.fill("#detail .tagger input", "mine"); await key(p, "Enter");
+    const [agentAfter, tagsAfter] = await agentOf();
+    ok(agentAfter === agentBefore && tagsAfter.split(",").includes("mine") && !tagsAfter.includes("tutorial"), `agent tags: Links: a tag the owner adds is theirs alone (${tagsAfter}); agent tags stay (${agentAfter})`);
+    ok(!!(await p.$("#detail .agentrow")), "agent tags: Links: the agent row is still there after the edit");
+    ok(!p.errs.length, "agent tags: Links: no errors " + p.errs.join("; "));
+    await p.close();
+  }
+
+  // Cards: own tags in the corner, the agent row under the title
+  {
+    const p = await page("cards.html?agent&suggest");
+    await p.selectOption("#deal-tag", "game dev"); await p.waitForTimeout(600);
+    for (let i = 0; i < 20 && !(await p.$(".card.top .agentrow")); i++) await key(p, "s");
+    ok(!!(await p.$(".card.top .agentrow")), "agent tags: Cards shows the agent row on a card with own tags");
+    ok(await p.$eval(".card.top .agentrow .label", e => e.textContent) === "agent", "agent tags: Cards labels the row \"agent\"");
+    const own = await styleOf(p, ".card.top .head .tags .tag"), agent = await styleOf(p, ".card.top .agentrow .tag.agent");
+    ok(own.filled && !own.outlined, "agent tags: Cards: the owner's chips are filled");
+    ok(!agent.filled && agent.outlined && agent.style === "solid", `agent tags: Cards: agent chips are outlined solid (${agent.style})`);
+    const apart = await p.evaluate(() => document.querySelector(".card.top .agentrow").getBoundingClientRect().top >= document.querySelector(".card.top .head").getBoundingClientRect().bottom);
+    ok(apart, "agent tags: Cards: the agent row sits under the head, apart from the owner's tags");
+    ok(/by haiku/.test(await hasMark(p)), "agent tags: Cards: a chip says which model wrote it");
+    ok(!p.errs.length, "agent tags: Cards: no errors " + p.errs.join("; "));
+    await p.close();
+  }
+
+  // Cards: a card holding suggestions and agent tags shows the three layers apart; F still accepts suggestions only
+  {
+    const p = await page("cards.html?agent&suggest");
+    const info = () => p.evaluate(() => ({ sug: !!document.querySelector(".card.top .suggestrow"), agent: !!document.querySelector(".card.top .agentrow"),
+      own: [...document.querySelectorAll(".card.top .head .tags .tag")].some(e => !e.classList.contains("guess")),
+      url: document.querySelector(".card.top .open")?.href }));
+    for (let i = 0; i < 40; i++) { const x = await info(); if (x.sug && x.agent) break; await key(p, "s"); }
+    const x = await info();
+    ok(x.sug && x.agent && !x.own, "agent tags: Cards: a card with no own tags shows its suggestions and the agent row");
+    const order = await p.evaluate(() => { const s = document.querySelector(".card.top .suggestrow"), a = document.querySelector(".card.top .agentrow");
+      return s.getBoundingClientRect().bottom <= a.getBoundingClientRect().top; });
+    ok(order, "agent tags: Cards: the agent row comes after the suggestions row");
+    const link = () => p.evaluate(async u => { const l = (await browser.runtime.sendMessage({ type: "links" })).links.find(x => x.url === u); return { tags: l.tags.join(), agent: l.agentTags.join(), by: l.agentBy }; }, x.url);
+    const before = await link();
+    await key(p, "f"); await p.waitForTimeout(400);
+    const after = await link();
+    ok(after.tags === "dev,ai" && after.agent === before.agent && after.by === "haiku", `agent tags: F accepts the suggestions as the owner's tags and leaves agent tags alone (${after.tags}; ${after.agent})`);
+    await p.close();
+  }
+
+  // Without ?agent nothing shows an agent row
+  {
+    const p = await page("list.html");
+    ok(!(await p.$(".agentrow")), "agent tags: a link with none shows no agent row, nothing else changes");
+    await p.close();
+  }
+}
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);
