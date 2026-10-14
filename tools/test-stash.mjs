@@ -444,24 +444,23 @@ await check("restore all brings every tab back — web unloaded in its container
   assert.ok(after.tabs.every(t => !t.seen_at), "opening records no mark");
 });
 
-await check("with 'remove after restore', restored tabs leave the stash — unless it is locked", async () => {
+await check("opening never takes tabs out, even with the old 'remove after restore' setting still stored", async () => {
   const tabs = makeTabs(20);
-  const { browser } = makeBrowser(tabs);
+  const { browser, store } = makeBrowser(tabs);
   const bg = await load(browser);
   await bg.stashTabs();
+  store.stashSettings = { ...(store.stashSettings || {}), afterRestore: "remove" };
   await browser.handle({ type: "set-stash-settings", afterRestore: "remove" });
   let [s] = await stashes(bg);
-  const res = await browser.handle({ type: "restore-stash", id: s.id, ids: [s.tabs[0].id] });
-  assert.equal(res.removed, true);
-  [s] = await stashes(bg);
   const n = s.tabs.length;
-  await browser.handle({ type: "flag-stash", id: s.id, locked: true });
+  const res = await browser.handle({ type: "restore-stash", id: s.id, ids: [s.tabs[0].id], flip: true });
+  assert.equal(res.ok, true);
+  assert.equal(res.removed, undefined);
+  [s] = await stashes(bg);
+  assert.equal(s.tabs.length, n, "the stash keeps every tab");
   await browser.handle({ type: "restore-stash", id: s.id });
   [s] = await stashes(bg);
-  assert.equal(s.tabs.length, n, "a locked stash keeps everything");
-  await browser.handle({ type: "flag-stash", id: s.id, locked: false });
-  await browser.handle({ type: "restore-stash", id: s.id });
-  assert.deepEqual(await stashes(bg), [], "restoring all empties and removes it");
+  assert.equal(s.tabs.length, n, "restoring all keeps them too");
 });
 
 await check("a deleted container falls back to a plain tab rather than failing", async () => {

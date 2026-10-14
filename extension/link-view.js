@@ -151,7 +151,6 @@ function restoredText(r) {
   const parts = [`Reopened ${plural(r.restored, "tab")}`];
   if (r.viaHelper) parts.push(`${r.viaHelper} local through the helper`);
   if (r.standins) parts.push(`${r.standins} as stand-ins`);
-  if (r.removed) parts.push("taken out of the stash");
   const fix = /not installed/.test(r.helperError || "") ? "; run native/install.zsh in the link-keeper repo once" : "";
   return parts.join(" · ") + (r.helperError ? `; local files opened as stand-ins: ${r.helperError}${fix}` : "");
 }

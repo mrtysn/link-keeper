@@ -254,7 +254,7 @@ LinkActions.setup({
 LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
   "group-prev": () => jumpTag(-1), "group-next": () => jumpTag(1),
-  read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
+  read: onRow("read"), open: onRow("open"),
   tags: onRow("tags"), accept: onRow("accept"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("new-name").focus(),
   escape: () => document.querySelector(".tagpop")?.remove(),

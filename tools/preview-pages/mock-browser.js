@@ -252,9 +252,7 @@
             return { ok: true, stashes: msg.stashes.length, tabs: tabs.length };
           }
           case "restore-stash": {
-            const remove = !!msg.flip;   // the mock's setting is "keep"
-            if (remove) takeTabs(msg.id, msg.ids);
-            return { ok: true, restored: msg.ids.length, removed: remove, viaHelper: 0, standins: 0 };
+            return { ok: true, restored: msg.ids.length, viaHelper: 0, standins: 0 };
           }
           case "delete-stash": {
             const s = findStash(msg.id);
@@ -344,7 +342,7 @@
             return { ok: true, restored: back.length };
           }
           case "stash-settings":
-            return { settings: { afterStash: "show", afterRestore: "keep", exclude: ["mail.google.com", "calendar.google.com"] } };
+            return { settings: { afterStash: "show", exclude: ["mail.google.com", "calendar.google.com"] } };
           case "get-folder": return { folder: "link-keeper", fallback: "link-keeper" };
           case "bridge-status": return { ok: true, state: "on", error: null, folder: "~/backups/link-keeper",
             lastBackup: { ok: true, at: new Date().toISOString(), file: "~/backups/link-keeper/latest.json" } };

@@ -24,7 +24,7 @@ const GROUP_KEY = "listGroup";
 const FILTERS = ["all", "captured", "uncaptured", "local", "filtered"];
 
 let data = { links: [], stashes: [], all: { links: [], stashes: [] }, sources: new Set(), byKey: new Map() };
-let settings = { afterStash: "show", afterRestore: "keep", exclude: [] };
+let settings = { afterStash: "show", exclude: [] };
 let filter = "all";
 const domainSel = new Set();   // empty = every domain
 const tagSel = new Set();      // empty = every tag; UNTAGGED = links with no tag set by hand
@@ -258,7 +258,7 @@ function onRow(cmd) {
     const i = cursorAt();
     if (i === -1) return walk(1);
     const { li, target } = rowsOnPage[i];
-    const inPane = pane && document.querySelector(`#detail .lk-bar [data-cmd="${cmd === "open-other" ? "open" : cmd}"]`);
+    const inPane = pane && document.querySelector(`#detail .lk-bar [data-cmd="${cmd}"]`);
     const anchor = inPane || (cmd === "tags" && li.querySelector(".tagedit")) || li.querySelector(".lk-bar .more") || li;
     LinkActions.key(cmd, target, anchor);
   };
@@ -273,7 +273,7 @@ LinkActions.setup({
   tagNext: () => { walk(1); onRow("tags")(); },
   async after(cmd, target, res) {
     if (res.ok === false) return;
-    const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
+    const leaves = ["list", "move", "remove"].includes(cmd);
     const i = cursorAt();
     if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (leaves || (cmd === "read" && filter === "uncaptured"))) {
       const next = rowsOnPage[i + 1] || rowsOnPage[i - 1];
@@ -288,7 +288,7 @@ LinkActions.setup({
 LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
   "group-prev": () => jumpSection(-1), "group-next": () => jumpSection(1),
-  read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
+  read: onRow("read"), open: onRow("open"),
   tags: onRow("tags"), accept: onRow("accept"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
   detail: () => togglePane(), preview: () => { if (!pane) togglePane(true); setPreview(previewShowing(detailLink()) ? "off" : "this"); },
@@ -539,9 +539,7 @@ function stashHeading(stash, shown) {
   const locked = stash.locked;
   const imported = stash.source === "import";
   h2.append(el("div", { className: "gacts" },
-    button("Open all", "primary", settings.afterRestore === "remove" && !locked
-      ? "Reopen every tab, unloaded until you switch to it, and take them out of the stash"
-      : "Reopen every tab, unloaded until you switch to it; the stash stays",
+    button("Open all", "primary", "Reopen every tab, unloaded until you switch to it; the stash stays",
     () => act({ type: "restore-stash", id: stash.id }, restoredText)),
     button("Move to list", "", "Add these to the reading list and take them out of the stash",
       () => act({ type: "move-stash", id: stash.id },
@@ -998,7 +996,6 @@ function renderTagManager() {
 function renderSettings() {
   renderTagManager();
   for (const r of document.querySelectorAll('input[name="after-stash"]')) r.checked = r.value === settings.afterStash;
-  for (const r of document.querySelectorAll('input[name="after-restore"]')) r.checked = r.value === settings.afterRestore;
   const list = $("exclude-list");
   list.textContent = "";
   if (!settings.exclude.length) list.append(el("li", { className: "none", textContent: "None yet. Right-click a page → Stash → Never stash this site." }));
@@ -1054,7 +1051,6 @@ $("backup-restore").onclick = async () => {
 };
 
 for (const r of document.querySelectorAll('input[name="after-stash"]')) r.onchange = () => act({ type: "set-stash-settings", afterStash: r.value });
-for (const r of document.querySelectorAll('input[name="after-restore"]')) r.onchange = () => act({ type: "set-stash-settings", afterRestore: r.value });
 $("exclude-form").onsubmit = e => {
   e.preventDefault();
   let host = $("exclude-host").value.trim().toLowerCase();

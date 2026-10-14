@@ -447,7 +447,7 @@ LinkActions.setup({
     flying = false;
     if (res.ok === false) { await wait; render(); return; }
     const onTop = deck[index]?.link.key === target?.link.key;
-    const leaves = ["list", "move", "remove", "accept"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
+    const leaves = ["list", "move", "remove", "accept"].includes(cmd);
     if (cmd === "remove" && onTop) tally.removed++;
     if (cmd === "undo" && res.cmd === "remove") tally.removed = Math.max(0, tally.removed - 1);
     if (cmd === "undo" && res.cmd === "later") tally.skipped = Math.max(0, tally.skipped - 1);
@@ -515,14 +515,14 @@ function jumpGroup(by) {
 const onTop = cmd => () => {
   const card = deck[index];
   if (!card) return;
-  LinkActions.key(cmd, { link: card.link }, $("actions").querySelector(`[data-cmd="${cmd === "open-other" ? "open" : cmd}"]`) || $("stage"));
+  LinkActions.key(cmd, { link: card.link }, $("actions").querySelector(`[data-cmd="${cmd}"]`) || $("stage"));
 };
 
 LinkKeys.listen({
   prev: () => back(),
   next: () => later(),
   "group-prev": () => jumpGroup(-1), "group-next": () => jumpGroup(1),
-  read: onTop("read"), open: onTop("open"), "open-other": onTop("open-other"),
+  read: onTop("read"), open: onTop("open"),
   tags: () => openTags(), accept: () => acceptTop(), list: onTop("list"), move: onTop("move"), remove: () => removeTop(),
   undo: () => LinkActions.undo(),
   escape: () => document.querySelector(".tagpop")?.remove(),

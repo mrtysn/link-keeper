@@ -10,7 +10,7 @@
  *   A D        previous / next group — the stash, List's section, the tag on Tags
  *   Q  ⌘⌫      remove this copy, then on to the next link; its other copies stay
  *   E  3       capture its text, images and links
- *   T          tags        4  open it        ⇧4  open it with the other stash effect
+ *   T          tags        4  open it
  *   F          accept the shown suggestions (or site guesses) as the link's tags
  *   L M        to the reading list · move to a stash
  *   ⌘Z         undo
@@ -36,7 +36,6 @@ const LinkKeys = (() => {
     { cmd: "read", show: ["E", "3"], does: "capture its text and images" },
     { cmd: "remove", show: ["Q", `${MOD}⌫`], does: "remove this copy, then next" },
     { cmd: "open", show: ["4"], does: "open" },
-    { cmd: "open-other", show: ["⇧4"], does: "open, the other way" },
     { cmd: "list", show: ["L"], does: "to the reading list" },
     { cmd: "move", show: ["M"], does: "move to a stash" },
     { cmd: "undo", show: [`${MOD}Z`], does: "undo" },
@@ -68,8 +67,8 @@ const LinkKeys = (() => {
       else return null;
     } else {
       if (e.altKey || (MAC ? e.ctrlKey : e.metaKey)) return null;
-      // Digits by their place, so ⇧4 reads as 4 whatever the layout prints on it.
-      if (DIGITS[e.code]) cmd = e.shiftKey ? (e.code === "Digit4" ? "open-other" : null) : DIGITS[e.code];
+      // Digits by their place, whatever the layout prints on them; shifted, they do nothing.
+      if (DIGITS[e.code]) cmd = e.shiftKey ? null : DIGITS[e.code];
       else if (ARROWS[e.key] && !e.shiftKey) cmd = ARROWS[e.key];
       else if (e.key === "?") cmd = "help";
       else if (e.key === "/") cmd = "filter";
@@ -123,12 +122,12 @@ const LinkKeys = (() => {
    * down sinks, lit, until it is let go. ? shows and hides it, and every page load shows it again. */
   const SHORT = {
     prev: "up", next: "skip ↓", "group-prev": "◂ group", "group-next": "group ▸",
-    read: "capture", open: "open", "open-other": "open other", tags: "tags", accept: "accept", list: "to list", move: "move",
+    read: "capture", open: "open", tags: "tags", accept: "accept", list: "to list", move: "move",
     remove: "remove", undo: "undo", detail: "detail", preview: "preview", filter: "filter", help: "keys", escape: "back",
   };
   const KIND = {
     prev: "go", next: "go", "group-prev": "go", "group-next": "go",
-    read: "keep", open: "open", "open-other": "open", tags: "edit", accept: "edit", list: "edit", move: "edit", remove: "drop",
+    read: "keep", open: "open", tags: "edit", accept: "edit", list: "edit", move: "edit", remove: "drop",
     undo: "edit", detail: "view", preview: "view", filter: "view", help: "view", escape: "view",
   };
   // The left hand's rows as they sit, and the keys away from it beneath; null caps are spacers.
@@ -137,15 +136,15 @@ const LinkKeys = (() => {
     [["Tab", null, "wide"], ["Q", "remove"], ["W", "prev"], ["E", "read"], ["R"], ["T", "tags"]],
     [["Caps", null, "wider"], ["A", "group-prev"], ["S", "next"], ["D", "group-next"], ["F", "accept"], ["G"]],
   ];
-  const EXTRA = [["L", "list"], ["M", "move"], ["V", "detail"], ["P", "preview"], ["/", "filter"], ["⇧4", "open-other"],
+  const EXTRA = [["L", "list"], ["M", "move"], ["V", "detail"], ["P", "preview"], ["/", "filter"],
     [`${MOD}Z`, "undo"], [`${MOD}⌫`, "remove"], ["Esc", "escape"], ["?", "help"]];
   // The physical keys behind each keycap (KeyboardEvent.code), and whether Shift is part of it.
   const CODES = {
     1: "Digit1", 2: "Digit2", 3: "Digit3", 4: "Digit4", Q: "KeyQ", W: "KeyW ArrowUp", E: "KeyE",
     T: "KeyT", F: "KeyF", A: "KeyA", S: "KeyS ArrowDown", D: "KeyD", L: "KeyL", M: "KeyM", V: "KeyV", P: "KeyP", "/": "Slash",
-    "⇧4": "Digit4", [`${MOD}Z`]: "KeyZ", [`${MOD}⌫`]: "Backspace Delete", Esc: "Escape", "?": "Slash",
+    [`${MOD}Z`]: "KeyZ", [`${MOD}⌫`]: "Backspace Delete", Esc: "Escape", "?": "Slash",
   };
-  const SHIFTED = new Set(["⇧4", "?"]);
+  const SHIFTED = new Set(["?"]);
   let active = new Set();
   let labels = {};
 

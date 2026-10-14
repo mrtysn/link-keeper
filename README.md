@@ -296,7 +296,6 @@ number row works as reddit's keyboard navigation (RES) has it.
 | `E` (`3`) | capture: load it in a background tab and save its text, images and links |
 | `Q` (`⌘⌫`) | remove this copy — from its stash, or from the reading list — then on to the next link |
 | `4` | open — a stashed tab reopens through its stash, keeping its container |
-| `⇧4` | open with the other stash effect: taken out of the stash if the setting keeps it, and the reverse |
 | `L` `M` | to the reading list · move to another stash (a field filters the stashes) |
 | `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
 | `/` `?` `Esc` | filter · the key guide · back out |
@@ -345,8 +344,7 @@ A link has a context (the stash, import, thread or phone share it came from) and
 flag for links you went over and want out of focus, set by hand, is reserved and not built.
 
 Only walking repeats while held, so a held key cannot remove a run of links. Keys never act
-while a field has the keyboard; `Esc` leaves it. What plain Open does to the stash is **Settings →
-After opening** on the Links page; `⇧4` does the other.
+while a field has the keyboard; `Esc` leaves it. Opening a link never changes the stash.
 
 ### Cards — one at a time
 
@@ -499,8 +497,7 @@ Everything removed from a stash or the reading list — Q, a stash's Delete, Dup
 `remove` — waits there for 30 days (the add-on's storage, key `trash`, so backups
 carry it). **Restore** puts a tab back in its stash at its old place with its marks, writing a deleted
 stash again once, and a reading-list link back on the list; **Delete forever** and **Empty Trash** ask
-first. Moving a link (to the list, between stashes), opening tabs with "take out of the stash", and
-undoing a move leave nothing in it; `⌘Z` after a removal takes its entry out again. Entries older than
+first. Moving a link (to the list, between stashes) and undoing a move leave nothing in it; `⌘Z` after a removal takes its entry out again. Entries older than
 30 days are dropped whenever the Trash is read, and at start. A capture removed through the CLI's
 `remove --capture` is not kept.
 

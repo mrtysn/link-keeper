@@ -590,9 +590,9 @@ async function queueActiveTab() {
  *   stashRoot     — the root folder's id
  *   stashMeta     — { stashes: { [folderId]: { created_at, locked?, starred? } },
  *                     tabs:    { [bookmarkId]: { container? } } }
- *   stashSettings — { afterStash: "show" | "stay", afterRestore: "keep" | "remove", exclude: [host] }
+ *   stashSettings — { afterStash: "show" | "stay", exclude: [host] }  (an afterRestore stored before is ignored)
  *
- * A locked stash cannot lose tabs: no delete, no remove, no move out, and opening always keeps it.
+ * A locked stash cannot lose tabs: no delete, no remove, no move out. Opening never takes anything out.
  * (Keep and Drop verdicts and opened marks are gone; ones stored before then stay in their records, unread.)
  *
  * Only the tab's URL, title and container are recorded. Nothing is injected into the tabs being
@@ -602,7 +602,7 @@ async function queueActiveTab() {
 
 const ROOT_TITLE = "Link Keeper stashes";
 const TAB_META = ["container"];
-const STASH_SETTINGS = { afterStash: "show", afterRestore: "keep", exclude: [] };
+const STASH_SETTINGS = { afterStash: "show", exclude: [] };
 /* The List page grouped by stash is where stashes are shown; sessions.html, the Stashed tabs page
  * before 5.14, only forwards there. The viewer pages themselves are never stashed: they are views,
  * reopened from the toolbar at any time. */
@@ -1163,10 +1163,9 @@ function leftOpen(tabs, excluded = () => false) {
 }
 
 /* Reopens tabs of one stash: all of them, or the bookmark ids given. Several at once open unloaded,
- * so forty tabs back is not forty page loads — each loads when you switch to it. Afterwards the
- * entries are marked restored, or with afterRestore "remove", taken out — never from a locked
- * stash. */
-async function restoreTabs(id, ids, flip = false) {
+ * so forty tabs back is not forty page loads — each loads when you switch to it. The stash is
+ * left as it was. */
+async function restoreTabs(id, ids) {
   const session = await findStash(id);
   if (!session) return { ok: false, error: "that stash is gone" };
   const wanted = ids ? session.tabs.filter(t => ids.includes(t.id)) : session.tabs;
@@ -1214,10 +1213,7 @@ async function restoreTabs(id, ids, flip = false) {
     }
   }
 
-  // flip: this once, the other of what the setting says (⇧4 on the viewer pages).
-  const remove = ((await getStashSettings()).afterRestore === "remove") !== !!flip && !session.locked;
-  if (remove) await dropFromStash(id, wanted.map(t => t.id), { trash: false });
-  return { ok: true, restored: wanted.length, removed: remove, viaHelper, standins: standins.length, helperError };
+  return { ok: true, restored: wanted.length, viaHelper, standins: standins.length, helperError };
 }
 
 async function restoreItems(wanted) {
@@ -1789,7 +1785,7 @@ async function handleMessage(msg) {
     }
 
     case "restore-stash":
-      return restoreTabs(msg.id, msg.ids, msg.flip);
+      return restoreTabs(msg.id, msg.ids);
 
     case "put-back":
       return putBack(msg.stash, msg.tabs || []);
@@ -1847,7 +1843,6 @@ async function handleMessage(msg) {
       const settings = await getStashSettings();
       const patch = {};
       if (["show", "stay"].includes(msg.afterStash)) patch.afterStash = msg.afterStash;
-      if (["keep", "remove"].includes(msg.afterRestore)) patch.afterRestore = msg.afterRestore;
       await browser.storage.local.set({ stashSettings: { ...settings, ...patch } });
       return { ok: true };
     }
