@@ -100,6 +100,7 @@ async function load() {
   settings = st;
   previewMode = stored[PREVIEW_KEY] ? "keep" : previewMode === "keep" ? "off" : previewMode;
   render();
+  await loadTrash();
 }
 
 async function act(msg, done) {
@@ -1065,23 +1066,42 @@ $("exclude-form").onsubmit = e => {
 };
 
 function openPanel(which) {
-  for (const id of ["settings-panel", "import-panel", "dups-panel"]) $(id).hidden = id !== which || !$(id).hidden;
+  for (const id of ["settings-panel", "import-panel", "dups-panel", "trash-panel"]) $(id).hidden = id !== which || !$(id).hidden;
   $("settings").setAttribute("aria-expanded", String(!$("settings-panel").hidden));
   if (!$("settings-panel").hidden) { loadFilterRules(); loadBackups(); }
   $("import").setAttribute("aria-expanded", String(!$("import-panel").hidden));
   $("dups").setAttribute("aria-expanded", String(!$("dups-panel").hidden));
   if (!$("import-panel").hidden) $("import-text").focus();
-  if (!$("dups-panel").hidden) renderDuplicates();
+  $("trash").setAttribute("aria-expanded", String(!$("trash-panel").hidden));
+  if (!$("dups-panel").hidden) { renderDuplicates(); $("dups-h").focus(); }
+  if (!$("trash-panel").hidden) { renderTrash(); $("trash-h").focus(); }
+  loadTrash();
+}
+// Closing hands the keyboard back to the button that opened the panel.
+function closePanel(panel, button) {
+  openPanel(panel);
+  $(button).focus();
+}
+for (const [panel, button] of [["dups-panel", "dups"], ["trash-panel", "trash"]]) {
+  $(panel).addEventListener("keydown", e => {
+    if (e.key !== "Escape" || e.target.matches("input[type=text], textarea")) return;
+    e.stopPropagation();
+    closePanel(panel, button);
+  });
 }
 $("settings").onclick = () => openPanel("settings-panel");
 $("dups").onclick = () => openPanel("dups-panel");
+$("trash").onclick = () => openPanel("trash-panel");
 
 /* --- duplicates -----------------------------------------------------------------------------
  * Every link held in more than one place among the sources on show — two stashes, or a stash and
- * the reading list — as a card with a checkbox per copy. Nothing starts ticked, a locked stash's
- * copy cannot be, and only what is ticked is removed, after one confirm. */
+ * the reading list — as a card with a checkbox per copy, newest first. Nothing starts ticked, a
+ * locked stash's copy cannot be, and only what is ticked moves to the Trash. Each card can tick all
+ * but its newest or oldest copy, and so can the panel for every card at once. */
 
 const picked = new Set();   // copy ids: "tab:<bookmark id>" or "list:<link key>"
+let dupSets = [];
+let dupSync = [];           // one function per card on show, to redraw its boxes from `picked`
 
 function duplicateSets() {
   const out = [];
@@ -1089,21 +1109,56 @@ function duplicateSets() {
     const copies = link.copies.filter(c => visibleStash(c.stash)).map(c => {
       const stash = stashById(c.stash);
       const at = stash.tabs.findIndex(t => t.id === c.tab);
-      return { id: `tab:${c.tab}`, stash, tab: c.tab, locked: stash.locked,
-        label: stashName(stash), detail: `${stash.source === "import" ? "imported" : "stashed"} ${whenOf(stash.created_at)} · tab ${at + 1} of ${stash.tabs.length}` };
+      const label = stashName(stash);
+      const kind = stash.source === "import" ? "imported" : "stashed";
+      return { id: `tab:${c.tab}`, stash, tab: c.tab, locked: stash.locked, at: Date.parse(stash.created_at) || 0,
+        when: whenOf(stash.created_at), label, hint: `tab ${at + 1} of ${stash.tabs.length}`,
+        detail: label === whenOf(stash.created_at) ? kind : `${kind} ${whenOf(stash.created_at)}` };
     });
     if (link.list && !link.list.loose && data.sources.has("list")) {
       const LIST = { pending: "not opened yet", seen: "opened", kept: "opened", skipped: "opened" };
-      copies.push({ id: `list:${link.key}`, list: true, locked: false, label: "Reading list",
-        detail: `${LIST[link.list.status] || link.list.status}${link.list.added_at ? ` · added ${link.list.added_at.slice(0, 10)}` : ""}` });
+      const added = Date.parse(link.list.added_at);
+      // A list entry with no date is the one you still act on: it counts as the newest.
+      copies.push({ id: `list:${link.key}`, list: true, locked: false, at: Number.isNaN(added) ? Number.MAX_SAFE_INTEGER : added,
+        when: link.list.added_at ? whenOf(link.list.added_at) : "", label: "Reading list", hint: "",
+        detail: LIST[link.list.status] || link.list.status });
     }
+    copies.sort((a, b) => b.at - a.at);
     if (copies.length > 1) out.push({ link, copies });
   }
   return out.sort((a, b) => b.copies.length - a.copies.length || (labelOf(a.link) || a.link.url).localeCompare(labelOf(b.link) || b.link.url));
 }
 
+// Rows past COLLAPSE_AFTER show only the first SHOWN_WHEN_COLLAPSED until "more" is pressed.
+const COLLAPSE_AFTER = 5, SHOWN_WHEN_COLLAPSED = 3;
+function collapseRows(card, rows, ticked) {
+  if (rows.length <= COLLAPSE_AFTER) return () => {};
+  const rest = rows.slice(SHOWN_WHEN_COLLAPSED);
+  const more = el("button", { className: "ghost small dup-more", type: "button" });
+  let open = false;
+  const paint = () => {
+    for (const r of rest) r.el.hidden = !open;
+    const n = rest.filter(r => ticked(r.id)).length;
+    more.textContent = open ? "Show fewer" : `+${rest.length} more${n ? ` (${n} ticked)` : ""}`;
+    more.setAttribute("aria-expanded", String(open));
+  };
+  more.onclick = () => { open = !open; paint(); };
+  card.append(more);
+  paint();
+  return paint;
+}
+
+function tickCopies(copies, keep) {
+  for (const c of copies) if (!c.locked) (c === keep ? picked.delete(c.id) : picked.add(c.id));
+}
+function tickEvery(keepOf) {
+  for (const { copies } of dupSets) tickCopies(copies, keepOf(copies));
+  for (const sync of dupSync) sync();
+  paintDupCount();
+}
+
 function renderDuplicates() {
-  const sets = duplicateSets();
+  const sets = dupSets = duplicateSets();
   $("dups").hidden = !sets.length && $("dups-panel").hidden;
   $("dups").textContent = `Duplicates (${sets.length})…`;
   if ($("dups-panel").hidden) return;
@@ -1113,53 +1168,82 @@ function renderDuplicates() {
 
   const box = $("dups-list");
   box.textContent = "";
-  if (!sets.length) box.append(el("p", { className: "none", textContent: "No link appears twice in the sources shown." }));
-  for (const { link, copies } of sets) {
+  dupSync = [];
+  if (!sets.length) box.append(el("p", { className: "none", textContent: "No duplicates in the sources shown." }));
+  sets.forEach(({ link, copies }, n) => {
     const title = labelOf(link);
-    const card = el("div", { className: "dup-card" },
-      el("div", { className: "dup-head" }, srcIcon(link.url),
-        el("div", {}, el("div", { className: `dup-title${title ? "" : " plain"}`, textContent: title || shortUrl(link.url), title: link.url }),
-          title && el("div", { className: "dup-url", textContent: shortUrl(link.url) }))));
-    const boxes = [];
-    // One toggle per card: ticks every copy that can be removed, or clears them when all are ticked.
+    const name = title || shortUrl(link.url);
     const free = copies.filter(c => !c.locked);
-    const all = el("button", { className: "dup-all", type: "button" });
-    const paintAll = () => { all.textContent = free.every(c => picked.has(c.id)) ? "Clear" : "Select all"; };
-    all.onclick = () => {
+    const toggle = el("button", { className: "ghost small", type: "button" });
+    const sync = () => {
+      for (const b of boxes) b.checked = picked.has(b.dataset.id);
+      toggle.textContent = free.every(c => picked.has(c.id)) ? "Untick all" : "Tick all";
+      toggle.setAttribute("aria-label", `${toggle.textContent} copies of ${name}`);
+      repaintMore();
+    };
+    const apply = fn => () => { fn(); sync(); paintDupCount(); };
+    const keepBtn = (text, keep) => el("button", { className: "ghost small", type: "button", textContent: text,
+      title: `Tick every other copy of this link`, onclick: apply(() => tickCopies(copies, keep)) });
+    const newest = keepBtn("Keep newest", copies[0]);
+    const oldest = keepBtn("Keep oldest", copies[copies.length - 1]);
+    newest.setAttribute("aria-label", `Keep the newest copy of ${name}, tick the rest`);
+    oldest.setAttribute("aria-label", `Keep the oldest copy of ${name}, tick the rest`);
+    toggle.onclick = apply(() => {
       const on = !free.every(c => picked.has(c.id));
       for (const c of free) on ? picked.add(c.id) : picked.delete(c.id);
-      for (const b of boxes) if (!b.disabled) b.checked = on;
-      paintAll(); paintDupCount();
-    };
-    if (free.length > 1) card.firstChild.append(all);
+    });
+    const hid = `dup-h-${n}`;
+    const card = el("div", { className: "dup-card" },
+      el("div", { className: "dup-head" }, srcIcon(link.url),
+        el("div", {}, el("div", { className: `dup-title${title ? "" : " plain"}`, id: hid, title: link.url },
+            name, el("span", { className: "dup-count", textContent: ` · ${copies.length} copies` })),
+          title && el("div", { className: "dup-url", title: link.url, textContent: shortUrl(link.url) })),
+        el("div", { className: "dup-tools" }, newest, oldest, ...(free.length > 1 ? [toggle] : []))));
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-labelledby", hid);
+    const boxes = [], rows = [];
     for (const c of copies) {
       const box2 = el("input", { type: "checkbox", checked: picked.has(c.id), disabled: c.locked });
+      box2.dataset.id = c.id;
       boxes.push(box2);
-      box2.onchange = () => { box2.checked ? picked.add(c.id) : picked.delete(c.id); paintAll(); paintDupCount(); };
-      card.append(el("label", { className: `dup-row${c.locked ? " locked" : ""}` }, box2,
+      box2.onchange = () => { box2.checked ? picked.add(c.id) : picked.delete(c.id); sync(); paintDupCount(); };
+      const row = el("label", { className: `dup-row${c.locked ? " locked" : ""}`, title: c.hint },
+        box2,
+        ...(c.when ? [el("span", { className: "dup-when", textContent: c.when })] : []),
         el("span", { className: "dup-where", textContent: c.label }),
-        el("span", { className: "dup-detail", textContent: c.locked ? `${c.detail} · locked` : c.detail })));
+        el("span", { className: "dup-detail", textContent: c.locked ? `${c.detail} · locked, kept` : c.detail }));
+      card.append(row);
+      rows.push({ el: row, id: c.id });
     }
-    paintAll();
+    const repaintMore = collapseRows(card, rows, id => picked.has(id));
+    sync();
+    dupSync.push(sync);
     box.append(card);
-  }
+  });
   paintDupCount();
 }
 
 function paintDupCount() {
-  $("dups-remove").disabled = !picked.size;
-  $("dups-remove").textContent = picked.size ? `Remove ${copiesWord(picked.size)}` : "Remove selected";
+  const n = picked.size;
+  const touched = dupSets.filter(s => s.copies.some(c => picked.has(c.id))).length;
+  const gone = dupSets.filter(s => s.copies.every(c => picked.has(c.id))).length;
+  $("dups-remove").disabled = !n;
+  $("dups-remove").textContent = n ? `Move ${copiesWord(n)} to Trash` : "Move to Trash";
+  const sum = $("dups-sum");
+  sum.textContent = n ? `${copiesWord(n)} ticked in ${touched} of ${dupSets.length} groups` : "Nothing ticked";
+  if (gone) sum.append(" · ", el("b", { textContent: `${gone === 1 ? "1 link" : `${gone} links`} will be left only in the Trash` }));
 }
 // plural() would say "copys".
 const copiesWord = n => (n === 1 ? "1 copy" : `${n} copies`);
+
+$("dups-newest").onclick = () => tickEvery(copies => copies[0]);
+$("dups-oldest").onclick = () => tickEvery(copies => copies[copies.length - 1]);
+$("dups-none").onclick = () => { picked.clear(); for (const sync of dupSync) sync(); paintDupCount(); };
 
 $("dups-remove").onclick = async () => {
   const sets = duplicateSets();
   const chosen = sets.flatMap(s => s.copies.filter(c => picked.has(c.id) && !c.locked).map(c => ({ ...c, link: s.link })));
   if (!chosen.length) return;
-  const gone = sets.filter(s => s.copies.every(c => picked.has(c.id))).length;
-  const warn = gone ? ` ${gone === 1 ? "1 link loses" : `${gone} links lose`} every copy and will be gone entirely.` : "";
-  if (!confirm(`Remove ${copiesWord(chosen.length)}? A stashed tab is closed, so its copy may be its only record.${warn}`)) return;
   const byStash = new Map();
   for (const c of chosen.filter(c => c.stash)) {
     if (!byStash.has(c.stash.id)) byStash.set(c.stash.id, []);
@@ -1170,10 +1254,119 @@ $("dups-remove").onclick = async () => {
   const listUrls = chosen.filter(c => c.list).map(c => c.link.url);
   if (listUrls.length) removed += (await send({ type: "remove", urls: listUrls }))?.removed || 0;
   picked.clear();
-  say(`Removed ${copiesWord(removed)}`);
+  say(`Moved ${copiesWord(removed)} to the Trash. Open Trash to restore them`);
   await load();
+  $("dups-h").focus();
 };
-$("dups-close").onclick = () => openPanel("dups-panel");
+$("dups-close").onclick = () => closePanel("dups-panel", "dups");
+
+/* --- trash ----------------------------------------------------------------------------------
+ * What was removed, newest removal first, one card per removal and a checkbox per link. Restoring
+ * puts a link back where it came from; deleting forever, or the 30 days running out, ends it. */
+
+const trashPicked = new Set();
+let trashEntries = [], trashDays = 30;
+
+async function loadTrash() {
+  const res = await send({ type: "trash-list" });
+  trashEntries = res?.entries || [];
+  trashDays = res?.days || 30;
+  $("trash").hidden = !trashEntries.length && $("trash-panel").hidden;
+  $("trash").textContent = `Trash (${trashEntries.length})…`;
+  if (!$("trash-panel").hidden) renderTrash();
+}
+
+const daysLeft = e => Math.max(0, Math.ceil((Date.parse(e.at) + trashDays * 86400000 - Date.now()) / 86400000));
+
+function renderTrash() {
+  const ids = new Set(trashEntries.map(e => e.id));
+  for (const id of [...trashPicked]) if (!ids.has(id)) trashPicked.delete(id);
+  const box = $("trash-list");
+  box.textContent = "";
+  if (!trashEntries.length) box.append(el("p", { className: "none", textContent: "The Trash is empty. Links you remove stay here for 30 days." }));
+  const groups = new Map();
+  for (const e of trashEntries) groups.set(e.at, [...(groups.get(e.at) || []), e]);
+  [...groups].forEach(([at, entries], n) => {
+    const free = entries.map(e => e.id);
+    const toggle = el("button", { className: "ghost small", type: "button" });
+    const sync = () => {
+      for (const b of boxes) b.checked = trashPicked.has(b.dataset.id);
+      toggle.textContent = free.every(id => trashPicked.has(id)) ? "Untick all" : "Tick all";
+      toggle.setAttribute("aria-label", `${toggle.textContent} links removed ${whenOf(at)}`);
+      repaintMore();
+    };
+    toggle.onclick = () => {
+      const on = !free.every(id => trashPicked.has(id));
+      for (const id of free) on ? trashPicked.add(id) : trashPicked.delete(id);
+      sync(); paintTrashCount();
+    };
+    const hid = `trash-h-${n}`;
+    const card = el("div", { className: "dup-card" },
+      el("div", { className: "dup-head" }, el("span"),
+        el("div", {}, el("div", { className: "dup-title", id: hid },
+          `Removed ${whenOf(at)}`, el("span", { className: "dup-count", textContent: ` · ${plural(entries.length, "link")}` }))),
+        el("div", { className: "dup-tools" }, toggle)));
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-labelledby", hid);
+    const boxes = [], rows = [];
+    for (const e of entries) {
+      const box2 = el("input", { type: "checkbox", checked: trashPicked.has(e.id) });
+      box2.dataset.id = e.id;
+      boxes.push(box2);
+      box2.onchange = () => { box2.checked ? trashPicked.add(e.id) : trashPicked.delete(e.id); sync(); paintTrashCount(); };
+      const left = daysLeft(e);
+      const row = el("label", { className: "dup-row", title: e.url },
+        box2,
+        el("span", { className: "dup-where", textContent: e.title || shortUrl(e.url) }),
+        el("span", { className: "dup-detail", textContent: `${e.kind === "item" ? "Reading list" : e.stash.name} · deleted forever in ${plural(left, "day")}` }));
+      card.append(row);
+      rows.push({ el: row, id: e.id });
+    }
+    const repaintMore = collapseRows(card, rows, id => trashPicked.has(id));
+    sync();
+    box.append(card);
+  });
+  paintTrashCount();
+}
+
+function paintTrashCount() {
+  const n = trashPicked.size;
+  $("trash-restore").disabled = $("trash-delete").disabled = !n;
+  $("trash-empty").disabled = !trashEntries.length;
+  $("trash-restore").textContent = n ? `Restore ${plural(n, "link")}` : "Restore";
+  $("trash-delete").textContent = n ? `Delete ${plural(n, "link")} forever` : "Delete forever";
+  $("trash-sum").textContent = n ? `${plural(n, "link")} ticked of ${trashEntries.length}` : "Nothing ticked";
+}
+
+$("trash-restore").onclick = async () => {
+  const ids = [...trashPicked];
+  if (!ids.length) return;
+  const res = await send({ type: "trash-restore", ids });
+  trashPicked.clear();
+  const left = ids.length - (res?.restored || 0);
+  say(res?.ok === false ? res.error || "Not restored"
+    : `Restored ${plural(res.restored, "link")} to ${res.where.join(", ") || "where they were"}${left ? `; ${left} could not be put back and stay in the Trash` : ""}`);
+  await load();
+  $("trash-h").focus();
+};
+$("trash-delete").onclick = async () => {
+  const ids = [...trashPicked];
+  if (!ids.length || !confirm(`Delete ${plural(ids.length, "link")} forever? They cannot be restored.`)) return;
+  const res = await send({ type: "trash-delete", ids });
+  trashPicked.clear();
+  say(`Deleted ${plural(res?.removed || 0, "link")} forever`);
+  await loadTrash();
+  $("trash-h").focus();
+};
+$("trash-empty").onclick = async () => {
+  if (!trashEntries.length || !confirm(`Delete all ${plural(trashEntries.length, "link")} in the Trash forever? They cannot be restored.`)) return;
+  const res = await send({ type: "trash-delete", all: true });
+  trashPicked.clear();
+  say(`Deleted ${plural(res?.removed || 0, "link")} forever`);
+  await loadTrash();
+  $("trash-h").focus();
+};
+$("trash-close").onclick = () => closePanel("trash-panel", "trash");
 
 /* Where Keep with a screenshot saves: a folder inside Downloads, the only place an extension may
  * write. Committed on Enter or leaving the field, so every keystroke is not a write. */

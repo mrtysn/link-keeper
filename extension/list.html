@@ -263,23 +263,38 @@
     color: var(--ink); background: var(--bg); border: 1px solid var(--field); border-radius: 6px;
   }
 
-  /* duplicates */
-  #dups-list { display: grid; gap: 10px; margin-top: 12px; }
-  #dups-list .none { color: var(--dim); }
+  /* duplicates and the trash */
+  html { scroll-padding-bottom: 5rem; }
+  #dups-list, #trash-list { display: grid; gap: 10px; margin-top: 12px; }
+  #dups-list .none, #trash-list .none { color: var(--dim); }
+  .dups-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 12px; }
+  .dups-bulk span { color: var(--dim); font-size: .8125rem; }
   .dup-card { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
-  .dup-head { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; align-items: start; margin-bottom: 6px; }
-  .dup-all { font-size: .8125rem; padding: 2px 10px; }
+  .dup-head { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; margin-bottom: 6px; }
+  .dup-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
+  .dup-head .dup-tools button { min-height: 26px; padding: 2px 8px; font-size: .8125rem; }
   .dup-title { font-weight: 600; font-size: .9375rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dup-title.plain { font: .8125rem/1.6 ui-monospace, Menlo, monospace; font-weight: 400; }
   .dup-url { color: var(--dim); font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dup-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 5px 0 5px 26px; font-size: .875rem; cursor: pointer; }
+  .dup-count { color: var(--dim); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .dup-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 5px 0 5px 26px; font-size: .875rem; cursor: pointer; border-radius: 6px; }
+  .dup-row[hidden] { display: none; }
   .dup-row input { margin: 0 0 0 -26px; accent-color: var(--bad); }
+  .dup-row .dup-when { font-variant-numeric: tabular-nums; }
   .dup-row .dup-where { font-weight: 600; }
   .dup-row .dup-detail { color: var(--dim); font-variant-numeric: tabular-nums; }
   .dup-row.locked { cursor: default; opacity: .7; }
-  .dup-row:has(input:checked) .dup-where { color: var(--bad); text-decoration: line-through; }
-  /* The remove button stays in reach at the foot of the screen however long the list is. */
+  .dup-row:has(input:checked) { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+  .dup-row:has(input:checked) .dup-where { color: var(--bad); text-decoration: line-through; text-decoration-thickness: from-font; }
+  #trash-list .dup-row input { accent-color: var(--accent); }
+  #trash-list .dup-row:has(input:checked) { background: var(--chip); }
+  #trash-list .dup-row:has(input:checked) .dup-where { color: inherit; text-decoration: none; }
+  .dup-more { margin: 2px 0 0 16px; }
+  /* The actions stay in reach at the foot of the screen however long the list is. */
   .dups-actions { position: sticky; bottom: 0; z-index: 2; margin: 12px -16px -16px; padding: 12px 16px; background: var(--panel); border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; }
+  .dups-actions .dups-sum { color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; flex: 1 1 14rem; }
+  .dups-actions .dups-sum b { color: var(--bad); font-weight: 600; }
+  @media (max-width: 480px) { .dup-head { grid-template-columns: 16px minmax(0, 1fr); } .dup-tools { grid-column: 2; justify-content: flex-start; } }
 
   /* --- view toggles, and the one-stash banner --- */
   .viewtoggles { margin-left: auto; }
@@ -365,7 +380,8 @@
       <p class="sub" id="sub">Loading…</p>
     </div>
     <div class="page-actions">
-      <button id="dups" hidden aria-expanded="false" aria-controls="dups-panel" title="Links saved in more than one place. Tick the copies to remove.">Duplicates…</button>
+      <button id="dups" hidden aria-expanded="false" aria-controls="dups-panel" title="Links saved in more than one place. Tick the copies to move to the Trash.">Duplicates…</button>
+      <button id="trash" hidden aria-expanded="false" aria-controls="trash-panel" title="Links you removed, kept for 30 days">Trash…</button>
       <button id="import" aria-expanded="false" aria-controls="import-panel" title="Import stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links, or capture JSONL for the reading list">Import…</button>
       <span id="export-slot"></span>
       <button id="settings" aria-expanded="false" aria-controls="settings-panel" title="What happens after stashing and restoring, and sites never to stash">Settings</button>
@@ -426,13 +442,32 @@
   </section>
 
   <section class="panel" id="dups-panel" hidden aria-labelledby="dups-h">
-    <h2 id="dups-h">Duplicates</h2>
+    <h2 id="dups-h" tabindex="-1">Duplicates</h2>
     <p>Links that appear more than once in the sources shown, such as in two stashes, or in a stash and the reading list.
-      Tick the copies to remove. Nothing is ticked for you, and copies in a locked stash cannot be removed.</p>
+      Tick the copies to move to the Trash. Nothing is ticked for you, and copies in a locked stash stay where they are.</p>
+    <div class="dups-bulk">
+      <button class="small" id="dups-newest" title="In every group, tick all but the newest copy">Keep the newest of each</button>
+      <button class="small" id="dups-oldest" title="In every group, tick all but the oldest copy">Keep the oldest of each</button>
+      <button class="small ghost" id="dups-none">Untick all</button>
+    </div>
     <div id="dups-list"></div>
     <div class="row dups-actions">
-      <button class="danger" id="dups-remove" disabled>Remove selected</button>
+      <span class="dups-sum" id="dups-sum" aria-live="polite">Nothing ticked</span>
+      <button class="danger" id="dups-remove" disabled>Move to Trash</button>
       <button class="ghost" id="dups-close">Close</button>
+    </div>
+  </section>
+
+  <section class="panel" id="trash-panel" hidden aria-labelledby="trash-h">
+    <h2 id="trash-h" tabindex="-1">Trash</h2>
+    <p>Links you removed stay here for 30 days, then are deleted forever. Restoring puts a link back in the stash or list it came from.</p>
+    <div id="trash-list"></div>
+    <div class="row dups-actions">
+      <span class="dups-sum" id="trash-sum" aria-live="polite">Nothing ticked</span>
+      <button class="primary" id="trash-restore" disabled>Restore</button>
+      <button class="danger" id="trash-delete" disabled>Delete forever</button>
+      <button class="ghost danger" id="trash-empty">Empty Trash</button>
+      <button class="ghost" id="trash-close">Close</button>
     </div>
   </section>
 

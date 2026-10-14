@@ -357,7 +357,7 @@ carries its headline, text, embedded links, images and screenshot preview; a sta
 shows only its tab title and address — `x.com/i/status/2086188444317819246` tells you nothing, so
 capturing first makes a card worth looking at.
 
-Removing takes out only the copy the card stands for, and `⌘Z` puts it back. Skipping records
+Removing takes out only the copy the card stands for, into the Trash, and `⌘Z` puts it back. Skipping records
 nothing.
 
 The deck is shuffled fresh each visit: ordered by date it would be 133 x.com cards in a row, and
@@ -480,10 +480,21 @@ a 22rem popup.
 
 **Duplicates (N)…**, shown when any link is held in more than one place among the sources on show
 (two stashes, or a stash and the reading list), lists each such link with a checkbox per copy:
-which stash, when, and its place in it, or its reading-list status. Nothing starts ticked, a locked
-stash's copy cannot be; **Select all** on a card ticks every removable copy of that link (and
-**Clear** unticks them), and **Remove N copies** asks once, then removes only what was ticked — saying
-so when a link would lose every copy.
+when, which stash, and its reading-list status, newest first; a card with more than five copies shows
+three and "+N more". Nothing starts ticked, and a locked stash's copy cannot be. A card's **Keep newest**
+and **Keep oldest** tick every other copy, **Tick all** every one; the same two for every card sit above
+the list. **Move N copies to Trash** needs no confirm, since the Trash undoes it; the footer counts what
+is ticked and says when a link would be left only in the Trash.
+
+**Trash (N)…** lists what was removed, one card per removal, each row saying how many days remain.
+Everything removed from a stash or the reading list — Q, a stash's Delete, Duplicates, the CLI's
+`remove`, **Clear dropped** — waits there for 30 days (the add-on's storage, key `trash`, so backups
+carry it). **Restore** puts a tab back in its stash at its old place with its marks, writing a deleted
+stash again once, and a reading-list link back on the list; **Delete forever** and **Empty Trash** ask
+first. Moving a link (to the list, between stashes), restoring tabs with "take out of the stash", and
+undoing a move leave nothing in it; `⌘Z` after a removal takes its entry out again. Entries older than
+30 days are dropped whenever the Trash is read, and at start. A capture removed through the CLI's
+`remove --capture` is not kept.
 
 Clicking a reading-list title opens it in a new tab and marks that entry current, so a
 `Ctrl+Shift+K` there attaches the capture to the right list entry; clicking a stashed tab's title
@@ -801,7 +812,7 @@ than a watcher.
   OneTab import (8 stashes written within ten seconds, identified by that window and their tab
   counts) as an import.
 - There is no bulk clear or reset: links, captures and stashes go one at a time (or the copies
-  ticked in Duplicates), each after a confirm where it cannot be undone.
+  ticked in Duplicates), each moved to the Trash for 30 days; Delete forever and Empty Trash ask first.
 - Article bodies are read with `innerText`, not `textContent`, so paragraph breaks and code
   blocks survive. Plain tweets collapse whitespace, which is fine at that length.
 - Images are not captured — text only. A chart in an article is lost; its surrounding prose is not.

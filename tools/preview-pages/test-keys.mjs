@@ -595,6 +595,59 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
     await p.close();
   }
 }
+// Duplicates and Trash: keep one copy, move the rest to the Trash, restore them
+{
+  const p = await page("list.html");
+  const hidden = sel => p.$eval(sel, e => e.hidden);
+  ok(!(await hidden("#dups")), "duplicates: the button shows when a link is held twice");
+  const label = await p.$eval("#dups", e => e.textContent);
+  await p.click("#dups"); await p.waitForTimeout(300);
+  ok(await p.$eval("#dups-h", e => e === document.activeElement), "duplicates: opening puts focus on the panel heading");
+  const cards = await p.$$eval("#dups-list .dup-card", l => l.length);
+  const m = label.match(/\((\d+)\)/);
+  ok(cards === Number(m[1]), `duplicates: one card per group (${cards}, ${label})`);
+  ok(await p.$$eval("#dups-list .dup-card", l => l.every(c => c.getAttribute("role") === "group" && document.getElementById(c.getAttribute("aria-labelledby")))), "duplicates: each card is a named group");
+  const names = await p.$$eval("#dups-list .dup-tools button", l => l.map(b => b.getAttribute("aria-label")));
+  ok(names.length && new Set(names).size === names.length, "duplicates: every card's buttons name their link");
+  ok(await p.$eval("#dups-remove", e => e.disabled) && /Nothing ticked/.test(await p.$eval("#dups-sum", e => e.textContent)), "duplicates: nothing starts ticked");
+  const dates = await p.$$eval("#dups-list .dup-card", l => l[0] && [...l[0].querySelectorAll(".dup-row")].map(r => r.querySelector(".dup-when")?.textContent));
+  // Keep the newest of every group: each card keeps exactly one copy unticked.
+  await p.click("#dups-newest"); await p.waitForTimeout(200);
+  const kept = await p.$$eval("#dups-list .dup-card", l => l.map(c => [c.querySelectorAll(".dup-row input:not(:checked):not(:disabled)").length, c.querySelectorAll(".dup-row input:not(:checked)").length]));
+  ok(kept.every(([free, all]) => free <= 1 && all >= 1), `duplicates: Keep the newest of each leaves one copy per group, or the locked ones (${kept.slice(0, 5).join(" | ")})`);
+  ok(!/left only in the Trash/.test(await p.$eval("#dups-sum", e => e.textContent)), "duplicates: no link is lost entirely");
+  const first = await p.$eval("#dups-list .dup-card .dup-row input", e => e.checked);
+  ok(first === false, "duplicates: the newest copy is the first row, and it is kept");
+  // One card: Tick all warns that the link would be left only in the Trash.
+  await p.click("#dups-list .dup-card .dup-tools button:last-child"); await p.waitForTimeout(200);
+  ok(/left only in the Trash/.test(await p.$eval("#dups-sum", e => e.textContent)), "duplicates: ticking every copy says the link is left only in the Trash");
+  await p.click("#dups-list .dup-card .dup-tools button:last-child"); await p.waitForTimeout(200);
+  const n = Number((await p.$eval("#dups-remove", e => e.textContent)).match(/Move (\d+)/)?.[1]);
+  ok(n > 0, `duplicates: the button counts what is ticked (${await p.$eval("#dups-remove", e => e.textContent)})`);
+  await p.click("#dups-remove"); await p.waitForTimeout(600);
+  ok(/Moved \d+ cop(y|ies) to the Trash/.test(await msg(p)), `duplicates: Move to Trash needs no confirm and says so (${await msg(p)})`);
+  ok(await p.$$eval("#dups-list .dup-card", l => l.length) < cards, "duplicates: groups down to one copy are gone from the panel");
+  const trashLabel = await p.$eval("#trash", e => e.hidden ? "" : e.textContent);
+  ok(trashLabel === `Trash (${n})…`, `trash: the button counts what went in (${trashLabel})`);
+  // Close hands focus back to the button; Escape does the same.
+  await p.click("#dups-close"); await p.waitForTimeout(200);
+  ok(await p.$eval("#dups", e => e === document.activeElement || e.hidden), "duplicates: Close returns focus to its button");
+  await p.click("#trash"); await p.waitForTimeout(300);
+  ok(await p.$eval("#trash-h", e => e === document.activeElement), "trash: opening puts focus on the panel heading");
+  const rows = await p.$$eval("#trash-list .dup-row", l => l.length);
+  ok(rows === n, `trash: one row per removed copy (${rows})`);
+  ok(/deleted forever in 30 days/.test(await p.$eval("#trash-list .dup-detail", e => e.textContent)), "trash: each row says when it will be deleted");
+  await p.click("#trash-list .dup-tools button"); await p.waitForTimeout(200);
+  ok(!(await p.$eval("#trash-restore", e => e.disabled)), "trash: ticking a group enables Restore");
+  await p.click("#trash-restore"); await p.waitForTimeout(600);
+  ok(/Restored \d+ links? to/.test(await msg(p)), `trash: Restore says where (${await msg(p)})`);
+  ok((await p.$eval("#dups", e => e.hidden ? "(0)" : e.textContent)) !== "(0)", "trash: restored copies are duplicates again");
+  await key(p, "Escape");
+  ok(await p.$eval("#trash-panel", e => e.hidden), "trash: Escape closes the panel");
+  ok(p.errs.length === 0, `duplicates and trash: no errors ${p.errs.join()}`);
+  await p.close();
+}
+
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

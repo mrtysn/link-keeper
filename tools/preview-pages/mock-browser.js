@@ -107,6 +107,7 @@
     const rows = [...M.dump.items, ...M.dump.loose];
     state = {
       sessions: mockSessions(),
+      trash: [],
       items: M.dump.items.map(r => ({ url: r.url, status: r.status, added_at: r.added_at, saved_at: toIso(r.saved_at), title: r.title, note: r.note })),
       captures: rows.filter(r => r.cap).map(r => ({
         url: r.url, title: r.cap.title, author: r.cap.handle ? { handle: r.cap.handle } : undefined, text: r.cap.text, kind: r.cap.kind,
@@ -270,7 +271,32 @@
           case "delete-stash": {
             const s = findStash(msg.id);
             if (s?.locked) return { ok: false, error: "that stash is locked; unlock it first" };
-            return { ok: true, removed: takeTabs(msg.id, msg.ids).length };
+            const at = new Date().toISOString();
+            const taken = takeTabs(msg.id, msg.ids);
+            const trashed = msg.trash === false ? [] : taken.map(t => {
+              const e = { id: `tr${++nextId}`, at, kind: "tab", url: t.url, title: t.title, stash: { id: s.id, name: s.name || s.created_at, created_at: s.created_at }, tab: {} };
+              stored().trash.unshift(e);
+              return e.id;
+            });
+            return { ok: true, removed: taken.length, trashed };
+          }
+          case "trash-list": return { ok: true, entries: structuredClone(stored().trash), days: 30 };
+          case "trash-delete": {
+            const gone = new Set(msg.all ? stored().trash.map(e => e.id) : msg.ids);
+            const before = stored().trash.length;
+            stored().trash = stored().trash.filter(e => !gone.has(e.id));
+            return { ok: true, removed: before - stored().trash.length };
+          }
+          case "trash-restore": {
+            const back = stored().trash.filter(e => msg.ids.includes(e.id));
+            for (const e of back) {
+              if (e.kind === "item") { stored().items.push(e.item); continue; }
+              let s = findStash(e.stash.id);
+              if (!s) { s = { ...e.stash, id: `s${++nextId}`, tabs: [] }; stored().sessions.unshift(s); }
+              s.tabs.push({ id: `bm${++nextId}`, url: e.url, title: e.title });
+            }
+            stored().trash = stored().trash.filter(e => !msg.ids.includes(e.id));
+            return { ok: true, restored: back.length, where: [...new Set(back.map(e => (e.kind === "item" ? "the reading list" : e.stash.name)))] };
           }
           case "move-stash": {
             const s = findStash(msg.id);
@@ -315,7 +341,13 @@
             const drop = new Set(msg.urls.map(keyOf));
             const removed = stored().items.filter(i => drop.has(keyOf(i.url)));
             stored().items = stored().items.filter(i => !drop.has(keyOf(i.url)));
-            return { ok: true, removed: drop.size, items: removed };
+            const at = new Date().toISOString();
+            const trashed = msg.trash === false ? [] : removed.map(i => {
+              const e = { id: `tr${++nextId}`, at, kind: "item", url: i.url, title: i.title, item: i };
+              stored().trash.unshift(e);
+              return e.id;
+            });
+            return { ok: true, removed: drop.size, items: removed, trashed };
           }
           case "restore-items": {
             const have = new Set(stored().items.map(i => keyOf(i.url)));
