@@ -422,7 +422,7 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 - Drag a row to reorder it or drop it into another stash (ahead of or after the row it lands on, or
   last on a stash's heading); the row's **⋯** menu moves it up, down or to another stash. A stash emptied
   this way goes.
-- **Export → Stashes** downloads every stash as JSON. **Import…** reads it back, and also OneTab's
+- **Export → Stashes** downloads every stash as JSON. **Import** reads it back, and also OneTab's
   *Export URLs* text, a TidyTab export, CSV with a `url` column (optionally `title`, `group`,
   `date`), a JSON list of URLs, or any text with links in it — pasted or from a file — each group a
   stash under **Imports**, its heading marked *Imported · OneTab* and so on. Capture JSONL goes to the
@@ -479,7 +479,7 @@ a 22rem popup.
   Open or **Open in this tab**, Move, **To list**, the stash moves when grouped by stash, and a
   **Remove from …** for each *other* place it is held.
 
-**Duplicates (N)…**, shown when any address is held in more than one place among the sources on show
+**Duplicates (N)**, shown when any address is held in more than one place among the sources on show
 (two stashes, or a stash and the reading list; addresses are compared as written, `#fragment` included,
 so Gmail's messages, which differ only by it, are not duplicates of one another), lists each such link
 with a checkbox per copy:
@@ -489,7 +489,7 @@ and **Keep oldest** tick every other copy, **Tick all** every one; the same two 
 the list. **Move N copies to Trash** needs no confirm, since the Trash undoes it, except when some link would
 be left with no copy outside the Trash; the footer counts what is ticked and says so.
 
-**Trash (N)…**, always beside Duplicates (N = 0 when empty), lists what was removed, one card per removal, each row saying how many days remain.
+**Trash (N)**, always beside Duplicates (N = 0 when empty), lists what was removed, one card per removal, each row saying how many days remain.
 Everything removed from a stash or the reading list — Q, a stash's Delete, Duplicates, the CLI's
 `remove`, **Clear dropped** — waits there for 30 days (the add-on's storage, key `trash`, so backups
 carry it). **Restore** puts a tab back in its stash at its old place with its marks, writing a deleted
@@ -506,7 +506,7 @@ reopens it through its stash, in its container.
 ### Filling the list
 
 - **`Ctrl+Shift+U`** or the popup's **+ List** — queue something for later while browsing.
-- **Paste URLs** into List's **Import…** and choose *Links on the reading list*, one per line. Each
+- **Paste URLs** into List's **Import** and choose *Links on the reading list*, one per line. Each
   line may carry the date the link was originally saved, tab or space separated — which is exactly
   what the scripts in `importers/` produce:
 
@@ -563,7 +563,7 @@ destinations the post linked to. A bare `x.com/i/status/<id>` resolves fine, han
 
     ./importers/telegram.py result.json | ./importers/enrich-x.py > link-captures.jsonl
 
-Then, in the list page, **Import…** → choose the file or paste it. Those links arrive already captured, so
+Then, in the list page, **Import** → choose the file or paste it. Those links arrive already captured, so
 their cards show their text straight away.
 
 Import lives in the list page rather than the popup on purpose: choosing a file opens an OS dialog,

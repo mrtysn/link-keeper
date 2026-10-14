@@ -43,6 +43,8 @@
   h1 { font-size: 1.5rem; line-height: 1.15; letter-spacing: -.02em; margin: 0 0 4px; }
   .sub { margin: 0; color: var(--dim); font-size: .875rem; font-variant-numeric: tabular-nums; }
   .page-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  /* A button whose panel is open reads as pressed. */
+  .page-actions button[aria-expanded="true"] { background: var(--chip); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 
   .meter { height: 5px; margin-top: 16px; background: var(--chip); border-radius: 3px; overflow: hidden; display: flex; }
   .meter i { height: 100%; }
@@ -274,8 +276,9 @@
   .dup-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
   .dup-head .dup-tools button { min-height: 26px; padding: 2px 8px; font-size: .8125rem; }
   .dup-title { font-weight: 600; font-size: .9375rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dup-title.plain { font: .8125rem/1.6 ui-monospace, Menlo, monospace; font-weight: 400; }
-  .dup-url { color: var(--dim); font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dup-title.plain { font: .8125rem/1.6 ui-monospace, Menlo, monospace; font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
+  .dup-url { color: var(--dim); font-size: .8125rem; overflow-wrap: anywhere; user-select: text; }
+  .dup-rowurl { flex: 1 0 100%; }
   .dup-count { color: var(--dim); font-weight: 400; font-variant-numeric: tabular-nums; }
   .dup-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 5px 0 5px 26px; font-size: .875rem; cursor: pointer; border-radius: 6px; }
   .dup-row[hidden] { display: none; }
@@ -380,9 +383,9 @@
       <p class="sub" id="sub">Loading…</p>
     </div>
     <div class="page-actions">
-      <button id="dups" hidden aria-expanded="false" aria-controls="dups-panel" title="Links saved in more than one place. Tick the copies to move to the Trash.">Duplicates…</button>
-      <button id="trash" aria-expanded="false" aria-controls="trash-panel" title="Links you removed, kept for 30 days">Trash (0)…</button>
-      <button id="import" aria-expanded="false" aria-controls="import-panel" title="Import stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links, or capture JSONL for the reading list">Import…</button>
+      <button id="dups" hidden aria-expanded="false" aria-controls="dups-panel" title="Links saved in more than one place. Tick the copies to move to the Trash.">Duplicates</button>
+      <button id="trash" aria-expanded="false" aria-controls="trash-panel" title="Links you removed, kept for 30 days">Trash (0)</button>
+      <button id="import" aria-expanded="false" aria-controls="import-panel" title="Import stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links, or capture JSONL for the reading list">Import</button>
       <span id="export-slot"></span>
       <button id="settings" aria-expanded="false" aria-controls="settings-panel" title="What happens after stashing and opening, and sites never to stash">Settings</button>
       <button class="primary" id="stash" title="Stash the selected tabs, or every other tab in this window, and close them">Stash this window</button>

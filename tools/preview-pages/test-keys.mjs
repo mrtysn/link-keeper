@@ -600,7 +600,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const p = await page("list.html");
   const hidden = sel => p.$eval(sel, e => e.hidden);
   ok(!(await hidden("#dups")), "duplicates: the button shows when a link is held twice");
-  ok(!(await hidden("#trash")) && (await p.$eval("#trash", e => e.textContent)) === "Trash (0)…", "trash: the button shows from the start, empty");
+  ok(!(await hidden("#trash")) && (await p.$eval("#trash", e => e.textContent)) === "Trash (0)", "trash: the button shows from the start, empty");
   const label = await p.$eval("#dups", e => e.textContent);
   await p.click("#dups"); await p.waitForTimeout(300);
   ok(await p.$eval("#dups-h", e => e === document.activeElement), "duplicates: opening puts focus on the panel heading");
@@ -629,7 +629,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(/Moved \d+ cop(y|ies) to the Trash/.test(await msg(p)), `duplicates: Move to Trash needs no confirm and says so (${await msg(p)})`);
   ok(await p.$$eval("#dups-list .dup-card", l => l.length) < cards, "duplicates: groups down to one copy are gone from the panel");
   const trashLabel = await p.$eval("#trash", e => e.hidden ? "" : e.textContent);
-  ok(trashLabel === `Trash (${n})…`, `trash: the button counts what went in (${trashLabel})`);
+  ok(trashLabel === `Trash (${n})`, `trash: the button counts what went in (${trashLabel})`);
   // Close hands focus back to the button; Escape does the same.
   await p.click("#dups-close"); await p.waitForTimeout(200);
   ok(await p.$eval("#dups", e => e === document.activeElement || e.hidden), "duplicates: Close returns focus to its button");

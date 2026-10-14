@@ -1172,7 +1172,7 @@ function tickEvery(keepOf) {
 function renderDuplicates() {
   const sets = dupSets = duplicateSets();
   $("dups").hidden = !sets.length && $("dups-panel").hidden;
-  $("dups").textContent = `Duplicates (${sets.length})…`;
+  $("dups").textContent = `Duplicates (${sets.length})`;
   if ($("dups-panel").hidden) return;
   // What was ticked stays ticked across a reload, as long as the copy is still there.
   const ids = new Set(sets.flatMap(s => s.copies.map(c => c.id)));
@@ -1184,7 +1184,7 @@ function renderDuplicates() {
   if (!sets.length) box.append(el("p", { className: "none", textContent: "No duplicates in the sources shown." }));
   sets.forEach(({ link, copies }, n) => {
     const title = labelOf(link);
-    const name = title || shortUrl(link.url);
+    const name = title || link.url;
     const free = copies.filter(c => !c.locked);
     const toggle = el("button", { className: "ghost small", type: "button" });
     const sync = () => {
@@ -1209,7 +1209,7 @@ function renderDuplicates() {
       el("div", { className: "dup-head" }, srcIcon(link.url),
         el("div", {}, el("div", { className: `dup-title${title ? "" : " plain"}`, id: hid, title: link.url },
             name, el("span", { className: "dup-count", textContent: ` · ${copies.length} copies` })),
-          title && el("div", { className: "dup-url", title: link.url, textContent: shortUrl(link.url) })),
+          title && el("div", { className: "dup-url", textContent: link.url })),
         el("div", { className: "dup-tools" }, newest, oldest, ...(free.length > 1 ? [toggle] : []))));
     card.setAttribute("role", "group");
     card.setAttribute("aria-labelledby", hid);
@@ -1286,7 +1286,7 @@ async function loadTrash() {
   const res = await send({ type: "trash-list" });
   trashEntries = res?.entries || [];
   trashDays = res?.days || 30;
-  $("trash").textContent = `Trash (${trashEntries.length})…`;
+  $("trash").textContent = `Trash (${trashEntries.length})`;
   if (!$("trash-panel").hidden) renderTrash();
 }
 
@@ -1331,8 +1331,9 @@ function renderTrash() {
       const left = daysLeft(e);
       const row = el("label", { className: "dup-row", title: e.url },
         box2,
-        el("span", { className: "dup-where", textContent: e.title || shortUrl(e.url) }),
-        el("span", { className: "dup-detail", textContent: `${e.kind === "item" ? "Reading list" : e.stash.name} · deleted forever in ${plural(left, "day")}` }));
+        el("span", { className: "dup-where", textContent: e.title || e.url }),
+        el("span", { className: "dup-detail", textContent: `${e.kind === "item" ? "Reading list" : e.stash.name} · deleted forever in ${plural(left, "day")}` }),
+        ...(e.title ? [el("span", { className: "dup-url dup-rowurl", textContent: e.url })] : []));
       card.append(row);
       rows.push({ el: row, id: e.id });
     }
