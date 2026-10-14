@@ -139,6 +139,8 @@
   }
   @media (hover: hover) { ul.rows > li:hover { background: var(--panel); } }
   ul.rows > li.current { box-shadow: inset 2px 0 0 var(--accent); }
+  /* "Not captured" is the usual state, so a row says nothing; the detail pane and the Not captured filter do. */
+  ul.rows .lk-unread { display: none; }
   /* A row's buttons show on the row under the pointer, the one the keys are on, or one holding focus;
    * their room stays reserved so nothing shifts. Where there is no hover, they stay shown. */
   @media (hover: hover) {
