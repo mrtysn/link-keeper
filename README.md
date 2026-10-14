@@ -176,6 +176,17 @@ the change, so removing one wrong suggestion keeps the rest. They are stored apa
 stored, and `link-keeper links --json` carries `suggested` per link (empty once it has tags). The
 entry stays in storage after the link is tagged, unshown.
 
+**Agent tags** are a third layer, written by Claude agents and never counted as your tags. Each link
+shows them in a row of their own after yours, labelled **agent**, as outlined chips: your tags are
+filled, a suggestion's dashed, an agent's solid-outlined, so the three differ in form as well as place.
+The row is on Links (the detail pane's editor), List, Cards (under the title, after any Suggested row),
+the tag library's link lists and the tag editor, and a chip's hover names the model. They are stored
+apart (`agentTags`, `{ [link key]: { at, by, tags: [name] } }`, `by` the model such as `haiku`), change
+neither your tags nor the suggestions, and `F` still accepts only the suggestions. Agents write them with
+`link-keeper agent-tags-set FILE [--replace] [--by NAME]` (FILE is JSON `{url: [tags]}`; an empty list
+removes a link's entry; the message is `set-agent-tags`, journaled so `undo` reverts it) and read them with
+`link-keeper agent-tags`; `links --json` carries `agentTags` and `agentBy` per link.
+
 - `F` accepts the shown suggestions (or site guesses) as the link's tags; Cards moves on to the next card.
 - `T` on any page opens the editor: the link's chips, a field, and under it a palette of every tag
   there is — click one, or press `1`–`9` on the empty field, to put it on or take it off. Typing
