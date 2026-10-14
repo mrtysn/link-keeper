@@ -7,6 +7,8 @@ threads, mojibake, saved posts, `--list-threads`, `--account`, `--origins-out`, 
 `attach-dm-origin.py` putting the origin back on a record the enrichers rebuilt. No network.
 
     tools/test-instagram-export.py
+    tools/test-instagram-export.py --write-fixture DIR   # only write the fake export, without the
+                                                         # links to other sites (no fetching needed)
 """
 
 from __future__ import annotations
@@ -46,18 +48,18 @@ def write_thread(root: Path, slug: str, people: list[str], messages: list[dict])
     (d / "message_1.json").write_text(json.dumps(body))
 
 
-def build_export(root: Path) -> None:
+def build_export(root: Path, external: bool = True) -> None:
     day = 86_400_000
     t0 = 1_760_000_000_000
     write_thread(root, "me_1", ["Me"], [
         message("Me", t0, link=REEL_SELF, caption="self reel"),
-        message("Me", t0 + 1, content=f"read {SITE_SELF}"),
+        *([message("Me", t0 + 1, content=f"read {SITE_SELF}")] if external else []),
         message("Me", t0 + 2, link=REEL_SHARED, caption="in self too"),
     ])
     # Captions carry mojibake as Meta writes it: "é" as two latin-1 code points.
     write_thread(root, "alice_2", ["Me", "Alice"], [
         message("Alice", t0 + day, link=REEL_SHARED, caption="from alice Ã©"),
-        message("Alice", t0 + day + 1, content=f"look {SITE_ALICE}"),
+        *([message("Alice", t0 + day + 1, content=f"look {SITE_ALICE}")] if external else []),
     ])
     write_thread(root, "bob_3", ["Me", "Bob"], [
         message("Bob", t0 + 2 * day, link=POST_ONLY_BOB, caption="bob post \u00c3\u00a9"),
@@ -89,6 +91,11 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["--write-fixture"]:
+        root = Path(sys.argv[2])
+        root.mkdir(parents=True)
+        build_export(root, external=False)
+        return
     with tempfile.TemporaryDirectory() as tmp:
         export = Path(tmp) / "instagram-fake"
         export.mkdir()

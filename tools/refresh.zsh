@@ -49,7 +49,10 @@ done
 # value is captured before sourcing the config, which would otherwise clobber it.
 
 env_tg=${TELEGRAM_EXPORT_DIR:-} env_ig=${INSTAGRAM_EXPORT_DIR:-} env_data=${DATA_DIR:-} env_port=${SERVE_PORT:-}
+env_igacc=${INSTAGRAM_ACCOUNTS_DIR:-}
+typeset -A IG_ACCOUNTS    # account folder -> the thread slugs to read besides the self-thread
 [[ -r $repo/config.local.sh ]] && source "$repo/config.local.sh"
+INSTAGRAM_ACCOUNTS_DIR=${env_igacc:-${INSTAGRAM_ACCOUNTS_DIR:-}}
 TELEGRAM_EXPORT_DIR=${env_tg:-${TELEGRAM_EXPORT_DIR:-$HOME/Downloads/Telegram Desktop}}
 INSTAGRAM_EXPORT_DIR=${env_ig:-${INSTAGRAM_EXPORT_DIR:-$HOME/Downloads}}
 DATA_DIR=${env_data:-${DATA_DIR:-$repo/data}}
@@ -79,11 +82,47 @@ inbox=$outdir/link-inbox.tsv
 # Instagram is optional: the newest instagram-* zip or unzipped directory that actually holds
 # messages or saved posts. Instagram exports are per-request subsets, so a newer zip requested
 # for something else (say, connections only) must not shadow the one with the links in it.
-ig_export=""
-for c in ${~INSTAGRAM_EXPORT_DIR}/instagram-*(Nom); do
-  [[ -d $c || $c == *.zip ]] || continue
-  "$repo/importers/instagram.py" "$c" --check 2>/dev/null && { ig_export=$c; break }
-done
+#
+# With IG_ACCOUNTS set (config.local.sh), that is done once per account, in its own folder under
+# INSTAGRAM_ACCOUNTS_DIR: an export carries no account name, so the folder is what says whose it is.
+# Without it, the one newest export under INSTAGRAM_EXPORT_DIR is read, as before.
+newest_ig_export() {   # $1: a directory holding instagram-* exports; prints the newest valid one
+  local c
+  for c in ${~1}/instagram-*(Nom); do
+    [[ -d $c || $c == *.zip ]] || continue
+    "$repo/importers/instagram.py" "$c" --check 2>/dev/null && { print -r -- "$c"; return 0 }
+  done
+  return 1
+}
+
+ig_accts=() ig_paths=()   # parallel: the account ("" without IG_ACCOUNTS) and its newest export
+if (( ${#IG_ACCOUNTS} )); then
+  [[ -n $INSTAGRAM_ACCOUNTS_DIR ]] || {
+    print -u2 "IG_ACCOUNTS is set but INSTAGRAM_ACCOUNTS_DIR is not: set it in config.local.sh to the"
+    print -u2 "folder whose subfolders are the accounts (see config.local.sh.example)"
+    exit 1
+  }
+  for acct in ${(ko)IG_ACCOUNTS}; do
+    found=$(newest_ig_export "$INSTAGRAM_ACCOUNTS_DIR/$acct") || found=""
+    if [[ -n $found ]]; then
+      ig_accts+=("$acct") ig_paths+=("$found")
+    else
+      print -u2 "! no instagram-* export for account $acct under ${INSTAGRAM_ACCOUNTS_DIR/#$HOME/~}/$acct"
+    fi
+  done
+else
+  found=$(newest_ig_export "$INSTAGRAM_EXPORT_DIR") || found=""
+  [[ -z $found ]] || { ig_accts+=("") ig_paths+=("$found") }
+fi
+
+# instagram.py's arguments for the account at index $1 -> $reply
+ig_account_args() {
+  local acct=${ig_accts[$1]} s
+  reply=()
+  [[ -n $acct ]] || return 0
+  reply+=(--account "$acct")
+  for s in ${=IG_ACCOUNTS[$acct]}; do reply+=(--thread "$s"); done
+}
 
 x_jsonl=$outdir/link-captures-x.jsonl
 web_jsonl=$outdir/link-captures-web.jsonl
@@ -97,7 +136,9 @@ triage_html=$outdir/telegram-saved-links.html
 triage_json=$outdir/telegram-links-triage.json
 
 [[ -n $export_json ]] && print "export : ${export_json/#$HOME/~}"
-[[ -n $ig_export ]] && print "instagram : ${ig_export/#$HOME/~}"
+for (( i = 1; i <= ${#ig_paths}; i++ )); do
+  print "instagram : ${ig_paths[$i]/#$HOME/~}${ig_accts[$i]:+  (account ${ig_accts[$i]})}"
+done
 print "output : ${outdir/#$HOME/~}\n"
 
 # --- mirror the phone-share inbox from its server, when configured ----------------
@@ -135,11 +176,17 @@ fi
 worklist=""
 [[ -n $export_json ]] && worklist=$("$repo/importers/telegram.py" "$export_json")
 [[ -s $inbox ]] && worklist+=$'\n'$(grep -h . "$inbox")
-if [[ -n $ig_export ]]; then
-  worklist+=$'\n'$("$repo/importers/instagram.py" "$ig_export" --other)
-fi
-if [[ -z ${worklist//$'\n'/} ]]; then
-  print -u2 "nothing to work with: no Telegram export under $TELEGRAM_EXPORT_DIR, no $inbox"
+# Each account also writes where its links came from; the enrichers read only URL and date, so the
+# origin is put back on their records after the merge.
+origins_files=()
+for (( i = 1; i <= ${#ig_paths}; i++ )); do
+  ig_account_args $i
+  origins=$outdir/link-dm-origins-${ig_accts[$i]:-default}.jsonl
+  worklist+=$'\n'$("$repo/importers/instagram.py" "${ig_paths[$i]}" --other "${reply[@]}" --origins-out "$origins")
+  origins_files+=("$origins")
+done
+if [[ -z ${worklist//$'\n'/} ]] && (( ! ${#ig_paths} )); then
+  print -u2 "nothing to work with: no Telegram export under $TELEGRAM_EXPORT_DIR, no $inbox, no Instagram export"
   print -u2 "either export a chat, or set up the puller (importers/telegram-pull.py --login)"
   exit 1
 fi
@@ -160,11 +207,14 @@ print -r -- "$enrich_input" \
   | "$repo/importers/enrich-web.py" --failed-to "$unresolved" > "$web_jsonl"
 
 print "\n3/8  instagram, from its own export"
-if [[ -n $ig_export ]]; then
-  "$repo/importers/instagram.py" "$ig_export" --json > "$ig_jsonl"
+: > "$ig_jsonl"
+if (( ${#ig_paths} )); then
+  for (( i = 1; i <= ${#ig_paths}; i++ )); do
+    ig_account_args $i
+    "$repo/importers/instagram.py" "${ig_paths[$i]}" --json "${reply[@]}" >> "$ig_jsonl"
+  done
   print "  $(grep -c . "$ig_jsonl") captures → ${ig_jsonl:t} (no fetching — the export carries the content)"
 else
-  : > "$ig_jsonl"
   print "  no instagram-* export under ${INSTAGRAM_EXPORT_DIR/#$HOME/~} — skipped"
 fi
 
@@ -197,6 +247,10 @@ if [[ -s $extra_jsonl ]]; then
   print "  including $(grep -c . "$extra_jsonl") hand-recovered from ${extra_jsonl:t}"
 else
   cat "$x_jsonl" "$web_jsonl" "$ig_jsonl" "$reels_jsonl" > "$all_jsonl"
+fi
+if (( ${#origins_files} )); then
+  "$repo/importers/attach-dm-origin.py" "${origins_files[@]}" --captures "$all_jsonl" > "$all_jsonl.tmp"
+  mv "$all_jsonl.tmp" "$all_jsonl"
 fi
 print "  $(grep -c . "$all_jsonl") captures → ${all_jsonl:t}"
 

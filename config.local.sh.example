@@ -11,6 +11,14 @@ TELEGRAM_EXPORT_DIR="$HOME/Downloads/Telegram Desktop"
 # instagram-* zip or directory under it is used; if none exists the step is skipped.
 INSTAGRAM_EXPORT_DIR="$HOME/Downloads"
 
+# Several Instagram accounts, or threads with other people. Put each account's exports in its own
+# folder under INSTAGRAM_ACCOUNTS_DIR (an export does not say whose it is) and list the threads to
+# read besides the self-thread. Find a thread's slug with `importers/instagram.py <export> --list-threads`.
+# Setting IG_ACCOUNTS replaces INSTAGRAM_EXPORT_DIR; leave both commented out to keep the single export.
+#INSTAGRAM_ACCOUNTS_DIR="$HOME/Downloads/instagram-accounts"    # holds main/, side/, ...
+#IG_ACCOUNTS[main]="alice_123 bob_456"
+#IG_ACCOUNTS[side]=""                                            # self-thread only
+
 # Where watch-reel.zsh builds its packs (video, transcript, frames). Defaults to $DATA_DIR/reels.
 #REELS_DIR="$DATA_DIR/reels"
 
