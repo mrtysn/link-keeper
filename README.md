@@ -143,7 +143,7 @@ bulk, exports and settings live on the Links page.
 
 Links come from three **sources** — **Stashed tabs** (stashes made from your open tabs), **Imports**
 (stashes brought in from OneTab, TidyTab, a file or pasted text) and the **Reading list** (links you
-queued, and pages you kept) — and three **viewers** show them: **Links**, **Cards** and **Tags**.
+queued, and pages you captured) — and three **viewers** show them: **Links**, **Cards** and **Tags**.
 The bar across the top of every page links the viewers and holds a chip per source; turn any mix on,
 and the choice holds as you switch viewers and between visits. Each chip counts its links.
 
@@ -339,7 +339,7 @@ rows and the Cards sidebar.
 
 There is no opened, seen, kept, dropped or skipped state, and nothing marks a link automatically: opening
 or capturing it changes nothing about it. Keep and Drop left the pages in 5.38, and their code is gone;
-the automatic opened marks went after them. Marks and verdicts already stored stay in storage, unread.
+the automatic opened marks went after them. A one-time data patch (after a backup) stripped the marks, verdicts and statuses they had stored.
 A link has a context (the stash, import, thread or phone share it came from) and one flag, trashed. A
 flag for links you went over and want out of focus, set by hand, is reserved and not built.
 
@@ -486,7 +486,7 @@ a 22rem popup.
 (two stashes, or a stash and the reading list; addresses are compared as written, `#fragment` included,
 so Gmail's messages, which differ only by it, are not duplicates of one another), lists each such link
 with a checkbox per copy:
-when, which stash, and its reading-list status, newest first; a card with more than five copies shows
+when, which stash or the reading list, newest first; a card with more than five copies shows
 three and "+N more". Nothing starts ticked, and a locked stash's copy cannot be. A card's **Keep newest**
 and **Keep oldest** tick every other copy, **Tick all** every one; the same two for every card sit above
 the list. **Move N copies to Trash** needs no confirm, since the Trash undoes it, except when some link would
@@ -815,7 +815,8 @@ than a watcher.
   touched changes later. A patch acts only when its fingerprint matches exactly, and otherwise
   records why it skipped; one that fails is retried next launch. The first marks the 29 Sep 2026
   OneTab import (8 stashes written within ten seconds, identified by that window and their tab
-  counts) as an import.
+  counts) as an import. One waits for the helper, saves a backup, then strips the unread opened marks,
+  verdicts and statuses.
 - There is no bulk clear or reset: links, captures and stashes go one at a time (or the copies
   ticked in Duplicates), each moved to the Trash for 30 days; Delete forever and Empty Trash ask first.
 - Article bodies are read with `innerText`, not `textContent`, so paragraph breaks and code

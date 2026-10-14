@@ -50,7 +50,8 @@ Changing (needs Firefox running; each change is journaled)
   tag-create NAME [--hue 0-359]   tag-rename OLD NEW   tag-delete NAME   tag-recolor NAME HUE
   add URL... [--note TEXT]        put links on the reading list
   remove URL --stash ID | --list | --capture | --everywhere
-                                  one copy unless told otherwise; --capture also takes the list entry;
+                                  one copy unless told otherwise; --capture also takes the list entry and the capture;
+                                  everything removed waits 30 days in the Trash (Links page);
                                   with no flag, works only when the link is held in one place
   stash-rename ID NAME            stash-flag ID --lock|--unlock|--star|--unstar
   stash-delete ID                 the whole stash (refused while locked)
