@@ -62,6 +62,30 @@ await check("undo refuses to overwrite a change made after the agent's, unless f
   if (!f.ok || (await tagsOf(CAP)).length) throw new Error(JSON.stringify(f));
 });
 
+await check("agent-set tag suggestions show on links, step aside for tags, and undo reverts them", async () => {
+  const suggestedOf = async url => (await getLinks()).links.find(l => l.key === keyOf(url))?.suggested || [];
+  const set = (suggestions, replace = false) => agentRequest("call", { message: { type: "set-tag-suggestions", suggestions, replace } });
+  const res = await set({ [CAP]: [{ tag: "Dev  Tools", p: 0.4, by: "system-one" }, { tag: "ai", p: 0.9, by: "model" }],
+    "https://example.org/listed": [{ tag: "video", p: 0.7, by: "model" }] });
+  if (!res.ok || res.count !== 2 || !res.undo) throw new Error(JSON.stringify(res));
+  const got = await suggestedOf(CAP);
+  if (got.map(s => s.tag).join() !== "ai,dev tools" || got[0].p !== 0.9 || got[0].by !== "model") throw new Error(JSON.stringify(got));
+  await setTags(CAP, ["mine"]);
+  if ((await suggestedOf(CAP)).length) throw new Error("a link with tags carries suggestions");
+  await setTags(CAP, []);
+  const merged = await set({ "https://example.org/listed": [] });
+  if (!merged.ok || merged.count !== 1 || (await suggestedOf("https://example.org/listed")).length || (await suggestedOf(CAP)).length !== 2) throw new Error(JSON.stringify(merged));
+  const replaced = await set({ "https://example.org/listed": [{ tag: "news", p: 0.5, by: "system-one" }] }, true);
+  if (replaced.count !== 1 || (await suggestedOf(CAP)).length) throw new Error(JSON.stringify(replaced));
+  if ((await set({ [CAP]: "ai" })).ok) throw new Error("a malformed list was accepted");
+  const u = await agentRequest("undo", {});
+  if (!u.ok) throw new Error(JSON.stringify(u));
+  if ((await suggestedOf(CAP)).length !== 2) throw new Error("undo did not bring the replaced suggestions back");
+  await agentRequest("undo", {});
+  await agentRequest("undo", {});
+  if ((await browser.storage.local.get("tagSuggestions")).tagSuggestions) throw new Error("undo left suggestions in storage");
+});
+
 await check("agents cannot send what acts on tabs", async () => {
   for (const type of ["stash", "restore-stash", "next", "capture-url", "open-list", "queue-active"]) {
     const res = await agentRequest("call", { message: { type } });

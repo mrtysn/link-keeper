@@ -845,6 +845,44 @@ await check("tags: set by hand per URL, guesses from the site until then, one ta
   assert.deepEqual(by("https://github.com").guessed, ["code"], "clearing brings the guess back");
 });
 
+await check("tag suggestions: stored per link, cleaned, merged or replaced, hidden once the link has tags, kept when a stash is tagged", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [
+    { url: "https://github.com/me/repo" }, { url: "https://plain.example/" }, { url: "https://other.example/" }] }];
+  await load(browser);
+  const links = async () => plain(await browser.handle({ type: "links" })).links;
+  const by = async u => (await links()).find(x => x.url.startsWith(u));
+  const s = (tag, p, by = "model") => ({ tag, p, by });
+  let res = await browser.handle({ type: "set-tag-suggestions", suggestions: {
+    "https://plain.example/": [s("Dev  Tools", 0.4), s("ai", 0.9), s("ai", 0.1), s("", 1)],
+    "https://github.com/me/repo": [s("code", 2, "system-one")] } });
+  assert.deepEqual([res.ok, res.count], [true, 2]);
+  assert.deepEqual((await by("https://plain")).suggested, [s("ai", 0.9), s("dev tools", 0.4)], "cleaned, best first, one per tag");
+  assert.equal((await by("https://github.com")).suggested[0].p, 1, "p is held within 0..1");
+  assert.equal(store.tagSuggestions["plain.example"].tags.length, 2);
+  assert.match(store.tagSuggestions["plain.example"].at, /^\d{4}-\d\d-\d\dT/);
+
+  res = await browser.handle({ type: "set-tag-suggestions", suggestions: { "https://other.example/": [s("news", 0.5, "system-one")] } });
+  assert.equal(res.count, 3, "merging keeps the other links' entries");
+  res = await browser.handle({ type: "set-tag-suggestions", suggestions: { "https://other.example/": [] } });
+  assert.equal(res.count, 2, "an empty list removes that link's entry");
+  assert.equal((await browser.handle({ type: "set-tag-suggestions", suggestions: { "https://plain.example/": "ai" } })).ok, false);
+
+  await browser.handle({ type: "set-tags", url: "https://plain.example/", tags: ["mine"] });
+  assert.deepEqual((await by("https://plain")).suggested, [], "a link with tags of its own carries none");
+  assert.ok(store.tagSuggestions["plain.example"], "the stored entry stays");
+  await browser.handle({ type: "set-tags", url: "https://plain.example/", tags: [] });
+  assert.equal((await by("https://plain")).suggested.length, 2, "and returns when the tags go");
+
+  const { sessions: [st] } = plain(await browser.handle({ type: "sessions" }));
+  await browser.handle({ type: "tag-stash", id: st.id, tags: ["batch"] });
+  assert.deepEqual((await by("https://plain")).tags, ["ai", "dev tools", "batch"], "tagging a stash keeps the suggestions shown");
+  assert.deepEqual((await by("https://other")).tags, ["batch"]);
+
+  res = await browser.handle({ type: "set-tag-suggestions", suggestions: { "https://other.example/": [s("news", 0.5)] }, replace: true });
+  assert.equal(res.count, 1, "replace drops every other entry");
+});
+
 await check("tag library: presets first, every tag in use joins it, made, recoloured, merged and deleted", async () => {
   const { browser, store } = makeBrowser([]);
   store.items = [{ url: "https://a.example/", status: "pending" }];

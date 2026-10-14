@@ -14,6 +14,8 @@
  *   seen    — opened, restored or read at some point
  *   date    — when it was set aside: saved, added to the list, or stashed, whichever is known
  *   tags    — the tags set by hand, or [] (stored in linkTags, keyed like the link)
+ *   suggested — a local model's stored suggestions [{ tag, p, by }], best first, while tags is empty, else []
+ *               (stored in tagSuggestions, keyed like the link; by is "system-one" or "model")
  *   kinds   — what kind of thing it is, read off its site or capture ("code", "video", …); never stored
  *   guessed — kinds while tags is empty, else []: what the pages show dimmed in place of tags
  */
@@ -71,6 +73,16 @@ function guessTags(url, cap) {
   return [];
 }
 
+/* A link's stored suggestions, cleaned: tags named, p within 0..1, best first. */
+function suggestionsFor(map, key) {
+  const list = map?.[key]?.tags;
+  if (!Array.isArray(list)) return [];
+  const out = list.filter(s => s && cleanTag(s.tag))
+    .map(s => ({ tag: cleanTag(s.tag), p: Math.min(1, Math.max(0, Number(s.p) || 0)), by: s.by === "model" ? "model" : "system-one" }))
+    .sort((a, b) => b.p - a.p);
+  return out.filter((s, i) => out.findIndex(o => o.tag === s.tag) === i);
+}
+
 const hrefOf = l => (typeof l === "string" ? l : l?.resolved || l?.href) || null;
 
 /* What the pages show of a capture. */
@@ -101,7 +113,7 @@ const LIST_VERDICT = { kept: "keep", skipped: "drop" };
 
 /* items and captures as stored, sessions as getSessions gives them, currentKey the reading list's
  * current entry. Returns { links, stashes }, stashes in their own order with each tab's link key. */
-function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {} }) {
+function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {}, suggestions = {} }) {
   const capBy = new Map();
   for (const c of captures) {
     if (c.source_url) capBy.set(keyOf(c.source_url), c);
@@ -162,6 +174,7 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     const stashed = link.copies.map(c => stashAt.get(c.stash)).filter(Boolean).sort()[0] || null;
     link.date = link.list?.saved_at || link.list?.added_at || stashed;
     link.tags = (tags[link.key] || []).slice();
+    link.suggested = link.tags.length ? [] : suggestionsFor(suggestions, link.key);
     link.kinds = guessTags(link.url, link.cap);
     link.guessed = link.tags.length ? [] : link.kinds;
   }

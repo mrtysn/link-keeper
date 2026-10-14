@@ -1361,9 +1361,10 @@ allowPreviewFrames().catch(e => console.error("preview frames:", e));
 
 /* Every source joined into one dataset for the pages; joinLinks in links.js does the joining. */
 async function getLinks() {
-  const [items, captures, sessions, thumbs, current, tags] =
-    [await getItems(), await getCaptures(), await getSessions(), await read("thumbs", {}), await getCurrent(), await read("linkTags", {})];
-  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags });
+  const [items, captures, sessions, thumbs, current, tags, suggestions] =
+    [await getItems(), await getCaptures(), await getSessions(), await read("thumbs", {}), await getCurrent(), await read("linkTags", {}),
+      await read("tagSuggestions", {})];
+  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags, suggestions });
 }
 
 /* --- tags ------------------------------------------------------------------------
@@ -1373,7 +1374,12 @@ async function getLinks() {
  *
  * tagDefs: { seeded: true, list: [{ name, hue }] } — the tag library, in the order tags were made:
  * the presets, then each tag as it is first used or created. hue is null until a colour is picked,
- * and the name's own hue shows. Every tag in use is in it; the pages offer it to pick from. */
+ * and the name's own hue shows. Every tag in use is in it; the pages offer it to pick from.
+ *
+ * tagSuggestions: { [link key]: { at, tags: [{ tag, p, by }] } } — what a local model suggests for a
+ * link, best first (p is 0..1; by is "system-one" or "model"). Written only by agents
+ * (set-tag-suggestions). The pages show them dimmed in a link's place until it has tags of its own;
+ * accepting them is an ordinary set-tags, and the entry stays in storage, unshown. */
 const PRESET_TAGS = ["to-read", "to-watch", "to-try", "reference", "inspiration", "work", "personal", "buy",
   "dev", "ai", "design", "news", "video", "shopping", "music", "games"];
 const tagQueue = serial();
@@ -1411,17 +1417,36 @@ const recolorTag = (name, hue) => editTags((all, lib) => {
 /* Replace a link's tags; an empty list clears them, and its guesses show again. */
 const setTags = (url, tags) => editTags(all => { all[keyOf(url)] = tagList(tags); return { ok: true, tags: all[keyOf(url)] }; });
 
-/* Add tags to every tab of a stash. A link showing only guesses keeps them, now as its own. */
+/* Replace the suggestions of the links named (url → [{ tag, p, by }]), or of every link when replace
+ * is true. An empty list takes a link's entry away. Tag names are cleaned like any tag. */
+const setTagSuggestions = (suggestions, replace) => tagQueue(async () => {
+  if (!suggestions || typeof suggestions !== "object" || Array.isArray(suggestions)) return { ok: false, error: "suggestions must be an object of url → [{ tag, p, by }]" };
+  const all = replace ? {} : await read("tagSuggestions", {});
+  const at = new Date().toISOString();
+  let written = 0;
+  for (const [url, list] of Object.entries(suggestions)) {
+    if (!Array.isArray(list)) return { ok: false, error: `${url}: expected a list of { tag, p, by }` };
+    const tags = suggestionsFor({ k: { tags: list } }, "k");
+    const key = keyOf(url);
+    if (tags.length) { all[key] = { at, tags }; written++; } else delete all[key];
+  }
+  await browser.storage.local.set({ tagSuggestions: all });
+  return { ok: true, count: Object.keys(all).length, written };
+});
+
+/* Add tags to every tab of a stash. A link showing only suggestions or guesses keeps them, now as its own. */
 async function tagStash(id, add) {
   const stash = await findStash(id);
   if (!stash) return { ok: false, error: "that stash is gone" };
   const extra = tagList(add);
   if (!extra.length) return { ok: false, error: "no tag given" };
   const caps = new Map((await getCaptures()).map(c => [keyOf(c.url), c]));
+  const suggested = await read("tagSuggestions", {});
   return editTags(all => {
     for (const t of stash.tabs) {
       const k = keyOf(t.url);
-      const had = all[k]?.length ? all[k] : guessTags(t.url, caps.get(k));
+      const mine = suggestionsFor(suggested, k).map(s => s.tag);
+      const had = all[k]?.length ? all[k] : mine.length ? mine : guessTags(t.url, caps.get(k));
       all[k] = tagList([...had, ...extra]);
     }
     return { ok: true, tagged: stash.tabs.length };
@@ -1854,6 +1879,9 @@ async function handleMessage(msg) {
 
     case "set-tags":
       return setTags(String(msg.url || ""), msg.tags);
+
+    case "set-tag-suggestions":
+      return setTagSuggestions(msg.suggestions, !!msg.replace);
 
     case "tag-stash":
       return tagStash(msg.id, msg.tags);

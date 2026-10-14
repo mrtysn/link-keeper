@@ -47,6 +47,9 @@ if kill -0 $run 2>/dev/null; then
   cli_check "add" lk add https://example.org/from-cli
   cli_check "tag --add" lk tag https://example.org/from-cli --add cli
   cli_check "history lists the CLI's changes" zsh -c "node '$here/link-keeper.mjs' history | grep -q set-tags"
+  print -r -- '{"https://example.org/from-cli": [{"tag": "dev", "p": 0.8, "by": "model"}], "https://example.org/cap": [{"tag": "ai", "p": 0.6, "by": "system-one"}]}' > "$work/suggestions.json"
+  cli_check "suggest-set" lk suggest-set "$work/suggestions.json"
+  cli_check "suggestions counts the link with no tags of its own" zsh -c "node '$here/link-keeper.mjs' suggestions | grep -q '^1 links with suggestions'"
   cli_check "tabs stay out of reach" zsh -c "! node '$here/link-keeper.mjs' call stash"
   lk tag-create cli-done > /dev/null
 fi
