@@ -118,7 +118,8 @@ def main() -> None:
               set(recs) == {REEL_SELF, REEL_SHARED, POST_ONLY_BOB, SAVED}, str(sorted(recs)))
         check("a link met in two threads keeps both", recs[REEL_SHARED]["thread"] == ["me_1", "alice_2"], str(recs[REEL_SHARED]))
         check("account is stamped", all(r["account"] == "main" for r in recs.values()))
-        check("sender is the person who sent it", recs[POST_ONLY_BOB]["sender"] == "Bob", str(recs[POST_ONLY_BOB]))
+        check("senders names the person who sent it", recs[POST_ONLY_BOB]["senders"] == ["Bob"], str(recs[POST_ONLY_BOB]))
+        check("a link two people sent keeps both, you once", recs[REEL_SHARED]["senders"] == ["Me", "Alice"], str(recs[REEL_SHARED]))
         check("saved posts are their own thread", recs[SAVED]["thread"] == ["saved_posts"], str(recs[SAVED]))
         check("first caption of a shared link is kept", recs[REEL_SHARED]["text"] == "in self too", recs[REEL_SHARED]["text"])
         check("mojibake is repaired", recs[POST_ONLY_BOB]["text"] == "bob post \u00e9", recs[POST_ONLY_BOB]["text"])
@@ -131,16 +132,16 @@ def main() -> None:
         by_url = {l["url"]: l for l in lines}
         check("origins cover every link, query stripped",
               set(by_url) == {SITE_SELF, "https://example.com/article", REEL_SELF, REEL_SHARED, SAVED}, str(sorted(by_url)))
-        check("origin carries account, thread and sender",
+        check("origin carries account, thread and senders",
               by_url["https://example.com/article"] == {"url": "https://example.com/article", "account": "main",
-                                                        "thread": ["alice_2"], "sender": "Alice"},
+                                                        "thread": ["alice_2"], "senders": ["Alice"]},
               str(by_url["https://example.com/article"]))
 
         enriched = json.dumps({"kind": "page", "url": "https://example.com/article", "title": "T"}) + "\n" \
             + json.dumps({"kind": "page", "url": "https://elsewhere.test/"}) + "\n"
         out = [json.loads(l) for l in run(ATTACH, origins, stdin=enriched).splitlines()]
         check("attach fills origin onto a matching record",
-              (out[0].get("account"), out[0].get("thread"), out[0].get("sender")) == ("main", ["alice_2"], "Alice"), str(out[0]))
+              (out[0].get("account"), out[0].get("thread"), out[0].get("senders")) == ("main", ["alice_2"], ["Alice"]), str(out[0]))
         check("attach leaves a non-matching record untouched", out[1] == {"kind": "page", "url": "https://elsewhere.test/"}, str(out[1]))
 
         keeps = json.dumps({"url": "https://example.com/article", "account": "other"})

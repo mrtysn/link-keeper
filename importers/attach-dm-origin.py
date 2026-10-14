@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# DESC: Put the account, thread and sender a DM link came from back onto capture records the enrichers rebuilt.
-"""Copy `account`, `thread` and `sender` from origin lines onto capture records, matched by link.
+# DESC: Put the account, thread and senders a DM link came from back onto capture records the enrichers rebuilt.
+"""Copy `account`, `thread` and `senders` from origin lines onto capture records, matched by link.
 
 An importer such as `instagram.py --origins-out` writes one line per link it found in a DM:
-`{"url", "account", "thread", "sender"}`. The enrichers read only `URL<TAB>date`, so a link that
+`{"url", "account", "thread", "senders"}`. The enrichers read only `URL<TAB>date`, so a link that
 went through them comes back without that. This reads the finished capture records (JSONL) and
 fills the three fields in wherever a record's `url` or `source_url` matches an origin line — after
 dropping the query string, the fragment and a trailing slash from both sides. A record that already
 holds a field keeps it; one that matches nothing is passed through untouched.
 
-When the same link has several origin lines, `thread` takes the union in the order seen.
+When the same link has several origin lines, `thread` and `senders` take the union in the order seen.
 
 Usage:
     attach-dm-origin.py origins.jsonl [more-origins.jsonl ...] < captures.jsonl > captures.out.jsonl
@@ -43,11 +43,11 @@ def load_origins(paths: list[Path]) -> dict[str, dict]:
             if not k:
                 continue
             into = merged.setdefault(k, {})
-            for field in ("account", "sender"):
-                if row.get(field) and field not in into:
-                    into[field] = row[field]
-            threads = into.setdefault("thread", [])
-            threads += [t for t in row.get("thread") or [] if t not in threads]
+            if row.get("account") and "account" not in into:
+                into["account"] = row["account"]
+            for field in ("thread", "senders"):
+                seen = into.setdefault(field, [])
+                seen += [v for v in row.get(field) or [] if v not in seen]
     return merged
 
 
@@ -63,7 +63,7 @@ def attach(record: dict, origins: dict[str, dict]) -> dict:
 
 def main() -> None:
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-    p = argparse.ArgumentParser(description="Attach DM origins (account, thread, sender) to capture records.")
+    p = argparse.ArgumentParser(description="Attach DM origins (account, thread, senders) to capture records.")
     p.add_argument("origins", nargs="+", type=Path, help="origin JSONL file(s), from an importer's --origins-out")
     p.add_argument("--captures", type=Path, help="capture records to read instead of stdin")
     args = p.parse_args()

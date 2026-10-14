@@ -1588,7 +1588,7 @@ article.ws-card h3::before {
 <tr><td><code>via</code></td><td>importer name</td></tr>
 <tr><td><code>account</code></td><td>new: account folder</td></tr>
 <tr><td><code>thread</code></td><td>new: list of threads</td></tr>
-<tr><td><code>sender</code></td><td>new: who sent it</td></tr>
+<tr><td><code>senders</code></td><td>new: each distinct sender, you once</td></tr>
 </tbody>
 </table>
 <p>The existing fields keep their names: <code>saved_at</code>, not <code>sent_at</code>, and <code>via</code>, not <code>source</code>. <code>via</code> takes <code>instagram-export</code>, <code>x-archive</code> or <code>chrome-agent</code>. A record with <code>text</code> is what lets a later import upgrade a bare one.</p>
@@ -1599,7 +1599,7 @@ article.ws-card h3::before {
 <p>The archive and export routes are the baseline. A browser agent is a fallback that produces the same records, and each run needs your approval first: it drives your logged-in accounts, so the count of pages is stated up front and the first captcha or challenge ends the run. Chrome would also need those accounts logged in.</p>
 <ol>
 <li><strong>Plain external links</strong> (a DM that contains a news article or a tweet): the agent returns <code>URL&lt;TAB&gt;YYYY-MM-DD</code> lines. The <code>enrich-x.py</code> and <code>enrich-web.py</code> scripts resolve them with no login. Both read only the first two columns, so the account and thread cannot ride along; use tier 2 when they matter.</li>
-<li><strong>Login-walled Instagram posts and reels</strong>, and any link where the account and thread must be kept: the agent returns full records with <code>via: "chrome-agent"</code>, plus <code>account</code>, <code>thread</code> and <code>sender</code>.</li>
+<li><strong>Login-walled Instagram posts and reels</strong>, and any link where the account and thread must be kept: the agent returns full records with <code>via: "chrome-agent"</code>, plus <code>account</code>, <code>thread</code> and <code>senders</code>.</li>
 </ol>
 </section>
 <section id="where-refresh-changes">

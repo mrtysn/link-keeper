@@ -557,7 +557,8 @@ this whenever an export containing messages exists — Instagram exports are per
 thread with its link count, most links first; the name in the second column is the thread's slug.
 `--thread SLUG` (repeatable) reads that thread besides the self-thread, and `--account NAME` stamps each
 record with the account, because an export does not say whose it is. Each record then carries
-`account`, `thread` (a list: a link met in several threads is one record) and `sender`, stored with it
+`account`, `thread` (a list: a link met in several threads is one record) and `senders` (each distinct
+person who sent it; you count once however often), stored with it
 but shown in no main view. For several accounts, put each account's exports in its own folder and name
 the threads to read in `config.local.sh` (`config.local.sh.example` shows the layout):
 
@@ -567,7 +568,7 @@ the threads to read in `config.local.sh` (`config.local.sh.example` shows the la
 
 `refresh.zsh` then reads the newest export of each account. Links to other sites go through the enrichers
 as plain `URL<TAB>date`, which cannot carry the origin, so `importers/attach-dm-origin.py` puts `account`,
-`thread` and `sender` back on their records after the merge. A link two accounts both hold keeps the
+`thread` and `senders` back on their records after the merge. A link two accounts both hold keeps the
 first account's record on import. Without `IG_ACCOUNTS` the old single-export setup is unchanged.
 
 A reel is a video, so a captured URL is not yet captured content. `tools/watch-reel.zsh` closes that

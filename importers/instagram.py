@@ -23,8 +23,9 @@ so reading only the first file silently drops the oldest half.
 Other people's threads are read only when named with `--thread` (repeatable), in addition to the
 self-thread. A thread's directory name is Meta's slug, `<name>_<id>`, which you only learn from the
 export: `--list-threads` prints every thread with its link count, most links first. A link met in
-several threads is one record whose `thread` lists them all; `--account NAME` stamps the record with
-the account the export belongs to, since the export itself does not say.
+several threads is one record whose `thread` lists them all, and whose `senders` lists each distinct
+person who sent it (you, however often, count once); `--account NAME` stamps the record with the
+account the export belongs to, since the export itself does not say.
 
 Accepts the export as the downloaded .zip or as an unzipped directory.
 
@@ -66,7 +67,7 @@ def parse_args() -> argparse.Namespace:
                    "(see --list-threads)")
     p.add_argument("--account", help="name of the account this export belongs to, stored on each record")
     p.add_argument("--origins-out", type=Path, metavar="FILE",
-                   help="also write one JSON line per link — url, account, thread, sender — so the "
+                   help="also write one JSON line per link — url, account, thread, senders — so the "
                    "origin can be put back on records that enrichment rebuilt")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--json", action="store_true", help="emit capture records for instagram.com links")
@@ -173,7 +174,7 @@ def message_links(msg: dict):
 
 
 def gather(ex: Export, chosen: list[str]):
-    """Yield (url, date, share|None, thread, sender) for every link: the threads first, then saved posts."""
+    """Yield (url, date, share|None, thread, sender) for every sighting of a link: the threads first, then saved posts."""
     for thread, files in thread_files(ex, chosen):
         for name in files:
             for msg in ex.load(name).get("messages", []):
@@ -204,7 +205,7 @@ def list_threads(ex: Export) -> list[tuple[int, str, str]]:
 
 
 def record(url: str, date: str, share: dict, account: str | None = None,
-           threads: list[str] | None = None, sender: str | None = None) -> dict:
+           threads: list[str] | None = None, senders: list[str] | None = None) -> dict:
     m = SHORTCODE_RE.search(url)
     kind = "reel" if m and m.group(1) in ("reel", "reels", "tv") else "ig-post"
     return {
@@ -219,19 +220,19 @@ def record(url: str, date: str, share: dict, account: str | None = None,
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "via": "instagram-export",
         "site": "Instagram",
-        **origin(account, threads, sender),
+        **origin(account, threads, senders),
     }
 
 
-def origin(account: str | None, threads: list[str] | None, sender: str | None) -> dict:
+def origin(account: str | None, threads: list[str] | None, senders: list[str] | None) -> dict:
     """The optional fields that say where in the export a link came from."""
     out: dict = {}
     if account:
         out["account"] = account
     if threads:
         out["thread"] = threads
-    if sender:
-        out["sender"] = sender
+    if senders:
+        out["senders"] = senders
     return out
 
 
@@ -258,17 +259,20 @@ def main() -> None:
         key = canonical(url)
         row = rows.get(key)
         if row is None:
-            rows[key] = {"url": url, "date": date, "share": share, "threads": [thread], "sender": sender}
+            rows[key] = {"url": url, "date": date, "share": share, "threads": [thread],
+                         "senders": [sender] if sender else []}
             continue
         if thread not in row["threads"]:
             row["threads"].append(thread)
+        if sender and sender not in row["senders"]:
+            row["senders"].append(sender)
         row["share"] = row["share"] or share
     ordered = sorted(rows.values(), key=lambda r: r["date"], reverse=True)
 
     if args.origins_out:
         with args.origins_out.open("w") as fh:
             for r in ordered:
-                line = {"url": canonical(r["url"]), **origin(args.account, r["threads"], r["sender"])}
+                line = {"url": canonical(r["url"]), **origin(args.account, r["threads"], r["senders"])}
                 fh.write(json.dumps(line, ensure_ascii=False) + "\n")
 
     if args.stats:
@@ -282,7 +286,7 @@ def main() -> None:
     if args.json:
         for r in ordered:
             if is_instagram(r["url"]):
-                rec = record(r["url"], r["date"], r["share"] or {}, args.account, r["threads"], r["sender"])
+                rec = record(r["url"], r["date"], r["share"] or {}, args.account, r["threads"], r["senders"])
                 print(json.dumps(rec, ensure_ascii=False))
         return
 
