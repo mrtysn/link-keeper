@@ -78,6 +78,14 @@ async function restoreFromTrash(ids) {
     done.push(...items.map(e => e.id));
     where.add("the reading list");
   }
+  const caps = picked.filter(e => e.kind === "capture");
+  if (caps.length) {
+    const have = await getCaptures();
+    const keys = new Set(have.map(c => keyOf(c.url)));
+    await setCaptures([...have, ...caps.map(e => e.capture).filter(c => !keys.has(keyOf(c.url)))]);
+    done.push(...caps.map(e => e.id));
+    where.add("the captures");
+  }
   const byStash = new Map();
   for (const e of picked.filter(e => e.kind === "tab")) {
     if (!byStash.has(e.stash.id)) byStash.set(e.stash.id, []);
@@ -1700,12 +1708,17 @@ async function handleMessage(msg) {
       const items = await getItems();
       const removed = items.filter(i => drop.has(keyOf(i.url)));
       await setItems(items.filter(i => !drop.has(keyOf(i.url))));
+      let gone = [];
       if (msg.alsoCaptures) {
         const captures = await getCaptures();
+        gone = captures.filter(c => drop.has(keyOf(c.url)));
         await setCaptures(captures.filter(c => !drop.has(keyOf(c.url))));
       }
       // A move's undo passes trash: false; so does anything that is putting the entry somewhere else.
-      const trashed = msg.trash === false ? [] : await addToTrash(removed.map(i => ({ kind: "item", url: i.url, title: i.title, item: i })));
+      const trashed = msg.trash === false ? [] : await addToTrash([
+        ...removed.map(i => ({ kind: "item", url: i.url, title: i.title, item: i })),
+        ...gone.map(c => ({ kind: "capture", url: c.url, title: c.title, capture: c })),
+      ]);
       return { ok: true, removed: drop.size, items: removed, trashed };
     }
 

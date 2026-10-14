@@ -1079,6 +1079,16 @@ await check("removing keeps a copy in the trash for 30 days, and restoring puts 
   assert.equal(store.items.filter(i => i.url === "https://list.example/").length, 1);
   assert.equal(store.items.find(i => i.url === "https://list.example/").status, "pending");
 
+  // A capture removed with its link (the CLI's remove --capture) waits in the trash too, and comes back once.
+  store.captures = [{ url: "https://list.example/", text: "saved text" }];
+  const rc = await browser.handle({ type: "remove", urls: ["https://list.example/"], alsoCaptures: true });
+  assert.equal(rc.trashed.length, 2, "the list entry and the capture");
+  assert.equal(store.captures.length, 0);
+  await browser.handle({ type: "trash-restore", ids: rc.trashed });
+  assert.equal(store.captures.filter(c => c.url === "https://list.example/").length, 1, "the capture is back");
+  await browser.handle({ type: "trash-restore", ids: rc.trashed });
+  assert.equal(store.captures.length, 1, "a second restore adds no copy");
+
   // Entries older than 30 days are dropped whenever the trash is read; delete forever and empty work.
   const old = new Date(Date.now() - 31 * 86400000).toISOString();
   const fresh = new Date(Date.now() - 29 * 86400000).toISOString();

@@ -1327,7 +1327,7 @@ function renderTrash() {
       const row = el("label", { className: "dup-row", title: e.url },
         box2,
         el("span", { className: "dup-where", textContent: e.title || e.url }),
-        el("span", { className: "dup-detail", textContent: `${e.kind === "item" ? "Reading list" : e.stash.name} · deleted forever in ${plural(left, "day")}` }),
+        el("span", { className: "dup-detail", textContent: `${e.kind === "item" ? "Reading list" : e.kind === "capture" ? "Capture" : e.stash.name} · deleted forever in ${plural(left, "day")}` }),
         ...(e.title ? [el("span", { className: "dup-url dup-rowurl", textContent: e.url })] : []));
       card.append(row);
       rows.push({ el: row, id: e.id });

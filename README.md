@@ -499,7 +499,7 @@ carry it). **Restore** puts a tab back in its stash at its old place with its ma
 stash again once, and a reading-list link back on the list; **Delete forever** and **Empty Trash** ask
 first. Moving a link (to the list, between stashes) and undoing a move leave nothing in it; `⌘Z` after a removal takes its entry out again. Entries older than
 30 days are dropped whenever the Trash is read, and at start. A capture removed through the CLI's
-`remove --capture` is not kept.
+`remove --capture` waits there too, as its own entry, and Restore puts it back.
 
 Clicking a reading-list title opens it in a new tab and marks that entry current, so a
 `Ctrl+Shift+K` there attaches the capture to the right list entry; clicking a stashed tab's title
