@@ -48,7 +48,7 @@ def write_thread(root: Path, slug: str, people: list[str], messages: list[dict])
     (d / "message_1.json").write_text(json.dumps(body))
 
 
-def build_export(root: Path, external: bool = True) -> None:
+def build_export(root: Path, external: bool = True, saved_layout: str = "older") -> None:
     day = 86_400_000
     t0 = 1_760_000_000_000
     write_thread(root, "me_1", ["Me"], [
@@ -70,8 +70,15 @@ def build_export(root: Path, external: bool = True) -> None:
     ])
     saved = root / "your_instagram_activity" / "saved"
     saved.mkdir(parents=True)
-    (saved / "saved_posts.json").write_text(json.dumps({"saved_saved_media": [
-        {"title": "saver", "string_map_data": {"Saved on": {"href": SAVED, "timestamp": 1_760_000_000}}}]}))
+    if saved_layout == "newer":   # a list of label_values, as Meta's 2026 exports write it
+        body = [{"timestamp": 1_760_000_000, "media": [], "fbid": "1",
+                 "label_values": [{"label": "URL", "value": SAVED, "href": SAVED},
+                                  {"label": "Caption", "value": "saved caption"},
+                                  {"label": "Title", "value": ""}, {}]}]
+    else:
+        body = {"saved_saved_media": [
+            {"title": "saver", "string_map_data": {"Saved on": {"href": SAVED, "timestamp": 1_760_000_000}}}]}
+    (saved / "saved_posts.json").write_text(json.dumps(body))
 
 
 def run(*args: str | Path, stdin: str | None = None) -> str:
@@ -147,6 +154,14 @@ def main() -> None:
         keeps = json.dumps({"url": "https://example.com/article", "account": "other"})
         kept = json.loads(run(ATTACH, origins, stdin=keeps + "\n"))
         check("attach keeps a field the record already has", kept["account"] == "other", str(kept))
+
+        newer = Path(tmp) / "instagram-newer"
+        newer.mkdir()
+        build_export(newer, saved_layout="newer")
+        newer_recs = {json.loads(l)["url"]: json.loads(l) for l in run(IMPORTER, newer, "--json").splitlines()}
+        check("saved posts in the newer list layout are read", SAVED in newer_recs, str(sorted(newer_recs)))
+        check("...with their caption", newer_recs[SAVED]["text"] == "saved caption", str(newer_recs.get(SAVED)))
+        check("--stats runs on the newer layout", "links" in run(IMPORTER, newer, "--stats"))
 
         # The same link read from two accounts' exports.
         recs_in = [

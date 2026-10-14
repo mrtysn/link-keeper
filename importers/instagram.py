@@ -185,12 +185,29 @@ def gather(ex: Export, chosen: list[str]):
 
     for name in ex.names():
         if name.endswith("saved/saved_posts.json"):
-            for item in ex.load(name).get("saved_saved_media", []):
-                data = item.get("string_map_data", {}).get("Saved on", {})
-                if data.get("href"):
-                    ts = data.get("timestamp")
-                    date = datetime.fromtimestamp(ts).strftime("%Y-%m-%d") if ts else ""
-                    yield data["href"], date, {"original_content_owner": item.get("title")}, "saved_posts", None
+            for url, ts, share in saved_posts(ex.load(name)):
+                date = datetime.fromtimestamp(ts).strftime("%Y-%m-%d") if ts else ""
+                yield url, date, share, "saved_posts", None
+
+
+def saved_posts(data):
+    """Yield (url, timestamp, share) for each saved post, in either of Meta's two layouts.
+
+    Older exports: `{"saved_saved_media": [{"title": <owner>, "string_map_data": {"Saved on": {href, timestamp}}}]}`.
+    Newer ones: a list of `{"timestamp", "label_values": [{"label": "URL", "href"}, {"label": "Caption", "value"}, ...]}`.
+    """
+    if isinstance(data, dict):
+        for item in data.get("saved_saved_media", []):
+            entry = item.get("string_map_data", {}).get("Saved on", {})
+            if entry.get("href"):
+                yield entry["href"], entry.get("timestamp"), {"original_content_owner": item.get("title")}
+        return
+    for item in data:
+        labelled = {lv["label"]: lv for lv in item.get("label_values", []) if lv.get("label")}
+        url = labelled.get("URL", {}).get("href")
+        if url:
+            caption = labelled.get("Caption", {}).get("value")
+            yield url, item.get("timestamp"), {"share_text": caption, "original_content_owner": None}
 
 
 def list_threads(ex: Export) -> list[tuple[int, str, str]]:
