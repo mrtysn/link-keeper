@@ -85,8 +85,8 @@
       { id: `bm${++n}`, url: "file:///Users/someone/dev/notes/out/2026-09-27-report.html", title: "Companion Link Report" },
       { id: `bm${++n}`, url: "moz-extension://4b1c/bookmarks.html", title: "Visual bookmarks" });
     const first = tabs.slice(0, 7).map((t, i) => ({
-      ...t, ...(i === 1 && { seen_at: "2026-09-28T09:12:00Z", verdict: "keep" }), ...(i === 2 && { container: "firefox-container-7" }),
-      ...(i === 5 && { verdict: "drop" }),
+      ...t, ...(i === 1 && { seen_at: "2026-09-28T09:12:00Z" }), ...(i === 2 && { container: "firefox-container-7" }),
+      ...(i === 5 && { seen_at: "2026-09-28T09:20:00Z" }),
     }));
     const second = tabs.slice(7, 13);
     const third = [{ ...tabs[0], id: `bm${++n}` }, ...tabs.slice(13),
@@ -113,7 +113,7 @@
         url: r.url, title: r.cap.title, author: r.cap.handle ? { handle: r.cap.handle } : undefined, text: r.cap.text, kind: r.cap.kind,
         account: r.cap.account, thread: r.cap.thread, senders: r.cap.senders,
         links: r.cap.links, reply_links: r.cap.reply_links,
-        replies: Array.from({ length: r.cap.reply_count || 0 }, (_, n) => ({ handle: `@reply${n}`, text: `reply ${n}`, url: `https://x.com/reply${n}/status/${n}`, links: [] })), images: r.cap.images, verdict: r.cap.verdict || undefined,
+        replies: Array.from({ length: r.cap.reply_count || 0 }, (_, n) => ({ handle: `@reply${n}`, text: `reply ${n}`, url: `https://x.com/reply${n}/status/${n}`, links: [] })), images: r.cap.images,
         captured_at: "2026-09-20T10:00:00Z",
       })),
     };
@@ -251,16 +251,6 @@
               for (const fn of bookmarkListeners.onCreated || []) fn(`imp${i}`, { id: `imp${i}`, url: t.url });
             }
             return { ok: true, stashes: msg.stashes.length, tabs: tabs.length };
-          }
-          case "judge-link": {
-            const key = keyOf(msg.url), v = msg.verdict, st = stored();
-            for (const c of st.captures) if (keyOf(c.url) === key) v ? (c.verdict = v) : delete c.verdict;
-            for (const i of st.items) {
-              if (keyOf(i.url) !== key) continue;
-              if (v === "keep") i.status = "kept"; else if (v === "drop") i.status = "skipped"; else if (i.status === "kept" || i.status === "skipped") i.status = "seen";
-            }
-            for (const s of st.sessions) for (const t of s.tabs) if (keyOf(t.url) === key) v ? Object.assign(t, { verdict: v, judged_at: new Date().toISOString() }) : (delete t.verdict, delete t.judged_at);
-            return { ok: true };
           }
           case "restore-stash": {
             const remove = !!msg.flip;   // the mock's setting is "keep"

@@ -163,7 +163,7 @@ function cardEl(card, top) {
   const restored = card.link.copies.map(c => c.seen_at).filter(Boolean).sort().pop();
   if (restored) bits.push(`opened ${dayOf(restored)}`);
   const when = Object.assign(document.createElement("div"), { className: "when", textContent: `${bits.join(" · ")} ` });
-  when.append(...[verdictBadge(card.link), readBadge(card.link)].filter(Boolean));
+  when.append(...[readBadge(card.link)].filter(Boolean));
   names.append(when);
   head.append(mono, names);
   // Stored suggestions get their own labelled row under the title; own tags and site guesses stay in the corner.

@@ -5,13 +5,12 @@
  * and by the page previews and tests, which call it with made-up data.
  *
  * A link is one URL, however many places hold it:
- *   { key, url, title, sources: ["tabs" | "import" | "list"], list, cap, copies, verdict, seen, date,
+ *   { key, url, title, sources: ["tabs" | "import" | "list"], list, cap, copies, seen, date,
  *     tags, kinds, guessed }
  *   list    — its reading-list entry { status, added_at, saved_at, note, current, loose }, or null
  *   cap     — what was read off the page, or null
- *   copies  — one per stash that holds it: { stash, tab, seen_at, verdict, judged_at, container }
- *   verdict — "keep", "drop" or null, the same across every copy (see judgeLink in background.js)
- *   seen    — opened, restored or read at some point
+ *   copies  — one per stash that holds it: { stash, tab, seen_at, container }
+ *   seen    — opened or captured at some point, by any copy
  *   date    — when it was set aside: saved, added to the list, or stashed, whichever is known
  *   tags    — the tags set by hand, or [] (stored in linkTags, keyed like the link)
  *   suggested — a local model's stored suggestions [{ tag, p, by }], best first, while tags is empty, else []
@@ -127,11 +126,8 @@ function capView(c, thumbs = {}) {
     shotThumb: thumbs[c.screenshot?.filename] || null,
     shotId: c.screenshot?.downloadId ?? null,
     code_blocks: (c.code_blocks || []).length,
-    verdict: c.verdict || null,
   };
 }
-
-const LIST_VERDICT = { kept: "keep", skipped: "drop" };
 
 /* items and captures as stored, sessions as getSessions gives them, currentKey the reading list's
  * current entry. Returns { links, stashes }, stashes in their own order with each tab's link key. */
@@ -180,18 +176,15 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     const source = s.source === "import" ? "import" : "tabs";
     const tabs = s.tabs.map(t => {
       const link = linkFor(t.url, t.title);
-      link.copies.push({ stash: s.id, tab: t.id, seen_at: t.seen_at || null, verdict: t.verdict || null, judged_at: t.judged_at || null, container: t.container || null });
+      link.copies.push({ stash: s.id, tab: t.id, seen_at: t.seen_at || null, container: t.container || null });
       addSource(link, source);
-      return { id: t.id, key: link.key, url: t.url, title: t.title || null, seen_at: t.seen_at || null, verdict: t.verdict || null, container: t.container || null };
+      return { id: t.id, key: link.key, url: t.url, title: t.title || null, seen_at: t.seen_at || null, container: t.container || null };
     });
     return { id: s.id, name: s.name, created_at: s.created_at, locked: !!s.locked, starred: !!s.starred, source, format: s.format || null, tabs };
   });
   const stashAt = new Map(stashes.map(s => [s.id, s.created_at]));
 
   for (const link of byKey.values()) {
-    // Newest judgement first: a capture's, then any stash copy's, then what the reading list says.
-    const judged = link.copies.filter(c => c.verdict).sort((a, b) => String(b.judged_at).localeCompare(String(a.judged_at)));
-    link.verdict = link.cap?.verdict || judged[0]?.verdict || LIST_VERDICT[link.list?.status] || null;
     link.seen = !!(link.cap || (link.list && link.list.status !== "pending") || link.copies.some(c => c.seen_at));
     const stashed = link.copies.map(c => stashAt.get(c.stash)).filter(Boolean).sort()[0] || null;
     link.date = link.list?.saved_at || link.list?.added_at || stashed;

@@ -174,7 +174,7 @@ const Peek = (() => {
     const text = (cap?.text || "").replace(/\s+/g, " ").trim();
     const where = [link.list ? "Reading list" : null,
       ...link.copies.map(c => stashOf(d, c.stash)).filter(Boolean).map(stashName)].filter(Boolean);
-    const state = el("div", { className: "pk-badges" }, ...[verdictBadge(link), readBadge(link)].filter(Boolean),
+    const state = el("div", { className: "pk-badges" }, ...[readBadge(link)].filter(Boolean),
       ...(link.tags || []).map(t => tagChip(t)));
     return el("div", {},
       head(linkTitle(link), kindOf(link.url) === "web" ? hostOf(link.url) : shortUrl(link.url)),
@@ -204,7 +204,7 @@ const Peek = (() => {
     if (src === "list") {
       const l = link.list;
       if (!l) return null;
-      const rows = [["Status", { pending: "not opened yet", seen: "opened, undecided", kept: "kept", skipped: "skipped" }[l.status] || l.status],
+      const rows = [["Status", { pending: "not opened yet", seen: "opened" }[l.status] || l.status],
         ["Added", l.added_at && whenOf(l.added_at)], ["Saved", l.saved_at && whenOf(l.saved_at)],
         ["Note", l.note], ["Kept from", l.loose ? "a page you were on, not the list itself" : null]].filter(r => r[1]);
       return el("div", {}, head(SOURCE.list, linkTitle(link)),

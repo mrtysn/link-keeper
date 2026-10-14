@@ -1,7 +1,7 @@
 /* A worklist of links you walk at your own pace, and a capture store you export as a file.
  *
  * Two lists in storage.local:
- *   items    — the worklist. Each entry is pending, seen (opened, not kept) or kept.
+ *   items    — the worklist. Each entry is pending or seen (opened).
  *   captures — what you actually decided to keep, with the page data read off the DOM.
  *
  * Manual trigger throughout. Opening the next link navigates the tab you are in; capturing
@@ -147,20 +147,21 @@ async function addItems(entries, note = "") {
   return { ok: true, added, updated, skipped, total: items.length };
 }
 
-async function markCurrent(status) {
+/* The current reading-list entry was opened or captured: it is seen. */
+async function markCurrent() {
   const current = await getCurrent();
   if (!current) return;
   const items = await getItems();
   const item = items.find(i => keyOf(i.url) === current.key);
-  if (item && item.status !== "kept") {
-    item.status = status;
-    item[status === "kept" ? "kept_at" : "seen_at"] = new Date().toISOString();
+  if (item) {
+    item.status = "seen";
+    item.seen_at = new Date().toISOString();
     await setItems(items);
   }
 }
 
 /* Open the next pending link in the tab you are in. Opening or capturing it counts as seen;
- * only a keep makes it kept. */
+ */
 async function openNext() {
   const items = await getItems();
   const target = [...items].sort(byNewest).find(i => i.status === "pending");
@@ -172,7 +173,7 @@ async function openNext() {
   await browser.storage.local.set({
     current: { key: keyOf(target.url), url: target.url, at: new Date().toISOString() },
   });
-  if (target.status === "pending") await markCurrent("seen");
+  if (target.status === "pending") await markCurrent();
   await browser.tabs.update(tab.id, { url: target.url });
 
   const remaining = (await getItems()).filter(i => i.status === "pending").length;
@@ -551,12 +552,12 @@ async function captureActive(note = "", withShot = false) {
     await browser.storage.local.set({ pendingShot: null });
   }
 
-  // A capture arriving while a worklist item is open takes it off the queue as opened, not kept.
+  // A capture arriving while a worklist item is open takes it off the queue as opened.
   // The URL is matched loosely because x.com rewrites /i/status/<id> to /<handle>/status/<id> on load.
   const current = await getCurrent();
   if (current && (keyOf(record.url) === current.key || keyOf(tab.url || "") === current.key)) {
     record.from_worklist = current.url;
-    await markCurrent("seen");
+    await markCurrent();
   }
 
   const captures = await getCaptures();
@@ -628,16 +629,15 @@ async function queueActiveTab() {
  *
  * A folder's title is the stash's name — its time until renamed — and its bookmarks keep tab order.
  * What a bookmark cannot hold sits beside it in storage.local, keyed by bookmark id; losing it (an
- * uninstall) loses containers, verdicts and marks, never a tab:
+ * uninstall) loses containers and opened marks, never a tab:
  *
  *   stashRoot     — the root folder's id
  *   stashMeta     — { stashes: { [folderId]: { created_at, locked?, starred? } },
- *                     tabs:    { [bookmarkId]: { container?, seen_at?, verdict?, judged_at? } } }
+ *                     tabs:    { [bookmarkId]: { container?, seen_at? } } }
  *   stashSettings — { afterStash: "show" | "stay", afterRestore: "keep" | "remove", exclude: [host] }
  *
- * verdict is "keep" or "drop", set from the explorer. A drop is a flag, not a deletion, and
- * "Clear dropped" is what removes them. A locked stash cannot lose tabs: no delete, no remove, no
- * move out, and restoring always keeps it.
+ * A locked stash cannot lose tabs: no delete, no remove, no move out, and opening always keeps it.
+ * (Keep and Drop verdicts are gone; one stored before then stays in its record, unread.)
  *
  * Only the tab's URL, title and container are recorded. Nothing is injected into the tabs being
  * stashed. A stash is the only record of the tabs it closes — Firefox remembers 25 closed tabs — so
@@ -645,7 +645,7 @@ async function queueActiveTab() {
  */
 
 const ROOT_TITLE = "Link Keeper stashes";
-const TAB_META = ["container", "seen_at", "verdict", "judged_at"];
+const TAB_META = ["container", "seen_at"];
 const STASH_SETTINGS = { afterStash: "show", afterRestore: "keep", exclude: [] };
 /* The List page grouped by stash is where stashes are shown; sessions.html, the Stashed tabs page
  * before 5.14, only forwards there. The viewer pages themselves are never stashed: they are views,
@@ -702,7 +702,7 @@ const editMeta = fn => metaQueue(async () => {
 const getStashSettings = async () => ({ ...STASH_SETTINGS, ...await read("stashSettings", {}) });
 
 /* Newest first, starred ones on top: { id, name, created_at, locked, starred, source, format,
- * tabs: [{ id, url, title?, container?, seen_at?, verdict?, judged_at? }] }. Bookmarks moved or
+ * tabs: [{ id, url, title?, container?, seen_at? }] }. Bookmarks moved or
  * edited in Firefox's own library show up here as they are. */
 async function getSessions() {
   await migrateStashes();
@@ -855,6 +855,31 @@ const DATA_PATCHES = [
       if (rules.includes(rule)) return { skipped: "already a rule" };
       const res = await setFilterRules([...rules, rule]);
       return { added: rule, matched: res.matched };
+    },
+  },
+  {
+    // Keep and Drop are gone: a link was opened or it was not. A reading-list entry marked kept or
+    // skipped becomes opened, and a stashed tab that was judged but has no opened mark gets one,
+    // dated when it was judged. The stored verdicts themselves are left alone, unread.
+    id: "2026-10-15-opened-or-not",
+    async run() {
+      const items = await getItems();
+      let entries = 0;
+      for (const i of items) {
+        if (i.status !== "kept" && i.status !== "skipped") continue;
+        i.status = "seen";
+        i.seen_at ||= i.kept_at || new Date().toISOString();
+        delete i.kept_at;
+        entries++;
+      }
+      if (entries) await setItems(items);
+      let tabs = 0;
+      await editMeta(m => {
+        for (const t of Object.values(m.tabs)) {
+          if (t.verdict && !t.seen_at) { t.seen_at = t.judged_at || new Date().toISOString(); tabs++; }
+        }
+      });
+      return { entries, tabs };
     },
   },
 ];
@@ -1279,7 +1304,7 @@ async function restoreItems(wanted) {
 /* Undo of taking tabs out: each goes back into its stash at the place it had, with its marks. A
  * stash that went with its last tab is written again, with its name, date and flags, at the top.
  * stash: { id, name, created_at, source?, format?, locked?, starred? }; tabs: [{ url, title?, index,
- * container?, seen_at?, verdict?, judged_at? }]. Returns the stash's id and the new bookmark ids. */
+ * container?, seen_at? }]. Returns the stash's id and the new bookmark ids. */
 async function putBack(stash, tabs) {
   if (!stash?.id || !tabs.length) return { ok: false, error: "nothing to put back" };
   let id = stash.id;
@@ -1362,7 +1387,7 @@ async function moveStashed(ids, to, before) {
   return { ok: true, moved: moving.length };
 }
 
-/* Stashes from a file: [{ name?, created_at?, tabs: [{ url, title?, container?, verdict?, seen_at? }] }],
+/* Stashes from a file: [{ name?, created_at?, tabs: [{ url, title?, container?, seen_at? }] }],
  * already parsed by the page (stash-import.js). Written in the order given, above the others, with
  * URLs in the form Firefox bookmarks them. All or nothing: if one stash does not read back, the
  * ones this import already wrote are taken out again. */
@@ -1378,7 +1403,6 @@ async function importStashes(stashes, format) {
         url: t.url,
         title: typeof t.title === "string" && t.title.trim() ? t.title.trim().slice(0, 500) : undefined,
         container: typeof t.container === "string" ? t.container : undefined,
-        verdict: t.verdict === "keep" || t.verdict === "drop" ? t.verdict : undefined,
         seen_at: typeof t.seen_at === "string" ? t.seen_at : undefined,
         tags: Array.isArray(t.tags) ? t.tags : undefined,
       }));
@@ -1592,46 +1616,6 @@ const mergeTags = records => editTags(all => {
   return n;
 });
 
-/* One verdict for a URL wherever it is held: its capture, its reading-list entry (kept or skipped)
- * and every stash copy. null clears it, and a list entry goes back to seen. Nothing is removed. */
-const judgeQueue = serial();
-async function judgeLink(url, verdict) {
-  if (verdict !== null && verdict !== "keep" && verdict !== "drop") return { ok: false, error: "a verdict is keep, drop or null" };
-  const key = keyOf(url);
-  const at = new Date().toISOString();
-
-  const captures = await getCaptures();
-  const caps = captures.filter(c => keyOf(c.url) === key || (c.source_url && keyOf(c.source_url) === key));
-  for (const c of caps) {
-    if (verdict) Object.assign(c, { verdict, judged_at: at });
-    else { delete c.verdict; delete c.judged_at; }
-  }
-  if (caps.length) await setCaptures(captures);
-
-  const items = await getItems();
-  const listed = items.filter(i => keyOf(i.url) === key);
-  for (const i of listed) {
-    if (verdict === "keep") Object.assign(i, { status: "kept", kept_at: at });
-    else if (verdict === "drop") Object.assign(i, { status: "skipped", seen_at: at });
-    else if (i.status === "kept" || i.status === "skipped") i.status = "seen";
-  }
-  if (listed.length) await setItems(items);
-
-  const copies = (await getSessions()).flatMap(s => s.tabs).filter(t => keyOf(t.url) === key);
-  if (copies.length) {
-    await editMeta(m => {
-      for (const { id } of copies) {
-        const t = { ...m.tabs[id] };
-        if (verdict) Object.assign(t, { verdict, judged_at: at });
-        else { delete t.verdict; delete t.judged_at; }
-        m.tabs[id] = t;
-      }
-    });
-  }
-  const held = caps.length + listed.length + copies.length;
-  return held ? { ok: true, captures: caps.length, list: listed.length, stashed: copies.length } : { ok: false, error: "that link is not held anywhere" };
-}
-
 async function notifyStash(res) {
   if (!res.ok) return notify(`failed: ${res.error}`);
   if (res.why) await notify(`stashed ${res.stashed} · left open: ${res.why}`);
@@ -1791,7 +1775,7 @@ async function handleMessage(msg) {
       await browser.storage.local.set({
         current: { key: keyOf(msg.url), url: msg.url, at: new Date().toISOString() },
       });
-      await markCurrent("seen");
+      await markCurrent();
       return { ok: true };
     }
 
@@ -1936,16 +1920,6 @@ async function handleMessage(msg) {
       return { ok: true };
     }
 
-    case "clear-dropped": {
-      let removed = 0;
-      for (const s of await getSessions()) {
-        if (msg.id && s.id !== msg.id) continue;
-        const dropped = s.tabs.filter(t => t.verdict === "drop").map(t => t.id);
-        if (dropped.length) removed += (await dropFromStash(s.id, dropped)).length;
-      }
-      return { ok: true, removed };
-    }
-
     case "stash-settings":
       return { settings: await getStashSettings() };
 
@@ -1976,10 +1950,6 @@ async function handleMessage(msg) {
 
     case "links":
       return getLinks();
-
-    case "judge-link":
-      // In order: keys fire faster than a verdict is written, and each write reads what the last left.
-      return judgeQueue(() => judgeLink(String(msg.url || ""), msg.verdict ?? null));
 
     case "set-tags":
       return setTags(String(msg.url || ""), msg.tags);
@@ -2020,10 +1990,6 @@ async function handleMessage(msg) {
     }
 
     case "next":
-      return openNext();
-
-    case "skip":
-      await markCurrent("skipped");
       return openNext();
 
     case "capture-active":
@@ -2068,7 +2034,7 @@ async function handleMessage(msg) {
           byId.set(key, rec);
           added++;
         } else if (!existing.text && rec.text) {
-          Object.assign(existing, rec, { verdict: existing.verdict });
+          Object.assign(existing, rec);
           enriched++;
         } else {
           skipped++;

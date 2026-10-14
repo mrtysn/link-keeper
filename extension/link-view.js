@@ -62,13 +62,6 @@ function readMark(link) {
   if (link.cap) span.setAttribute("aria-label", "captured");
   return span;
 }
-/* A verdict as a badge, for pages whose rows have no mark of their own. */
-// Keep and drop left the pages in 5.38; marks stored before then are not shown.
-const verdictBadge = () => null;
-
-/* One state per link, shown the same everywhere: a verdict if it has one, else whether it was seen. */
-const stateOf = link => (link.verdict === "keep" ? "kept" : link.verdict === "drop" ? "dropped" : link.seen ? "seen" : "left");
-const STATE_NAMES = { left: "Not looked at yet", seen: "Seen, undecided", kept: "Kept", dropped: "Dropped" };
 const SOURCE_NAMES = { tabs: "Stashed", import: "Imported", list: "Reading list" };
 
 /* The dataset, cut down to the chosen sources: a link shows if any source holding it is chosen, a
@@ -109,8 +102,7 @@ function reloadOnChanges(load, busy = () => false) {
   const editing = () => !!document.activeElement?.closest?.(".tagger, .tagpop");
   const soon = () => {
     clearTimeout(timer);
-    // A verdict still being saved would be painted back to the old one by a reload now.
-    timer = setTimeout(() => (busy() || editing() || window.LinkActions?.saving() ? soon() : load()), 150);
+    timer = setTimeout(() => (busy() || editing() ? soon() : load()), 150);
   };
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagSuggestions", "agentTags", "tagDefs", "favicons"].some(k => changes[k])) soon();

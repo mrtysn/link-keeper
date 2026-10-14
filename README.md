@@ -338,8 +338,10 @@ Whether a link was captured shows the same way everywhere: a **captured** badge 
 or a dashed **not captured** on a row, card or the detail pane's header, and a page icon beside the title in Links'
 rows and the Cards sidebar. A card also says when its tab was last opened.
 
-Keep and Drop, the verdicts of versions before 5.38, are gone from the pages; marks already stored
-stay in storage untouched, and nothing reads them.
+There is no Keep, Drop or skipped state: a link was opened (or captured) or it was not. Keep and Drop left
+the pages in 5.38, and their code is gone; a one-time data patch turned reading-list entries marked
+kept or skipped into opened, and gave a stashed tab that had been judged an opened mark dated at its
+judgement. Verdicts already stored stay in storage, unread.
 
 Only walking repeats while held, so a held key cannot remove a run of links. Keys never act
 while a field has the keyboard; `Esc` leaves it. What plain Open does to the stash is **Settings →
@@ -469,15 +471,12 @@ a 22rem popup.
   on, **Keys** shows the key guide), then one line each of **Sites** and **Tags** chips whose label opens
   them whole. Selected chips come first so they stay in sight on the one line.
 - **Group by** Stash (each stash under its heading with its actions, then the reading list's links),
-  Domain (local files and browser pages under their own names), State, Day, Month, or flat newest-
+  Domain (local files and browser pages under their own names), Day, Month, or flat newest-
   or oldest-first. Grouped by stash, a URL in two stashes is a row in each; everywhere else it is
   one row.
 - Filter box searches URLs, titles, captured text, notes and embedded links; domain chips narrow to
   sites.
-- State chips narrow to what is left (never opened or read), seen, kept or dropped.
-- A state mark per row, told apart by shape as well as colour: a ring for left, a dot for seen, a
-  tick for kept, a cross for dropped. The reading list's current item carries a *Current* badge and
-  a line down its left edge.
+- The reading list's current item carries a *Current* badge and a line down its left edge.
 - Rows show the captured title, the post's text and any links found inside it, so a tweet you
   already read is legible without opening it again.
 - Per row: **Tags**, **Capture** (or **Capture again**) and **Remove** (this copy), and **⋯** holds
@@ -496,7 +495,7 @@ be left with no copy outside the Trash; the footer counts what is ticked and say
 
 **Trash (N)**, always beside Duplicates (N = 0 when empty), lists what was removed, one card per removal, each row saying how many days remain.
 Everything removed from a stash or the reading list — Q, a stash's Delete, Duplicates, the CLI's
-`remove`, **Clear dropped** — waits there for 30 days (the add-on's storage, key `trash`, so backups
+`remove` — waits there for 30 days (the add-on's storage, key `trash`, so backups
 carry it). **Restore** puts a tab back in its stash at its old place with its marks, writing a deleted
 stash again once, and a reading-list link back on the list; **Delete forever** and **Empty Trash** ask
 first. Moving a link (to the list, between stashes), opening tabs with "take out of the stash", and

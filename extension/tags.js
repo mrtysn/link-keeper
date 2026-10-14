@@ -183,7 +183,7 @@ function rowEl(link) {
   const meta = el("div", { className: "meta" },
     el("span", { textContent: kindOf(link.url) === "web" ? hostOf(link.url) : kindOf(link.url) === "file" ? "Local file" : "Browser page" }));
   if (link.date) meta.append(el("time", { dateTime: link.date, textContent: link.date.slice(0, 10) }));
-  meta.append(...[verdictBadge(link), readBadge(link)].filter(Boolean));
+  meta.append(...[readBadge(link)].filter(Boolean));
   const others = (link.tags || []).filter(t => t !== chosen);
   if (others.length) meta.append(el("span", { className: "tags" }, ...others.map(t => tagChip(t))));
   const li = el("li", {}, srcIcon(link.url), el("div", { className: "main" }, a, meta, agentRow(link)), LinkActions.bar({ link }, { compact: true }));

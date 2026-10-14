@@ -1,23 +1,22 @@
-/* What can be done to a link, the same on every page: tag it, capture it, remove it, or skip it —
- * and open it, move it to a stash or the reading list — with undo of any of them. Keep and drop stay
- * for the marks stored before 5.38, but no page offers them. Links, Cards and Tags call these
- * and draw them with bar(); the keys for them are in link-keys.js.
+/* What can be done to a link, the same on every page: tag it, capture it, remove it —
+ * and open it, move it to a stash or the reading list — with undo of any of them. Links, Cards and
+ * Tags call these and draw them with bar(); the keys for them are in link-keys.js.
  *
  * A target is a link and, where the page shows it inside a stash, that copy: { link, stash, tab }.
  * Without a copy, an action that needs one takes the link's first stash on show (the newest).
  *
  * Accepting (F) makes the suggested tags the link's own.
  *
- * Every change pushes its inverse, so ⌘Z takes back a verdict, a move, a removal, a move to the
+ * Every change pushes its inverse, so ⌘Z takes back a move, a removal, a move to the
  * reading list, and an open that took the tab out of its stash. A removed tab comes back where it
  * was, with its marks; a stash it emptied is written again.
  *
  * A page calls setup() once with:
  *   data()                 — what loadLinks() last gave it
  *   say(text)              — show a message
- *   after(cmd, target, r)  — reload and move on after an action; cmd is "undo" after an undo, and
- *                            "revert" when a verdict failed to save. r.local: the page's data
- *                            already holds the change, so redraw it rather than reload
+ *   after(cmd, target, r)  — reload and move on after an action; cmd is "undo" after an undo.
+ *                            r.local: the page's data already holds the change, so redraw it
+ *                            rather than reload
  *   tags(target, anchor)   — optional: open the page's own tag editor instead of a popover
  *   tagNext()              — optional: Enter on an empty tag field moves to the next link and opens
  *                            its editor, so links are tagged one after another on any page
@@ -56,7 +55,7 @@ const LinkActions = (() => {
   }
 
   const stashRecord = s => ({ id: s.id, name: s.name, created_at: s.created_at, source: s.source, format: s.format, locked: s.locked, starred: s.starred });
-  const tabRecord = c => ({ url: c.tab.url, title: c.tab.title, index: c.index, container: c.tab.container, seen_at: c.tab.seen_at, verdict: c.tab.verdict });
+  const tabRecord = c => ({ url: c.tab.url, title: c.tab.title, index: c.index, container: c.tab.container, seen_at: c.tab.seen_at });
   const putBack = c => send({ type: "put-back", stash: stashRecord(c.stash), tabs: [tabRecord(c)] });
   const fail = (res, fallback) => ({ ok: false, say: res?.error ? res.error[0].toUpperCase() + res.error.slice(1) : fallback });
 
@@ -76,9 +75,6 @@ const LinkActions = (() => {
       await browser.tabs.create({ url: t.link.url });
       return { ok: true, say: "Opened in a new tab" };
     },
-
-    async keep(t) { return judge(t, "keep"); },
-    async drop(t) { return judge(t, "drop"); },
 
     async read(t) {
       if (!isWeb(t.link.url)) return { ok: false, say: "Only web pages can be captured" };
@@ -164,42 +160,6 @@ const LinkActions = (() => {
     },
   };
 
-  /* A verdict lands on the page at once and is saved behind it: the link and its stashed copies
-   * take it here, the page redraws from that, and the write follows. Reloads wait for it (pending),
-   * so a reload cannot paint the old verdict back; a write that fails puts the old one back. */
-  let pending = 0;
-  function setVerdict(link, verdict) {
-    link.verdict = verdict || undefined;
-    const d = page.data();
-    for (const c of link.copies || []) {
-      const tab = d?.all.stashes.find(s => s.id === c.stash)?.tabs.find(x => x.id === c.tab);
-      if (tab) tab.verdict = verdict || undefined;
-    }
-  }
-  function saveVerdict(t, verdict, prev) {
-    setVerdict(t.link, verdict);
-    pending++;
-    return send({ type: "judge-link", url: t.link.url, verdict })
-      .then(res => {
-        if (res?.ok) return res;
-        setVerdict(t.link, prev);
-        page.say(`Not saved: ${res?.error || "no answer"}`);
-        page.after("revert", t, {});
-        return res;
-      })
-      .finally(() => { pending--; });
-  }
-
-  function judge(t, verdict) {
-    const prev = t.link.verdict || null;
-    const next = prev === verdict ? null : verdict;
-    saveVerdict(t, next, prev);
-    return {
-      ok: true, local: true, cleared: !next, say: next === "keep" ? "Kept" : next === "drop" ? "Dropped" : "Cleared",
-      undo: { label: next ? (next === "keep" ? "Keep" : "Drop") : "Clear", local: true, run: () => saveVerdict(t, prev, next) },
-    };
-  }
-
   let busy = false;
   /* Carry out cmd on target; opts.mark rides along on its undo entry for the page to read back. */
   async function run(cmd, t, opts = {}) {
@@ -222,14 +182,12 @@ const LinkActions = (() => {
   async function undo() {
     const entry = undos.pop();
     if (!entry) { page.say("Nothing to undo"); return null; }
-    // A verdict's undo shows at once; its write goes on behind it.
     const res = entry.local ? (entry.run(), null) : await entry.run();
     page.say(res && res.ok === false ? `Could not undo ${entry.label.toLowerCase()}: ${res.error || "no answer"}` : `Undone: ${entry.label.toLowerCase()}`);
     await page.after("undo", entry.target, entry);
     return entry;
   }
   const canUndo = () => undos.length > 0;
-  const saving = () => pending > 0;
 
   /* --- pickers ------------------------------------------------------------------- */
 
@@ -339,5 +297,5 @@ const LinkActions = (() => {
     return run(cmd, t);
   }
 
-  return { setup, run, push, undo, canUndo, saving, data: () => page.data(), bar, key, copyOf, moveMenu, tags };
+  return { setup, run, push, undo, canUndo, data: () => page.data(), bar, key, copyOf, moveMenu, tags };
 })();

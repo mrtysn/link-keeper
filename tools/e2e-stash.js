@@ -87,7 +87,7 @@ const kase = async (name, fn) => runCheck(name, async () => { await resetState()
 await kase("stashes kept in storage.local move into bookmarks, and the old record is set aside", async () => {
   const old = [
     { id: "a", created_at: "2026-09-28T10:00:00Z", name: "Before bookmarks", tabs: [
-      { url: "https://example.com/one", title: "One", verdict: "keep" }, { url: "file:///tmp/x.pdf" }, { url: "about:preferences" }] },
+      { url: "https://example.com/one", title: "One", seen_at: "2026-09-27T00:00:00Z" }, { url: "file:///tmp/x.pdf" }, { url: "about:preferences" }] },
     { id: "b", created_at: "2026-09-20T10:00:00Z", tabs: [{ url: "moz-extension://someone-else/page.html", seen_at: "2026-09-21T00:00:00Z" }] },
     // The shape of a real pile: 249 web pages, then 54 of mixed kinds.
     { id: "c", created_at: "2026-09-19T10:00:00Z", tabs: Array.from({ length: 249 }, (_, i) => ({ url: `https://site-${i % 40}.example/p/${i}`, title: `Page ${i}` })) },
@@ -99,7 +99,7 @@ await kase("stashes kept in storage.local move into bookmarks, and the old recor
   const s = await getSessions();
   eq(s.map(x => x.tabs.length), [3, 1, 249, 54], "tabs per stash");
   eq(s[0].name, "Before bookmarks", "name");
-  eq(s[0].tabs[0].verdict, "keep", "verdict kept");
+  eq(s[0].tabs[0].seen_at, "2026-09-27T00:00:00Z", "opened mark kept");
   const root = await rootFolder();
   yes(root, "no root folder in Other Bookmarks");
   const [tree] = await browser.bookmarks.getSubTree(root.id);
@@ -204,7 +204,7 @@ await kase("import takes OneTab's raw URLs — unicode, spaces, uppercase hosts 
     "https://www.google.com/search?udm=2&q=EGEBY%20%20jysk#vhid=P1", "https://example.com/a%20b", "https://xn--bcher-kva.de/x"], "as Firefox stores them");
 });
 
-await kase("the joined dataset: one link per URL across stashes and the list, one verdict for every copy, imports marked", async () => {
+await kase("the joined dataset: one link per URL across stashes and the list, imports marked", async () => {
   const res = await importStashes([{ tabs: [{ url: "https://joint.example/a", title: "A" }, { url: "https://joint.example/b" }] }], "onetab");
   yes(res.ok, res.error);
   await addItems([{ url: "https://joint.example/a", title: "A on the list" }]);
@@ -213,14 +213,6 @@ await kase("the joined dataset: one link per URL across stashes and the list, on
   eq(a.length, 1, "one row for a URL held in a stash and on the list");
   eq(a[0].sources.sort(), ["import", "list"], "held in both");
   eq([stashes[0].source, stashes[0].format], ["import", "onetab"], "the import is marked");
-  const judged = await judgeLink("https://joint.example/a", "drop");
-  eq([judged.list, judged.stashed], [1, 1], "the verdict reached the list and the stash");
-  ({ links } = await getLinks());
-  eq(links.find(l => l.key === a[0].key).verdict, "drop", "one verdict");
-  eq((await getItems()).find(i => i.url === "https://joint.example/a").status, "skipped", "the list entry is skipped");
-  eq((await getSessions())[0].tabs[0].verdict, "drop", "the bookmark's record is dropped");
-  await judgeLink("https://joint.example/a", null);
-  eq((await getSessions())[0].tabs[0].verdict, undefined, "cleared everywhere");
 });
 
 await kase("Links, its detail pane and Cards load in Firefox with the bar, the sources and rows from every source", async () => {
