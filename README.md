@@ -147,7 +147,8 @@ queued, and pages you kept) — and three **viewers** show them: **Links**, **Ca
 The bar across the top of every page links the viewers and holds a chip per source; turn any mix on,
 and the choice holds as you switch viewers and between visits. Each chip counts its links.
 
-A URL is one link wherever it is held. In a joint view it shows once, with badges saying where it
+A URL is one link wherever it is held (a trailing slash, `www.` and a plain `#anchor` do not make a different one; a
+`#fragment` holding a `/`, like Gmail's `#inbox/<message id>`, does). In a joint view it shows once, with badges saying where it
 is (*Reading list*, *Stashed*, *Imported ×2*). Its tags and its capture belong to the URL, so every
 copy shows them; removing acts on one copy, the one in front of you. Nothing is merged or deleted underneath: a stash keeps its bookmarks and the list its
 entries.

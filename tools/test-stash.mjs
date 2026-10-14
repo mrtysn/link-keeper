@@ -1166,4 +1166,22 @@ await check("removing keeps a copy in the trash for 30 days, and restoring puts 
   assert.equal((await trash()).length, cleared.removed);
 });
 
+await check("a link's key keeps a route fragment (Gmail messages) and drops an anchor or a text fragment", async () => {
+  const { browser } = makeBrowser([]);
+  const ctx = await load(browser);
+  const keyOf = url => vm.runInContext(`keyOf(${JSON.stringify(url)})`, ctx);
+  const a = keyOf("https://mail.google.com/mail/u/0/#inbox/AAA"), b = keyOf("https://mail.google.com/mail/u/0/#inbox/BBB");
+  assert.notEqual(a, b, "two messages are two links");
+  assert.notEqual(a, keyOf("https://mail.google.com/mail/u/0/#inbox"), "a message is not the inbox");
+  assert.equal(keyOf("https://mail.google.com/mail/u/0/#inbox"), keyOf("https://mail.google.com/mail/u/0/"), "a bare route name is the same page");
+  assert.equal(keyOf("https://a.example/page#section"), keyOf("https://a.example/page"), "an anchor is the same page");
+  assert.equal(keyOf("https://a.example/page#:~:text=one/two"), keyOf("https://a.example/page"), "a text fragment is the same page");
+  assert.equal(keyOf("https://www.a.example/page/#/app/x"), "a.example/page#/app/x");
+  // joined, two messages stay two links and one held twice stays one
+  const joined = makeBrowser([]);
+  joined.store.items = [{ url: "https://mail.google.com/mail/u/0/#inbox/AAA", status: "pending" }, { url: "https://mail.google.com/mail/u/0/#inbox/BBB", status: "pending" }];
+  await load(joined.browser);
+  assert.equal((await joined.browser.handle({ type: "links" })).links.length, 2);
+});
+
 console.log(`\n${passed} checks passed`);

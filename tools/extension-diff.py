@@ -110,7 +110,9 @@ def key_of(url: str) -> str:
         if i + 1 < len(parts) and parts[i + 1].isdigit():
             return f"status:{parts[i + 1]}"
     path = u.path[:-1] if u.path.endswith("/") else u.path
-    return host + path + (f"?{u.query}" if u.query else "")
+    # A fragment that is a route (holds a "/", as Gmail's #inbox/<id> does) names its own page.
+    frag = f"#{u.fragment}" if "/" in u.fragment and not u.fragment.startswith(":~:") else ""
+    return host + path + (f"?{u.query}" if u.query else "") + frag
 
 
 # --- snappy, raw and framed ------------------------------------------------------------------------

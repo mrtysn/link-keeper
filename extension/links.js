@@ -27,14 +27,17 @@
 const LINK_SOURCES = ["tabs", "import", "list"];
 
 /* Same normalisation on both sides of a comparison: x.com/i/status/<id> and
- * x.com/<handle>/status/<id> are the same post, and a trailing slash is never meaningful. */
+ * x.com/<handle>/status/<id> are the same post, and a trailing slash is never meaningful. A
+ * #fragment that is a route (it holds a "/": Gmail's #inbox/<message id>) names a page of its own and
+ * stays; a plain anchor (#section) or a text fragment (#:~:text=) is the same page and goes. */
+const routeFragment = hash => (/^#.*\//.test(hash) && !hash.startsWith("#:~:") ? hash : "");
 function keyOf(url) {
   try {
     const u = new URL(url);
     const host = u.hostname.toLowerCase().replace(/^www\./, "");
     const status = u.pathname.match(/\/status\/(\d+)/);
     if (/^(x|twitter)\.com$/.test(host) && status) return `status:${status[1]}`;
-    return host + u.pathname.replace(/\/$/, "") + u.search;
+    return host + u.pathname.replace(/\/$/, "") + u.search + routeFragment(u.hash);
   } catch (e) {
     return String(url);
   }
