@@ -73,6 +73,8 @@ def cap(c: dict, i: int) -> dict:
         "shotThumb": THUMB if i == 2 else None,
         "shotId": 1 if i == 2 else None,
         "verdict": "keep" if i == 6 else ("drop" if i == 7 else None),
+        # one link that arrived by DM, for the checks that its origin shows in the detail and the hover
+        **({"account": "main", "thread": ["alice_123", "bob_456"], "senders": ["Alice", "Bob"]} if i == 1 else {}),
     }
 
 

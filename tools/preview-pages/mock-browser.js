@@ -110,6 +110,7 @@
       items: M.dump.items.map(r => ({ url: r.url, status: r.status, added_at: r.added_at, saved_at: toIso(r.saved_at), title: r.title, note: r.note })),
       captures: rows.filter(r => r.cap).map(r => ({
         url: r.url, title: r.cap.title, author: r.cap.handle ? { handle: r.cap.handle } : undefined, text: r.cap.text, kind: r.cap.kind,
+        account: r.cap.account, thread: r.cap.thread, senders: r.cap.senders,
         links: r.cap.links, reply_links: r.cap.reply_links,
         replies: Array.from({ length: r.cap.reply_count || 0 }, (_, n) => ({ handle: `@reply${n}`, text: `reply ${n}`, url: `https://x.com/reply${n}/status/${n}`, links: [] })), images: r.cap.images, verdict: r.cap.verdict || undefined,
         captured_at: "2026-09-20T10:00:00Z",

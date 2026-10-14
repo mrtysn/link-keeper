@@ -101,6 +101,10 @@ function capView(c, thumbs = {}) {
     note: c.note || null,
     posted: c.posted || null,
     captured_at: c.captured_at || null,
+    // Where a DM link came from, when an importer recorded it (importers/instagram.py).
+    account: c.account || null,
+    thread: Array.isArray(c.thread) ? c.thread : [],
+    senders: Array.isArray(c.senders) ? c.senders : [],
     links: (c.links || []).map(hrefOf).filter(Boolean),
     reply_links: (c.reply_links || []).map(l => ({ href: hrefOf(l), from: l.from || null, self: !!l.self })).filter(l => l.href),
     reply_count: (c.replies || []).length,

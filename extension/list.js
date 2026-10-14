@@ -876,6 +876,8 @@ function knownBox(row) {
   const facts = el("ul", { className: "facts" });
   if (c?.captured_at) facts.append(el("li", { textContent: `Captured ${whenOf(c.captured_at)}` }));
   else if (isWeb(link.url)) facts.append(el("li", { textContent: "Not captured yet. Capture saves its text and images." }));
+  const dm = dmOriginText(c);
+  if (dm) facts.append(el("li", { textContent: `Direct message: ${dm}` }));
   if (c?.reply_count) facts.append(el("li", { textContent: `${c.reply_count} ${c.reply_count === 1 ? "reply" : "replies"} captured` }));
   if (link.list) facts.append(el("li", { textContent: `On the reading list: ${LIST_STATUS[link.list.status] || link.list.status}` }));
   for (const copy of link.copies) {

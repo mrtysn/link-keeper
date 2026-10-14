@@ -351,6 +351,27 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "preview: no errors " + p.errs.join("; "));
   await p.close();
 }
+// A link that arrived by DM: its account, thread and senders show in the detail and the hover card, never in the rows
+{
+  const p = await page("list.html?pane=1");
+  const dm = () => p.$$eval("#detail .facts li", l => l.map(e => e.textContent).find(s => /^Direct message:/.test(s)) || null).catch(() => null);
+  for (let i = 0; i < 40 && !(await dm()); i++) await key(p, "s");
+  const line = await dm();
+  ok(line === "Direct message: account main · thread alice_123, bob_456 · sent by Alice, Bob", "dm origin: the detail names account, threads and senders (" + line + ")");
+  ok(!/alice_123|Alice/.test(await p.$eval("#out", e => e.textContent)), "dm origin: no row shows it");
+  const peek = () => p.$eval(".peek", e => e.textContent).catch(() => null);
+  const titles = await p.$$("#out ul.rows > li .ttl[data-peek]");
+  let card = null;
+  for (const ttl of titles.slice(0, 40)) {
+    await ttl.hover(); await p.waitForTimeout(450);
+    card = await peek();
+    if (card && /Direct message:/.test(card)) break;
+    await p.mouse.move(5, 5); await p.waitForTimeout(250);
+  }
+  ok(!!card && card.includes("Direct message: account main · thread alice_123, bob_456 · sent by Alice, Bob"), "dm origin: the hover card names it too (" + (card || "").slice(0, 60) + ")");
+  ok(!p.errs.length, "dm origin: no errors " + p.errs.join("; "));
+  await p.close();
+}
 // Filtered out: a rule hides a site's main page from the pile; its filter shows only those
 {
   const p = await page("list.html");

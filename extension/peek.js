@@ -182,6 +182,7 @@ const Peek = (() => {
       // A post's title is its text already; say it once.
       text && !linkTitle(link).replace(/\s+/g, " ").includes(text.slice(0, 40)) ? el("p", { className: "pk-text", textContent: text.length > 320 ? `${text.slice(0, 320)}…` : text }) : null,
       state.childElementCount ? state : null,
+      dmOriginText(cap) ? el("p", { className: "pk-note", textContent: `Direct message: ${dmOriginText(cap)}` }) : null,
       where.length ? el("p", { className: "pk-note", textContent: `In ${where.slice(0, 3).join(", ")}${where.length > 3 ? ` and ${where.length - 3} more` : ""}` }) : null);
   });
 
