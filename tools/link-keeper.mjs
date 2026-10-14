@@ -156,6 +156,8 @@ const need = (v, what) => { if (!v) throw new Error(`missing ${what} (see --help
 
 /* --- output -------------------------------------------------------------------------------- */
 
+/* `link-keeper stashes | head` closes the pipe early: that is the reader's choice, not a crash. */
+process.stdout.on("error", e => { if (e.code === "EPIPE") process.exit(0); throw e; });
 const out = s => process.stdout.write(s + "\n");
 const json = v => out(JSON.stringify(v, null, 2));
 const day = iso => (iso ? String(iso).slice(0, 10) : "          ");
