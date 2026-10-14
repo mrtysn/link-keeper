@@ -156,7 +156,13 @@
               tagsSeeded = true;
               M.dump.items.slice(0, 9).forEach((r, i) => { mockTags[keyOf(r.url)] = [["ai tools", "game dev"], ["ai tools"], ["game dev", "to try"]][i % 3]; });
             }
-            return joinLinks({ items, captures, sessions, tags: mockTags,
+            // ?suggest: every link a model suggested two tags for, as the stored map holds them.
+            const suggestions = {};
+            if (params.has("suggest")) {
+              const urls = [...items.map(i => i.url), ...captures.map(c => c.url), ...sessions.flatMap(s => s.tabs.map(x => x.url))];
+              for (const u of urls) suggestions[keyOf(u)] = { at: "2026-10-14T00:00:00Z", tags: [{ tag: "dev", p: 0.82, by: "model" }, { tag: "ai", p: 0.64, by: "system-one" }] };
+            }
+            return joinLinks({ items, captures, sessions, tags: mockTags, suggestions,
               currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
           }
           // Filtered out, as the background keeps it: rules on a page's address, tagging what matches.

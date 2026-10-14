@@ -160,6 +160,19 @@ dashed: `code` (GitHub, GitLab…), `video`, `post`, `discussion`, `game`, `pape
 `local file`. Guesses are never saved; the first change in the editor makes the shown tags yours,
 and removing every tag brings the guess back.
 
+**Suggestions** from a local model take the guesses' place, dimmed the same way, until the link has
+tags of its own: a chip's hover says who suggested it and how sure — *Suggested by the tag model
+(82%)*, or *by system-one* — and the editor's status line lists them. `F` accepts everything shown
+as the link's tags in one step (site guesses too) and, in Cards, deals the next card; `⌘Z` takes it
+back. To fix one instead, open the editor and change it: the first change saves what was shown plus
+the change, so removing one wrong suggestion keeps the rest. They are stored apart from tags
+(`tagSuggestions`, `{ [link key]: { at, tags: [{ tag, p, by }] } }`, `p` 0–1, `by` `system-one` or
+`model`) and written only by agents: `link-keeper suggest-set FILE [--replace]` (FILE is JSON
+`{url: [{tag, p, by}]}`; an empty list removes a link's entry), `link-keeper suggestions` for what is
+stored, and `link-keeper links --json` carries `suggested` per link (empty once it has tags). The
+entry stays in storage after the link is tagged, unshown.
+
+- `F` accepts the shown suggestions (or site guesses) as the link's tags; Cards moves on to the next card.
 - `T` on any page opens the editor: the link's chips, a field, and under it a palette of every tag
   there is — click one, or press `1`–`9` on the empty field, to put it on or take it off. Typing
   narrows the palette (spaces and punctuation ignored, so `gamejam` finds *game jam*); Enter or Tab
@@ -190,7 +203,7 @@ come back with an import.
 ### Acting on a link — the same on every page
 
 Links, Cards and Tags offer one set of actions on a link, drawn the same way and answering to
-the same keys. There are four things to do with a link: **tag** it, **capture** it (save its text,
+the same keys. There are four things to do with a link: **tag** it (`T`, or `F` to accept what is suggested), **capture** it (save its text,
 images and links), **remove** it, or **skip** it for now. Under the one link Cards and the Links detail pane show,
 **Open**, **Tags**, **Capture** and **Remove** are buttons with their keys; on a row of List or Tags,
 Tags, Capture and Remove show. Move, To list and removing the link's *other* copies sit under **⋯** —
@@ -203,6 +216,7 @@ number row works as reddit's keyboard navigation (RES) has it.
 | `W` `S` (`1` `2`, `↑` `↓`) | previous / next link; a sidebar and the view beside it move together; held, they repeat |
 | `A` `D` | previous / next group: the section on Links (a stash, grouped by stash), the stash on Cards, the tag on Tags |
 | `T` | tags |
+| `F` | accept the suggested tags as the link's tags (Cards then deals the next card) |
 | `E` (`3`) | capture: load it in a background tab and save its text, images and links |
 | `Q` (`⌘⌫`) | remove this copy — from its stash, or from the reading list — then on to the next link |
 | `4` | open — a stashed tab reopens through its stash, keeping its container and marking it restored |
@@ -259,7 +273,7 @@ After restoring** on the Links page; `⇧4` does the other.
 
 Open *Cards* and go through the links in the chosen sources as a shuffled deck, one card at a time —
 every link, one tag, the untagged ones or those not captured, as the selector says. `T` tags the
-card, `E` captures it, `Q` (or a drag left) removes its copy, `S` (or a drag right or up) skips it —
+card, `F` accepts its suggested tags and deals the next card, `E` captures it, `Q` (or a drag left) removes its copy, `S` (or a drag right or up) skips it —
 it comes back next session — and `W` steps back a card. The sidebar lists every stash on show and the reading list, the card's row marked as the
 deck moves; `A` `D` deal the first link of the previous or next stash, and a click deals any row.
 

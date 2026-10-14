@@ -405,6 +405,15 @@ function removeTop() {
   LinkActions.run("remove", { link: card.link }, { mark: { index } });
 }
 
+/* Accept: the card's suggested tags become its tags, and the next card is dealt. */
+function acceptTop() {
+  const card = deck[index];
+  if (!card) return;
+  const { guessed, tags } = shownTags(card.link);
+  if (guessed && tags.length) fly(0, -1);
+  LinkActions.run("accept", { link: card.link }, { mark: { index } });
+}
+
 /* Skip: the next card, nothing recorded; it comes back next session. Undo brings it back. */
 function later(count = true) {
   const card = deck[index];
@@ -430,7 +439,7 @@ LinkActions.setup({
     flying = false;
     if (res.ok === false) { await wait; render(); return; }
     const onTop = deck[index]?.link.key === target?.link.key;
-    const leaves = ["list", "move", "remove"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
+    const leaves = ["list", "move", "remove", "accept"].includes(cmd) || (cmd === "open" && /taken out/.test(res.say || ""));
     if (cmd === "remove" && onTop) tally.removed++;
     if (cmd === "undo" && res.cmd === "remove") tally.removed = Math.max(0, tally.removed - 1);
     if (cmd === "undo" && res.cmd === "later") tally.skipped = Math.max(0, tally.skipped - 1);
@@ -503,11 +512,11 @@ LinkKeys.listen({
   next: () => later(),
   "group-prev": () => jumpGroup(-1), "group-next": () => jumpGroup(1),
   read: onTop("read"), open: onTop("open"), "open-other": onTop("open-other"),
-  tags: () => openTags(), list: onTop("list"), move: onTop("move"), remove: () => removeTop(),
+  tags: () => openTags(), accept: () => acceptTop(), list: onTop("list"), move: onTop("move"), remove: () => removeTop(),
   undo: () => LinkActions.undo(),
   escape: () => document.querySelector(".tagpop")?.remove(),
 }, { labels: { prev: "back", next: "skip", "group-prev": "◂ stash", "group-next": "stash ▸" } });
-$("keys-line").append("Drag left to remove, right or up to skip, or ", ...LinkKeys.hint(["tags", "read", "remove", "next", "prev", "group-next", "open"]));
+$("keys-line").append("Drag left to remove, right or up to skip, or ", ...LinkKeys.hint(["tags", "accept", "read", "remove", "next", "prev", "group-next", "open"]));
 
 /* --- drag --- */
 

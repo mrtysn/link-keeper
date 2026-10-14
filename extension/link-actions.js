@@ -6,6 +6,8 @@
  * A target is a link and, where the page shows it inside a stash, that copy: { link, stash, tab }.
  * Without a copy, an action that needs one takes the link's first stash on show (the newest).
  *
+ * Accepting (F) makes the suggested tags the link's own.
+ *
  * Every change pushes its inverse, so ⌘Z takes back a verdict, a move, a removal, a move to the
  * reading list, and an open that took the tab out of its stash. A removed tab comes back where it
  * was, with its marks; a stash it emptied is written again.
@@ -125,6 +127,18 @@ const LinkActions = (() => {
           return res2;
         } },
       };
+    },
+
+    /* The shown suggestions (or site guesses) become the link's tags. Undo clears them again, so
+     * the suggestions show as before. */
+    async accept(t) {
+      const { tags, guessed } = shownTags(t.link);
+      if (!guessed) return { ok: false, say: "Already has its own tags" };
+      if (!tags.length) return { ok: false, say: "Nothing suggested for it" };
+      const res = await send({ type: "set-tags", url: t.link.url, tags });
+      if (!res?.ok) return fail(res, "Unable to tag it");
+      return { ok: true, say: `Tagged ${res.tags.join(", ")}`,
+        undo: { label: "Accept tags", run: () => send({ type: "set-tags", url: t.link.url, tags: [] }) } };
     },
 
     async remove(t, { fromList = false } = {}) {

@@ -11,6 +11,7 @@
  *   Q  ⌘⌫      remove this copy, then on to the next link; its other copies stay
  *   E  3       capture its text, images and links
  *   T          tags        4  open it        ⇧4  open it with the other stash effect
+ *   F          accept the shown suggestions (or site guesses) as the link's tags
  *   L M        to the reading list · move to a stash
  *   ⌘Z         undo
  *   /  ?  Esc  filter · these keys · back out
@@ -31,6 +32,7 @@ const LinkKeys = (() => {
     { cmd: "group-prev", show: ["A"], does: "previous group: stash, section or tag" },
     { cmd: "group-next", show: ["D"], does: "next group: stash, section or tag" },
     { cmd: "tags", show: ["T"], does: "tags" },
+    { cmd: "accept", show: ["F"], does: "accept the suggested tags" },
     { cmd: "read", show: ["E", "3"], does: "capture its text and images" },
     { cmd: "remove", show: ["Q", `${MOD}⌫`], does: "remove this copy, then next" },
     { cmd: "open", show: ["4"], does: "open" },
@@ -46,7 +48,7 @@ const LinkKeys = (() => {
   ];
   const BY_CMD = new Map(TABLE.map(r => [r.cmd, r]));
 
-  const PLAIN = { w: "prev", s: "next", a: "group-prev", d: "group-next", q: "remove", e: "read", t: "tags", l: "list", m: "move", p: "preview", v: "detail" };
+  const PLAIN = { w: "prev", s: "next", a: "group-prev", d: "group-next", q: "remove", e: "read", t: "tags", f: "accept", l: "list", m: "move", p: "preview", v: "detail" };
   const DIGITS = { Digit1: "prev", Digit2: "next", Digit3: "read", Digit4: "open" };
   const ARROWS = { ArrowUp: "prev", ArrowDown: "next" };
   const REPEATING = new Set(["prev", "next"]);
@@ -121,26 +123,26 @@ const LinkKeys = (() => {
    * down sinks, lit, until it is let go. ? shows and hides it, and every page load shows it again. */
   const SHORT = {
     prev: "up", next: "skip ↓", "group-prev": "◂ group", "group-next": "group ▸",
-    read: "capture", open: "open", "open-other": "open other", tags: "tags", list: "to list", move: "move",
+    read: "capture", open: "open", "open-other": "open other", tags: "tags", accept: "accept", list: "to list", move: "move",
     remove: "remove", undo: "undo", detail: "detail", preview: "preview", filter: "filter", help: "keys", escape: "back",
   };
   const KIND = {
     prev: "go", next: "go", "group-prev": "go", "group-next": "go",
-    read: "keep", open: "open", "open-other": "open", tags: "edit", list: "edit", move: "edit", remove: "drop",
+    read: "keep", open: "open", "open-other": "open", tags: "edit", accept: "edit", list: "edit", move: "edit", remove: "drop",
     undo: "edit", detail: "view", preview: "view", filter: "view", help: "view", escape: "view",
   };
   // The left hand's rows as they sit, and the keys away from it beneath; null caps are spacers.
   const ROWS = [
     [["`"], ["1", "prev"], ["2", "next"], ["3", "read"], ["4", "open"], ["5"]],
     [["Tab", null, "wide"], ["Q", "remove"], ["W", "prev"], ["E", "read"], ["R"], ["T", "tags"]],
-    [["Caps", null, "wider"], ["A", "group-prev"], ["S", "next"], ["D", "group-next"], ["F"], ["G"]],
+    [["Caps", null, "wider"], ["A", "group-prev"], ["S", "next"], ["D", "group-next"], ["F", "accept"], ["G"]],
   ];
   const EXTRA = [["L", "list"], ["M", "move"], ["V", "detail"], ["P", "preview"], ["/", "filter"], ["⇧4", "open-other"],
     [`${MOD}Z`, "undo"], [`${MOD}⌫`, "remove"], ["Esc", "escape"], ["?", "help"]];
   // The physical keys behind each keycap (KeyboardEvent.code), and whether Shift is part of it.
   const CODES = {
     1: "Digit1", 2: "Digit2", 3: "Digit3", 4: "Digit4", Q: "KeyQ", W: "KeyW ArrowUp", E: "KeyE",
-    T: "KeyT", A: "KeyA", S: "KeyS ArrowDown", D: "KeyD", L: "KeyL", M: "KeyM", V: "KeyV", P: "KeyP", "/": "Slash",
+    T: "KeyT", F: "KeyF", A: "KeyA", S: "KeyS ArrowDown", D: "KeyD", L: "KeyL", M: "KeyM", V: "KeyV", P: "KeyP", "/": "Slash",
     "⇧4": "Digit4", [`${MOD}Z`]: "KeyZ", [`${MOD}⌫`]: "Backspace Delete", Esc: "Escape", "?": "Slash",
   };
   const SHIFTED = new Set(["⇧4", "?"]);

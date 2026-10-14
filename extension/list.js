@@ -287,7 +287,7 @@ LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
   "group-prev": () => jumpSection(-1), "group-next": () => jumpSection(1),
   read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
-  tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
+  tags: onRow("tags"), accept: onRow("accept"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
   detail: () => togglePane(), preview: () => { if (!pane) togglePane(true); setPreview(previewShowing(detailLink()) ? "off" : "this"); },
   escape: () => { document.querySelector(".tagpop")?.remove(); },
@@ -688,7 +688,7 @@ function renderTagChips() {
   if (untagged) box.append(chip(UNTAGGED, "Untagged", untagged));
   const hand = new Set(data.links.flatMap(l => l.tags));
   for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
-    box.append(chip(t, t, n, tagChip(t, !hand.has(t))));
+    box.append(chip(t, t, n, tagChip(t, !hand.has(t), "Suggested, not on any link as a tag yet")));
   }
   if (tagSel.size) {
     const clear = el("button", { className: "chip ghost", textContent: "Clear tags" });

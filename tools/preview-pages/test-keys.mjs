@@ -145,6 +145,58 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "cards: no errors " + p.errs.join("; "));
   await p.close();
 }
+// Stored suggestions: dimmed chips with their source, F accepts them and deals the next card
+{
+  const p = await page("cards.html?suggest");
+  const top = () => p.$eval(".card.top .title", e => e.textContent.slice(0, 40));
+  const href = () => p.$eval(".card.top .open", e => e.href);
+  const skipped = () => p.$eval("#t-skipped", e => e.textContent);
+  const tagsOf = url => p.evaluate(async u => (await browser.runtime.sendMessage({ type: "links" })).links.find(l => l.url === u)?.tags, url);
+  const chips = () => p.$$eval(".card.top .tags .tag", l => l.map(e => ({ text: e.textContent, guess: e.classList.contains("guess"), title: e.title })));
+  // The first dozen links carry tags by hand in the mock; skip to one that shows suggestions.
+  for (let i = 0; i < 20 && !(await chips()).some(c => c.guess); i++) await key(p, "s");
+  const c = await chips();
+  ok(c.map(x => x.text).join() === "dev,ai" && c.every(x => x.guess), `suggest: the card shows the suggestions dimmed, best first (${c.map(x => x.text)})`);
+  ok(c[0]?.title === "Suggested by the tag model (82%)" && c[1]?.title === "Suggested by system-one (64%)", `suggest: each chip says who suggested it and how sure (${c.map(x => x.title).join(" | ")})`);
+  ok(await p.$eval('#key-guide [data-cmd="accept"]', e => !e.classList.contains("idle") && e.textContent.startsWith("F")), "suggest: F is live in the key guide");
+  ok(/accept/.test(await p.$eval("#keys-line", e => e.textContent)), "suggest: the keys line names F");
+  // The editor says the same, and the first change keeps the rest of what was shown.
+  const url = await href();
+  await key(p, "t");
+  ok(/Suggested by the tag model and system-one: dev 82%, ai 64%/.test(await p.$eval(".tagpop .tagstatus", e => e.textContent)), "suggest: the editor's status line says who suggested them");
+  await p.click('.tagpop .chips .tag button[title="Remove dev"]'); await p.waitForTimeout(300);
+  ok((await tagsOf(url)).join() === "ai", `suggest: removing one wrong suggestion keeps the rest as tags (${await tagsOf(url)})`);
+  await key(p, "Escape");
+  await key(p, "f");
+  ok(/Already has its own tags/.test(await msg(p)) && (await href()) === url, "suggest: F on a link with tags of its own does nothing (" + await msg(p) + ")");
+  await p.evaluate(async u => { await browser.runtime.sendMessage({ type: "set-tags", url: u, tags: [] }); }, url);
+  await p.reload(); await p.waitForTimeout(600);
+  for (let i = 0; i < 40 && (await href().catch(() => "")) !== url; i++) await key(p, "s");
+  const before = await top(), s0 = +(await skipped());
+  await key(p, "f"); await p.waitForTimeout(400);
+  ok((await top()) !== before && (await tagsOf(url)).join() === "dev,ai", `suggest: F tags the card with all suggestions and deals the next (${await tagsOf(url)})`);
+  ok(/Tagged dev, ai/.test(await msg(p)) && +(await skipped()) === s0, "suggest: it says so, and counts nothing as skipped (" + await msg(p) + ")");
+  await key(p, "Meta+z"); await p.waitForTimeout(400);
+  ok((await href()) === url && (await tagsOf(url)).length === 0 && (await chips()).every(x => x.guess), "suggest: undo brings the card back, untagged, suggestions showing");
+  ok(!p.errs.length, "suggest: no errors " + p.errs.join("; "));
+  await p.close();
+}
+{
+  // Without suggestions F accepts the site guess.
+  const p = await page("cards.html");
+  const href = () => p.$eval(".card.top .open", e => e.href);
+  const guess = () => p.$$eval(".card.top .tags .tag.guess", l => l.map(e => e.title));
+  for (let i = 0; i < 25 && !(await guess()).length; i++) await key(p, "s");
+  const g = await guess(), url = await href();
+  if (g.length) {
+    ok(g.every(t => t === "Suggested from the site"), "suggest: a site guess keeps its title (" + g + ")");
+    await key(p, "f"); await p.waitForTimeout(400);
+    const tags = await p.evaluate(async u => (await browser.runtime.sendMessage({ type: "links" })).links.find(l => l.url === u)?.tags, url);
+    ok(tags.length > 0 && (await href()) !== url, `suggest: F accepts the site guess too (${tags})`);
+  } else ok(true, "suggest: the sample has no site guess to accept");
+  ok(!p.errs.length, "suggest: no errors on Cards without suggestions " + p.errs.join("; "));
+  await p.close();
+}
 // Tagging one link after another, from any page: Explore's Untagged chip, T, Enter on an empty field
 {
   const p = await page("list.html?group=stash&pane=1");

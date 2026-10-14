@@ -107,7 +107,7 @@ function reloadOnChanges(load, busy = () => false) {
     timer = setTimeout(() => (busy() || editing() || window.LinkActions?.saving() ? soon() : load()), 150);
   };
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagDefs", "favicons"].some(k => changes[k])) soon();
+    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagSuggestions", "tagDefs", "favicons"].some(k => changes[k])) soon();
   });
   for (const ev of ["onCreated", "onRemoved", "onChanged", "onMoved"]) browser.bookmarks?.[ev].addListener(soon);
   window.LinkSources.onChange(load);
@@ -173,8 +173,19 @@ async function readLink(url) {
  * site it is ("code", "video", …) shows in their place, dimmed. The editor is swipe-sort's: chips,
  * suggestions from the tags in use, and every change saved at once. */
 
-/* What a link shows: its own tags, or the guesses, flagged as such. */
-const shownTags = link => (link.tags?.length ? { tags: link.tags, guessed: false } : { tags: link.kinds || [], guessed: true });
+/* What a link shows: its own tags; else the model's stored suggestions; else the guesses from its
+ * site. Suggestions and guesses are flagged guessed, and `titles` says where each tag came from. */
+const SUGGESTERS = { "system-one": "system-one", model: "the tag model" };
+const suggestionTitle = s => `Suggested by ${SUGGESTERS[s.by] || s.by} (${Math.round(s.p * 100)}%)`;
+const SITE_GUESS_TITLE = "Suggested from the site";
+function shownTags(link) {
+  if (link.tags?.length) return { tags: link.tags, guessed: false, from: "own", titles: {} };
+  if (link.suggested?.length) {
+    return { tags: link.suggested.map(s => s.tag), guessed: true, from: "suggested",
+      titles: Object.fromEntries(link.suggested.map(s => [s.tag, suggestionTitle(s)])) };
+  }
+  return { tags: link.kinds || [], guessed: true, from: "site", titles: {} };
+}
 
 /* The tag library (background.js, tagDefs): every tag made or used, presets first, in the order
  * they were made — the order the editor's palette offers them in — with any colour picked for one. */
@@ -205,9 +216,9 @@ function tagHue(tag) {
   for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) % 360;
   return h;
 }
-function tagChip(tag, guessed = false) {
+function tagChip(tag, guessed = false, why = SITE_GUESS_TITLE) {
   const chip = el("span", { className: `tag${guessed ? " guess" : ""}`, textContent: tag,
-    title: guessed ? "Suggested from the site" : tag });
+    title: guessed ? why : tag });
   if (!guessed) {
     chip.style.setProperty("--h", tagHue(tag));
     if (typeof Peek !== "undefined") Peek.mark(chip, "tag", tag);
@@ -215,8 +226,8 @@ function tagChip(tag, guessed = false) {
   return chip;
 }
 function tagChips(link) {
-  const { tags, guessed } = shownTags(link);
-  return tags.length ? el("span", { className: "tags" }, ...tags.map(t => tagChip(t, guessed))) : null;
+  const { tags, guessed, titles } = shownTags(link);
+  return tags.length ? el("span", { className: "tags" }, ...tags.map(t => tagChip(t, guessed, titles[t]))) : null;
 }
 
 /* Suggestions under a field, matched with spaces and punctuation ignored, so "gamejam" finds
@@ -285,8 +296,14 @@ function suggestField(input, exclude = () => []) {
     .observe(document.body, { childList: true, subtree: true });
 }
 
-/* The editor for one link's tags. Guesses start as dimmed chips; the first change saves what is
- * shown, so a guess that is kept becomes a tag, and removing every tag brings the guesses back.
+/* The editor's status line for stored suggestions: who made them, and how sure. */
+function suggestionsLine(link) {
+  const by = [...new Set(link.suggested.map(s => SUGGESTERS[s.by] || s.by))].join(" and ");
+  return `Suggested by ${by}: ${link.suggested.map(s => `${s.tag} ${Math.round(s.p * 100)}%`).join(", ")}`;
+}
+
+/* The editor for one link's tags. Suggestions and guesses start as dimmed chips; the first change
+ * saves what is shown, so one that is kept becomes a tag, and removing every tag brings them back.
  * Under the field, a palette of every tag toggles them with a click, or 1–9 on an empty field.
  * order() replaces the palette's order, and limit shows only that many until something is typed.
  * Enter on the empty field or Escape is "done": the box fires "tagdone", its detail saying which
@@ -296,6 +313,8 @@ function tagEditor(link, onSaved, { order = null, limit = 0 } = {}) {
   const start = shownTags(link);
   let tags = start.tags.slice();
   let guessed = start.guessed && tags.length > 0;
+  let titles = start.titles;
+  let from = start.from;
   const chips = el("span", { className: "chips" });
   const input = el("input", { type: "text", placeholder: tags.length ? "add a tag" : "add a tag, Enter" });
   input.setAttribute("aria-label", "Add a tag");
@@ -341,13 +360,13 @@ function tagEditor(link, onSaved, { order = null, limit = 0 } = {}) {
   input.addEventListener("input", drawPalette);
 
   const mark = () => {
-    status.textContent = guessed ? "Suggested from the site" : "";
+    status.textContent = !guessed ? "" : from === "suggested" ? suggestionsLine(link) : SITE_GUESS_TITLE;
     status.classList.remove("bad");
   };
   const draw = () => {
     chips.textContent = "";
     for (const t of tags) {
-      const chip = tagChip(t, guessed);
+      const chip = tagChip(t, guessed, titles[t]);
       const x = el("button", { type: "button", textContent: "×", title: `Remove ${t}` });
       x.onclick = () => { tags = tags.filter(m => m !== t); save(); };
       chip.append(x);
@@ -364,10 +383,15 @@ function tagEditor(link, onSaved, { order = null, limit = 0 } = {}) {
       return;
     }
     link.tags = res.tags;
+    // Suggestions step aside while the link has tags and come back if they all go.
+    if (res.tags.length) { link.suggestedBefore ||= link.suggested; link.suggested = []; }
+    else if (link.suggestedBefore) link.suggested = link.suggestedBefore;
     link.guessed = res.tags.length ? [] : link.kinds || [];
     const now = shownTags(link);
     tags = now.tags.slice();
     guessed = now.guessed && tags.length > 0;
+    titles = now.titles;
+    from = now.from;
     draw();
     onSaved?.(res.tags);
   }

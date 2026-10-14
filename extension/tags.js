@@ -255,7 +255,7 @@ LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
   "group-prev": () => jumpTag(-1), "group-next": () => jumpTag(1),
   read: onRow("read"), open: onRow("open"), "open-other": onRow("open-other"),
-  tags: onRow("tags"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
+  tags: onRow("tags"), accept: onRow("accept"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("new-name").focus(),
   escape: () => document.querySelector(".tagpop")?.remove(),
 }, { labels: { "group-prev": "◂ tag", "group-next": "tag ▸" } });
