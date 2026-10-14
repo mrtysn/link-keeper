@@ -219,7 +219,8 @@ async function agentRequest(cmd, args) {
       const msg = args.message || {};
       if (AGENT_READS.has(msg.type)) return handleMessage(msg);
       if (AGENT_WRITES.has(msg.type)) return agentQueue(() => journaled(msg));
-      return { ok: false, error: `${msg.type} is not open to agents; it acts on tabs, or does not exist` };
+      return { ok: false, error: `${msg.type} is not open to agents in Link Keeper ${browser.runtime.getManifest().version}: `
+        + "it acts on tabs, or this version does not have it (a newer one ships with the next release)" };
     }
     default:
       return { ok: false, error: `unknown command ${cmd}` };
