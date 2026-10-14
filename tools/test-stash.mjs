@@ -1092,4 +1092,78 @@ await check("data patch: a fingerprint that does not match changes nothing and s
   assert.equal(fresh.store.dataPatches["2026-09-29-mark-onetab-import"].marked, 8, "and the next launch applies it");
 });
 
+await check("removing keeps a copy in the trash for 30 days, and restoring puts it back where it was", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/", title: "One" }, { url: "https://2.example/", verdict: "drop" }, { url: "https://3.example/" }] }];
+  store.items = [{ url: "https://list.example/", title: "Listed", added_at: "2026-09-01T00:00:00Z", status: "pending" }];
+  const bg = await load(browser);
+  const urls = async () => (await stashes(bg)).flatMap(s => s.tabs.map(t => t.url));
+  const trash = async () => (await browser.handle({ type: "trash-list" })).entries;
+  const [a] = await stashes(bg);
+
+  const del = await browser.handle({ type: "delete-stash", id: a.id, ids: [a.tabs[1].id] });
+  assert.equal(del.removed, 1);
+  assert.equal(del.trashed.length, 1);
+  assert.deepEqual(await urls(), ["https://1.example/", "https://3.example/"]);
+  assert.equal((await trash()).length, 1);
+  const back = await browser.handle({ type: "trash-restore", ids: del.trashed });
+  assert.equal(back.restored, 1);
+  assert.deepEqual(await urls(), ["https://1.example/", "https://2.example/", "https://3.example/"], "back at its place");
+  assert.equal((await stashes(bg))[0].tabs[1].verdict, "drop", "with its marks");
+  assert.equal((await trash()).length, 0);
+
+  // An undo takes the entries out again instead of leaving them to be restored twice.
+  const again = await browser.handle({ type: "delete-stash", id: a.id, ids: [(await stashes(bg))[0].tabs[0].id] });
+  await browser.handle({ type: "put-back", stash: { id: a.id, name: a.name, created_at: a.created_at }, tabs: [{ url: "https://1.example/", index: 0 }] });
+  await browser.handle({ type: "trash-delete", ids: again.trashed });
+  assert.equal((await trash()).length, 0);
+  assert.equal((await urls()).filter(u => u === "https://1.example/").length, 1);
+
+  // A move is not a removal.
+  const [cur] = await stashes(bg);
+  await browser.handle({ type: "move-stash", id: cur.id, ids: [cur.tabs[2].id] });
+  assert.equal((await trash()).length, 0, "moving to the reading list leaves nothing in the trash");
+  await browser.handle({ type: "delete-stash", id: cur.id, ids: [cur.tabs[0].id], trash: false });
+  assert.equal((await trash()).length, 0, "trash: false skips it");
+
+  // A whole stash deleted comes back as one stash, even when its tabs are restored one at a time.
+  const [last] = await stashes(bg);
+  const gone = await browser.handle({ type: "delete-stash", id: last.id });
+  assert.equal((await stashes(bg)).length, 0);
+  const entries = await trash();
+  assert.equal(entries.length, gone.removed);
+  for (const e of entries) await browser.handle({ type: "trash-restore", ids: [e.id] });
+  assert.equal((await stashes(bg)).length, 1, "one stash, not one per tab");
+  assert.equal(await trash().then(x => x.length), 0);
+
+  // A reading-list entry: removed, trashed, restored once (a second restore adds no copy).
+  const rm = await browser.handle({ type: "remove", urls: ["https://list.example/"] });
+  assert.equal(rm.trashed.length, 1);
+  assert.ok(!store.items.some(i => i.url === "https://list.example/"));
+  await browser.handle({ type: "trash-restore", ids: rm.trashed });
+  assert.equal(store.items.filter(i => i.url === "https://list.example/").length, 1);
+  assert.equal(store.items.find(i => i.url === "https://list.example/").status, "pending");
+
+  // Entries older than 30 days are dropped whenever the trash is read; delete forever and empty work.
+  const old = new Date(Date.now() - 31 * 86400000).toISOString();
+  const fresh = new Date(Date.now() - 29 * 86400000).toISOString();
+  store.trash = [
+    { id: "old", at: old, kind: "item", url: "https://old.example/", item: { url: "https://old.example/" } },
+    { id: "new", at: fresh, kind: "item", url: "https://new.example/", item: { url: "https://new.example/" } },
+    { id: "new2", at: fresh, kind: "item", url: "https://new2.example/", item: { url: "https://new2.example/" } },
+  ];
+  assert.deepEqual((await trash()).map(e => e.id), ["new", "new2"]);
+  assert.equal((await browser.handle({ type: "trash-delete", ids: ["new"] })).removed, 1);
+  assert.equal((await browser.handle({ type: "trash-delete", all: true })).removed, 1);
+  assert.equal((await trash()).length, 0);
+
+  // clear-dropped trashes what it takes; a locked stash gives up nothing.
+  const [s] = await stashes(bg);
+  await browser.handle({ type: "flag-stash", id: s.id, locked: true });
+  assert.equal((await browser.handle({ type: "clear-dropped" })).removed, 0);
+  await browser.handle({ type: "flag-stash", id: s.id, locked: false });
+  const cleared = await browser.handle({ type: "clear-dropped" });
+  assert.equal((await trash()).length, cleared.removed);
+});
+
 console.log(`\n${passed} checks passed`);

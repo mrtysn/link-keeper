@@ -101,7 +101,7 @@ const LinkActions = (() => {
       return {
         ok: true, say: res.added ? "Moved to the reading list" : "Already on the reading list; taken out of the stash",
         undo: { label: "To the reading list", run: async () => {
-          if (res.added) await send({ type: "remove", urls: [t.link.url] });
+          if (res.added) await send({ type: "remove", urls: [t.link.url], trash: false });
           return putBack(copy);
         } },
       };
@@ -123,7 +123,7 @@ const LinkActions = (() => {
           if (back?.ok) return back;
           // The stash it left went with its last tab: write it again, then take this copy out.
           const res2 = await putBack(copy);
-          if (res2?.ok) await send({ type: "delete-stash", id: to, ids: [copy.tab.id] });
+          if (res2?.ok) await send({ type: "delete-stash", id: to, ids: [copy.tab.id], trash: false });
           return res2;
         } },
       };
@@ -147,12 +147,20 @@ const LinkActions = (() => {
         if (copy.stash.locked) return { ok: false, say: "That stash is locked" };
         const res = await send({ type: "delete-stash", id: copy.stash.id, ids: [copy.tab.id] });
         if (!res?.ok) return fail(res, "Unable to remove it");
-        return { ok: true, say: `Removed from ${stashName(copy.stash)}`, undo: { label: "Remove", run: () => putBack(copy) } };
+        return { ok: true, say: `Removed from ${stashName(copy.stash)}; in the Trash for 30 days`, undo: { label: "Remove", run: async () => {
+          const back = await putBack(copy);
+          if (back?.ok && res.trashed?.length) await send({ type: "trash-delete", ids: res.trashed });
+          return back;
+        } } };
       }
       if (!t.link.list || t.link.list.loose) return { ok: false, say: "Nothing to remove it from" };
       const res = await send({ type: "remove", urls: [t.link.url] });
       if (!res?.ok) return fail(res, "Unable to remove it");
-      return { ok: true, say: "Removed from the reading list", undo: { label: "Remove", run: () => send({ type: "restore-items", items: res.items || [] }) } };
+      return { ok: true, say: "Removed from the reading list; in the Trash for 30 days", undo: { label: "Remove", run: async () => {
+        const back = await send({ type: "restore-items", items: res.items || [] });
+        if (back?.ok && res.trashed?.length) await send({ type: "trash-delete", ids: res.trashed });
+        return back;
+      } } };
     },
   };
 

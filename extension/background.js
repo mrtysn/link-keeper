@@ -32,6 +32,72 @@ async function setCaptures(captures) {
   await browser.storage.local.set({ captures });
 }
 
+/* --- trash ---------------------------------------------------------------------- */
+
+/* What is removed from a stash or the reading list waits here for TRASH_DAYS, with what it takes to
+ * put it back: a tab entry holds the stash it left (id, name, date, flags) and its place and marks,
+ * an item entry the whole reading-list entry. Old entries are dropped whenever the trash is read —
+ * there is no timer to rely on in an event page — and when the add-on starts. */
+const TRASH_DAYS = 30;
+
+async function getTrash() {
+  const all = await read("trash", []);
+  const cutoff = Date.now() - TRASH_DAYS * 86400000;
+  const keep = all.filter(e => Date.parse(e.at) >= cutoff);
+  if (keep.length !== all.length) await browser.storage.local.set({ trash: keep });
+  return keep;
+}
+
+async function addToTrash(entries) {
+  if (!entries.length) return [];
+  const at = new Date().toISOString();
+  const made = entries.map((e, i) => ({ id: `${Date.now().toString(36)}${i}${Math.random().toString(36).slice(2, 6)}`, at, ...e }));
+  await browser.storage.local.set({ trash: [...made, ...await getTrash()] });
+  return made.map(e => e.id);
+}
+
+async function deleteFromTrash(ids) {
+  const gone = new Set(ids);
+  const all = await getTrash();
+  const keep = all.filter(e => !gone.has(e.id));
+  await browser.storage.local.set({ trash: keep });
+  return all.length - keep.length;
+}
+
+/* Put trashed entries back. Tabs of one stash go back together; a stash that is gone is written
+ * again once, and the entries still waiting for it follow it to its new id. An entry that cannot
+ * be put back stays in the trash. */
+async function restoreFromTrash(ids) {
+  const want = new Set(ids);
+  const picked = (await getTrash()).filter(e => want.has(e.id));
+  const done = [];
+  const where = new Set();
+  const items = picked.filter(e => e.kind === "item");
+  if (items.length) {
+    await restoreItems(items.map(e => e.item));
+    done.push(...items.map(e => e.id));
+    where.add("the reading list");
+  }
+  const byStash = new Map();
+  for (const e of picked.filter(e => e.kind === "tab")) {
+    if (!byStash.has(e.stash.id)) byStash.set(e.stash.id, []);
+    byStash.get(e.stash.id).push(e);
+  }
+  for (const [sid, es] of byStash) {
+    const res = await putBack(es[0].stash, es.map(e => ({ url: e.url, title: e.title, ...e.tab })));
+    if (!res.ok) continue;
+    done.push(...es.map(e => e.id));
+    where.add((await findStash(res.id))?.name || es[0].stash.name);
+    if (res.id !== sid) {
+      const rest = await getTrash();
+      for (const e of rest) if (e.stash?.id === sid) e.stash.id = res.id;
+      await browser.storage.local.set({ trash: rest });
+    }
+  }
+  await deleteFromTrash(done);
+  return { ok: true, restored: done.length, where: [...where] };
+}
+
 /* --- worklist ------------------------------------------------------------------- */
 
 /* When the link was originally saved, wherever it came from — not when it was pasted here. That
@@ -814,6 +880,7 @@ browser.runtime.onInstalled.addListener(() => applyDataPatches().catch(() => {})
 // The tag library is written on the first install or update that has one: the presets and the tags in use.
 browser.runtime.onInstalled.addListener(() => editTags(() => {}).catch(() => {}));
 browser.runtime.onStartup.addListener(() => applyDataPatches().catch(() => {}));
+browser.runtime.onStartup.addListener(() => getTrash().catch(() => {}));
 for (const ev of [browser.runtime.onStartup, browser.runtime.onInstalled]) ev.addListener(() => iconsFromOpenTabs().catch(() => {}));
 
 /* There is one List tab to show stashes in, like OneTab's tab: every way in switches to the open
@@ -1193,12 +1260,20 @@ async function restoreTabs(id, ids, flip = false) {
 
   // flip: this once, the other of what the setting says (⇧4 on the viewer pages).
   const remove = ((await getStashSettings()).afterRestore === "remove") !== !!flip && !session.locked;
-  if (remove) await dropFromStash(id, wanted.map(t => t.id));
+  if (remove) await dropFromStash(id, wanted.map(t => t.id), { trash: false });
   else {
     const at = new Date().toISOString();
     await editMeta(m => { for (const t of wanted) m.tabs[t.id] = { ...m.tabs[t.id], seen_at: at }; });
   }
   return { ok: true, restored: wanted.length, removed: remove, viaHelper, standins: standins.length, helperError };
+}
+
+async function restoreItems(wanted) {
+  const items = await getItems();
+  const have = new Set(items.map(i => keyOf(i.url)));
+  const back = wanted.filter(i => i?.url && !have.has(keyOf(i.url)));
+  await setItems([...items, ...back]);
+  return { ok: true, restored: back.length };
 }
 
 /* Undo of taking tabs out: each goes back into its stash at the place it had, with its marks. A
@@ -1228,10 +1303,17 @@ async function putBack(stash, tabs) {
 
 /* Take tabs out of a stash — all of them, or the bookmark ids given, which must be in it. A stash
  * left empty goes with them. Returns what was taken; a locked stash gives up nothing. */
-async function dropFromStash(id, ids) {
+async function dropFromStash(id, ids, { trash = true } = {}) {
   const session = await findStash(id);
   if (!session || session.locked) return [];
   const taken = ids ? session.tabs.filter(t => ids.includes(t.id)) : session.tabs;
+  // Moves pass trash: false: the tab is not gone, it is somewhere else. The entry ids ride on
+  // the returned array, for a caller whose undo must take them out of the trash again.
+  const trashed = trash ? await addToTrash(taken.map(t => ({
+    kind: "tab", url: t.url, title: t.title,
+    stash: { id, name: session.name, created_at: session.created_at, source: session.source, format: session.format, starred: session.starred },
+    tab: { index: session.tabs.indexOf(t), ...Object.fromEntries(TAB_META.filter(k => t[k] != null).map(k => [k, t[k]])) },
+  }))) : [];
   for (const t of taken) await browser.bookmarks.remove(t.id);
   // Only an empty folder goes: one the user put anything else in stays.
   const emptied = !(await browser.bookmarks.getChildren(id)).length;
@@ -1240,6 +1322,7 @@ async function dropFromStash(id, ids) {
     for (const t of taken) delete m.tabs[t.id];
     if (emptied) delete m.stashes[id];
   });
+  taken.trashed = trashed;
   return taken;
 }
 
@@ -1253,7 +1336,7 @@ async function moveStashToList(id, ids) {
   // and browser pages stay in the stash.
   const web = asked.filter(t => /^(https?|ftp):/.test(t.url));
   if (!web.length) return { ok: false, error: "only web pages can go to the reading list" };
-  const taken = await dropFromStash(id, web.map(t => t.id));
+  const taken = await dropFromStash(id, web.map(t => t.id), { trash: false });
   const res = await addItems(taken.map(t => ({ url: t.url, title: t.title, saved_at: session.created_at })));
   return { ...res, moved: taken.length, stayed: asked.length - taken.length };
 }
@@ -1721,7 +1804,9 @@ async function handleMessage(msg) {
         const captures = await getCaptures();
         await setCaptures(captures.filter(c => !drop.has(keyOf(c.url))));
       }
-      return { ok: true, removed: drop.size, items: removed };
+      // A move's undo passes trash: false; so does anything that is putting the entry somewhere else.
+      const trashed = msg.trash === false ? [] : await addToTrash(removed.map(i => ({ kind: "item", url: i.url, title: i.title, item: i })));
+      return { ok: true, removed: drop.size, items: removed, trashed };
     }
 
     case "open-shot": {
@@ -1805,14 +1890,19 @@ async function handleMessage(msg) {
     case "put-back":
       return putBack(msg.stash, msg.tabs || []);
 
-    case "restore-items": {
+    case "restore-items":
       // Undo of "remove": the entries as they were, back in the list. One already there stays as it is.
-      const items = await getItems();
-      const have = new Set(items.map(i => keyOf(i.url)));
-      const back = (msg.items || []).filter(i => i?.url && !have.has(keyOf(i.url)));
-      await setItems([...items, ...back]);
-      return { ok: true, restored: back.length };
-    }
+      return restoreItems(msg.items || []);
+
+    case "trash-list":
+      return { ok: true, entries: await getTrash(), days: TRASH_DAYS };
+
+    case "trash-restore":
+      return restoreFromTrash(msg.ids || []);
+
+    // Delete forever; also what an undo uses to take a removal's entries back out of the trash.
+    case "trash-delete":
+      return { ok: true, removed: await deleteFromTrash(msg.all ? (await getTrash()).map(e => e.id) : msg.ids || []) };
 
     case "rename-stash": {
       const session = await findStash(msg.id);
@@ -1825,7 +1915,8 @@ async function handleMessage(msg) {
     case "delete-stash": {
       const session = await findStash(msg.id);
       if (session?.locked) return { ok: false, error: "that stash is locked; unlock it first" };
-      return { ok: true, removed: (await dropFromStash(msg.id, msg.ids)).length };
+      const taken = await dropFromStash(msg.id, msg.ids, { trash: msg.trash !== false });
+      return { ok: true, removed: taken.length, trashed: taken.trashed || [] };
     }
 
     case "move-stash":
