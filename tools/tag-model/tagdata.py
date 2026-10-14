@@ -25,7 +25,7 @@ SOURCE_SYSTEM_ONE = "system-one"
 SOURCE_GUTSY = "gutsy"
 SOURCE_MODEL = "model"
 
-# One line per tag whose name alone does not say what belongs under it. The owner's own list lives in
+# One line per tag of the owner's library, saying what belongs under it. The owner's own list lives in
 # `<data dir>/tag-model/tag-meanings.json` ({tag: meaning}) and overrides these.
 DEFAULT_TAG_MEANINGS = {
     "leverage": "an idea, tool or service that multiplies what one person can get done with little effort",
@@ -59,6 +59,28 @@ DEFAULT_TAG_MEANINGS = {
     "to-watch": "something to watch later",
     "reference": "something to keep for later lookup",
     "inspiration": "something that inspires ideas or taste",
+    "work": "the owner's job and professional tasks: employer, colleagues, work tools and deliverables",
+    "personal": "private life and personal matters, not work",
+    "buy": "something to purchase: a product or item the owner means to buy",
+    "dev": "software development: code, programming tools, libraries, engineering practice",
+    "ai": "artificial intelligence: models, agents, machine learning, AI tools and research",
+    "design": "design work and craft: graphic, product, interface and visual design",
+    "news": "news and current events: reporting, headlines, analysis of what is happening",
+    "video": "videos and video-making: films, clips, streaming, editing",
+    "shopping": "stores, products and deals: browsing or comparing things to buy",
+    "music": "music: songs, albums, artists, instruments, listening and making music",
+    "games": "video games and games in general: playing, making and game news",
+    "education": "formal teaching and courses: schools, universities, lessons and teaching material",
+    "photography": "taking and editing photographs: cameras, technique, photographers",
+    "learning": "learning a skill or subject: tutorials, explanations, study methods",
+    "visual arts": "painting, drawing, illustration, sculpture and other fine or visual art",
+    "books": "books and reading: titles, authors, reviews, book lists",
+    "movies": "films and series: reviews, trailers, what to watch",
+    "exercise": "physical training and fitness: workouts, gym, sport, body conditioning",
+    "running": "running: training, races, shoes, routes, technique",
+    "languages": "learning and using human languages: vocabulary, grammar, translation, linguistics",
+    "marketing": "promoting a product or business: advertising, growth, audience, branding",
+    "entertainment": "things for fun: shows, humour, celebrities, pastimes",
 }
 
 
