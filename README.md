@@ -248,6 +248,22 @@ comes from `tag-meanings.json` in that folder when you add one, else from a buil
 writes `compare/answers.json` and `compare/compare.md` in that folder: speed, agreement and every
 link where they differ. With `--labelled` it scores both against the links you have tagged.
 
+#### Agent tags
+
+`tools/tag-model/agent_tag.py` has Claude Haiku (`claude -p`, no CLAUDE.md, rules or hooks loaded)
+tag your links with tags from your own library: 0 to 5 per link, only ones that clearly fit, never
+a tag outside the list. It sees each tag with its one-line meaning, and each link's title, site and
+the first 1,500 characters of its captured text. It runs only when you ask, and every call spends
+Claude tokens (25 links per call, three calls at a time).
+
+    cd tools/tag-model && uv run python agent_tag.py             # links with no agent tags yet
+    uv run python agent_tag.py --limit 50 --no-write             # a trial; --all retags everything
+
+Each batch is cached in `<data dir>/tag-model/agent-tags.json` (keyed by the link's text), so a
+stopped run resumes where it stopped; the result, `{url: [tags]}`, is written to
+`agent-tags-set.json` beside it and sent with `link-keeper agent-tags-set FILE --by haiku` (merges;
+`--all` replaces). `--no-write` only writes the file and prints that command.
+
 ### Acting on a link — the same on every page
 
 Links, Cards and Tags offer one set of actions on a link, drawn the same way and answering to

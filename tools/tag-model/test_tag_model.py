@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 import json
 import random
+import subprocess
 import urllib.error
 import zlib
 
@@ -346,3 +347,198 @@ def test_gutsy_without_an_install_fails_clearly(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="GUTSY_DIR"):
         with gutsy_mod.gutsy_server(tmp_path, tmp_path / "log"):
             pass
+
+
+# --- agent_tag: Haiku tags links from the library ---
+
+import agent_tag  # noqa: E402
+
+AGENT_LIBRARY = ["cook", "code", "to-read"]
+
+
+def agent_links(n: int) -> list[Link]:
+    return [Link(f"https://site.example/{i}", f"page {i}", [], f"text of page {i}") for i in range(n)]
+
+
+def stub_claude(answers: dict[str, list[str]], calls: list | None = None, skip: set[str] | None = None):
+    """A stand-in for call_claude: answers each url of the batch from `answers`, leaving out `skip`."""
+    def ask(system, user, schema):
+        batch = json.loads(user)
+        if calls is not None:
+            calls.append([item["url"] for item in batch])
+        return {"results": [{"url": item["url"], "tags": answers.get(item["url"], [])}
+                            for item in batch if item["url"] not in (skip or set())]}
+    return ask
+
+
+def test_the_built_in_meanings_cover_the_library_tags():
+    for tag in ("music", "games", "dev", "ai", "work", "buy", "visual arts", "to-read", "leverage"):
+        assert tagdata.DEFAULT_TAG_MEANINGS[tag]
+
+
+def test_the_prompt_lists_every_tag_with_its_meaning_and_the_schema_limits_tags_to_the_library():
+    system = agent_tag.system_prompt(["music", "weird"], {"music": "songs and albums"})
+    assert "- music: songs and albums" in system and "- weird\n" in system
+    assert "never invent" in system.lower() and "empty list" in system
+    schema = agent_tag.result_schema(["music", "weird"])
+    assert schema["properties"]["results"]["items"]["properties"]["tags"]["items"]["enum"] == ["music", "weird"]
+
+
+def test_links_go_out_25_to_a_call_and_the_answers_are_collected(tmp_path):
+    calls: list = []
+    links = agent_links(60)
+    answers = {link.url: ["cook"] for link in links}
+    result, seconds = agent_tag.tag_links(links, AGENT_LIBRARY, {}, tmp_path / "c.json",
+                                          ask_fn=stub_claude(answers, calls), report=lambda *_: None)
+    assert sorted(len(c) for c in calls) == [10, 25, 25]
+    assert len(seconds) == 3
+    assert result == {link.url: ["cook"] for link in links}
+
+
+def test_unknown_tags_repeats_and_surplus_are_dropped(tmp_path):
+    links = agent_links(1)
+    answer = ["cook", "invented", "cook", "code", "to-read", "x", "y"]
+    result, _ = agent_tag.tag_links(links, AGENT_LIBRARY, {}, tmp_path / "c.json",
+                                    ask_fn=stub_claude({links[0].url: answer}), report=lambda *_: None)
+    assert result[links[0].url] == ["cook", "code", "to-read"]
+
+
+def test_urls_outside_the_batch_are_ignored_and_an_empty_answer_is_a_valid_one(tmp_path):
+    links = agent_links(2)
+
+    def ask(system, user, schema):
+        return {"results": [{"url": "https://elsewhere.example", "tags": ["cook"]},
+                            {"url": links[0].url, "tags": []}, {"url": links[1].url, "tags": ["code"]}]}
+
+    result, _ = agent_tag.tag_links(links, AGENT_LIBRARY, {}, tmp_path / "c.json", ask_fn=ask, report=lambda *_: None)
+    assert result == {links[0].url: [], links[1].url: ["code"]}
+
+
+def test_a_link_missing_from_the_answer_is_asked_once_more(tmp_path):
+    links = agent_links(3)
+    calls: list = []
+    state = {"first": True}
+
+    def ask(system, user, schema):
+        calls.append(len(json.loads(user)))
+        skip = {links[1].url} if state.pop("first", False) else set()
+        return stub_claude({link.url: ["code"] for link in links}, skip=skip)(system, user, schema)
+
+    result, _ = agent_tag.tag_links(links, AGENT_LIBRARY, {}, tmp_path / "c.json", ask_fn=ask, report=lambda *_: None)
+    assert calls == [3, 1]
+    assert result[links[1].url] == ["code"]
+
+
+def test_a_link_never_answered_is_left_out_after_one_retry(tmp_path):
+    links = agent_links(2)
+    calls: list = []
+    result, _ = agent_tag.tag_links(links, AGENT_LIBRARY, {}, tmp_path / "c.json",
+                                    ask_fn=stub_claude({}, calls, skip={links[1].url}), report=lambda *_: None)
+    assert len(calls) == 2 and list(result) == [links[0].url]
+
+
+def test_a_failing_call_is_retried_and_total_failure_stops_the_run(tmp_path):
+    links = agent_links(2)
+
+    def broken(system, user, schema):
+        raise agent_tag.AgentTagError("down")
+
+    with pytest.raises(agent_tag.AgentTagError):
+        agent_tag.tag_links(links, AGENT_LIBRARY, {}, tmp_path / "c.json", ask_fn=broken, report=lambda *_: None)
+
+
+def test_a_stopped_run_resumes_from_the_cache(tmp_path):
+    links = agent_links(30)
+    answers = {link.url: ["to-read"] for link in links}
+    cache = tmp_path / "agent-tags.json"
+    seen = {"n": 0}
+
+    def dies_on_the_second_call(system, user, schema):
+        seen["n"] += 1
+        if seen["n"] == 2:
+            raise KeyboardInterrupt
+        return stub_claude(answers)(system, user, schema)
+
+    with pytest.raises(KeyboardInterrupt):
+        agent_tag.tag_links(links, AGENT_LIBRARY, {}, cache, ask_fn=dies_on_the_second_call, parallel=1,
+                            report=lambda *_: None)
+    assert len(json.loads(cache.read_text())) == 25
+
+    calls: list = []
+    result, _ = agent_tag.tag_links(links, AGENT_LIBRARY, {}, cache, ask_fn=stub_claude(answers, calls),
+                                    report=lambda *_: None)
+    assert calls == [[link.url for link in links[25:]]]
+    assert result == answers
+
+
+def test_all_ignores_the_cache(tmp_path):
+    links = agent_links(2)
+    cache = tmp_path / "agent-tags.json"
+    answers = {link.url: ["code"] for link in links}
+    agent_tag.tag_links(links, AGENT_LIBRARY, {}, cache, ask_fn=stub_claude(answers), report=lambda *_: None)
+    calls: list = []
+    agent_tag.tag_links(links, AGENT_LIBRARY, {}, cache, ask_fn=stub_claude(answers, calls), use_cache=False,
+                        report=lambda *_: None)
+    assert len(calls) == 1
+
+
+def test_the_cache_is_keyed_by_text_hash_and_a_changed_text_is_asked_again(tmp_path):
+    link = agent_links(1)[0]
+    cache = tmp_path / "agent-tags.json"
+    agent_tag.tag_links([link], AGENT_LIBRARY, {}, cache, ask_fn=stub_claude({link.url: ["code"]}), report=lambda *_: None)
+    assert list(json.loads(cache.read_text())) == [agent_tag.text_hash(link)]
+    changed = Link(link.url, link.title, [], "other text")
+    calls: list = []
+    agent_tag.tag_links([changed], AGENT_LIBRARY, {}, cache, ask_fn=stub_claude({}, calls), report=lambda *_: None)
+    assert len(calls) == 1
+
+
+def test_the_default_run_takes_links_without_agent_tags_and_all_takes_everything():
+    links = agent_links(4)
+    done = {links[0].url, links[1].url}
+    assert [l.url for l in agent_tag.links_to_tag(links, done, everything=False, limit=None)] == [links[2].url, links[3].url]
+    assert len(agent_tag.links_to_tag(links, done, everything=True, limit=None)) == 4
+    assert len(agent_tag.links_to_tag(links, done, everything=False, limit=1)) == 1
+
+
+def test_a_missing_agent_tags_field_means_none_yet(monkeypatch):
+    rows = [{"url": "https://a.example"}, {"url": "https://b.example", "agentTags": []},
+            {"url": "https://c.example", "agentTags": ["code"]}]
+    monkeypatch.setattr(tagdata, "link_keeper", lambda *a: json.dumps({"links": rows}))
+    assert agent_tag.urls_with_agent_tags() == {"https://b.example", "https://c.example"}
+
+
+def test_the_output_file_is_url_to_tags_and_the_command_merges_unless_all(tmp_path, monkeypatch):
+    links = agent_links(2)
+    monkeypatch.setattr(tagdata, "load_tag_library", lambda: AGENT_LIBRARY)
+    monkeypatch.setattr(tagdata, "load_links", lambda: links)
+    monkeypatch.setattr(tagdata, "link_keeper", lambda *a: json.dumps({"links": []}))
+    answers = {links[0].url: ["cook", "nope"], links[1].url: []}
+    assert agent_tag.main(["--data-dir", str(tmp_path), "--no-write"], ask_fn=stub_claude(answers)) == 0
+    out = json.loads((tmp_path / "tag-model" / "agent-tags-set.json").read_text())
+    assert out == {links[0].url: ["cook"], links[1].url: []}
+    assert "--replace" not in agent_tag.send_command(tmp_path / "x.json", replace=False)
+    assert "--replace" in agent_tag.send_command(tmp_path / "x.json", replace=True)
+    assert agent_tag.send_command(tmp_path / "x.json", False)[-2:] == ["--by", "haiku"]
+
+
+def test_call_claude_reads_structured_output_and_refuses_errors(monkeypatch):
+    def fake_run(payload):
+        return lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(agent_tag.shutil, "which", lambda name: "/bin/claude")
+    seen = {}
+
+    def run(cmd, **kw):
+        seen["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, json.dumps({"structured_output": {"results": []}}), "")
+
+    monkeypatch.setattr(agent_tag.subprocess, "run", run)
+    assert agent_tag.call_claude("sys", "user", {"type": "object"}) == {"results": []}
+    cmd = seen["cmd"]
+    assert cmd[cmd.index("--model") + 1] == "haiku" and cmd[cmd.index("--setting-sources") + 1] == ""
+    monkeypatch.setattr(agent_tag.subprocess, "run", fake_run({"is_error": True, "result": "bad"}))
+    with pytest.raises(agent_tag.AgentTagError):
+        agent_tag.call_claude("sys", "user", {})
+    monkeypatch.setattr(agent_tag.subprocess, "run", fake_run({"result": '{"results": []}'}))
+    assert agent_tag.call_claude("sys", "user", {}) == {"results": []}
