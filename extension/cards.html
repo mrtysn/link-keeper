@@ -165,10 +165,12 @@
   }
   .done b { display: block; color: var(--ink); font-size: 1.1rem; margin-bottom: .3rem; }
   .done a { color: var(--accent); }
-  #deal-tag {
-    margin-left: auto; max-width: 14rem; min-height: 30px; padding: 3px 8px; font: inherit; font-size: .8125rem;
+  .deal { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
+  #deal-tag, #deal-order {
+    max-width: 14rem; min-height: 30px; padding: 3px 8px; font: inherit; font-size: .8125rem;
     color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
   }
+  #side button.passed:not([aria-current]) { opacity: .5; }
   .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .card .head .tags { margin-left: auto; justify-content: flex-end; max-width: 45%; }
   /* Stored tag suggestions: outlined and dashed, so they read as not yet the owner's tags. */
@@ -195,7 +197,16 @@
   <header>
     <h1>One at a time</h1>
     <label class="sr-only" for="deal-tag">Which links</label>
-    <select id="deal-tag" title="Every link, one tag, the untagged ones or those not captured"></select>
+    <div class="deal">
+      <label class="sr-only" for="deal-order">Order</label>
+      <select id="deal-order" title="The order the deck is dealt in">
+        <option value="shuffle">Shuffled</option>
+        <option value="oldest">Oldest first</option>
+        <option value="newest">Newest first</option>
+        <option value="site">By site</option>
+      </select>
+      <select id="deal-tag" title="Every link, one tag, the untagged ones or those not captured"></select>
+    </div>
   </header>
 
   <div class="meter"><i id="bar"></i></div>

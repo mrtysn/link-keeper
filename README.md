@@ -364,6 +364,9 @@ nothing.
 
 The deck is shuffled fresh each visit: ordered by date it would be 133 x.com cards in a row, and
 mixing the domains keeps each card worth a look.
+The **Order** choice beside the deck selector (remembered) changes that: *Oldest first* or *Newest first* by
+save date, or *By site*, one site at a time with the site holding most links first. Links you have passed
+this session are dimmed in the sidebar, so your place in the pile shows; the card on show never is.
 
 ### Stashing tabs
 

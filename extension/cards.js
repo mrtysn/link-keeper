@@ -73,6 +73,7 @@ function toCard(link) {
 /* Deal one tag at a time, as swipe-sort deals one source: similar links are quicker to judge
  * together. "" is every tag; UNTAGGED the links with none set by hand. */
 const TAG_KEY = "cardsTag";
+const ORDER_KEY = "cardsOrder";
 const UNTAGGED = "\u0000untagged";
 const UNCAPTURED = "\u0000uncaptured";
 // Untagged links that hold stored tag suggestions, dealt most confident first.
@@ -81,6 +82,8 @@ const hasSuggestions = l => !l.tags.length && !!l.suggested?.length;
 const topSuggestion = l => l.suggested?.[0]?.p || 0;
 let dealTag = "";
 try { dealTag = localStorage.getItem(TAG_KEY) || ""; } catch (e) { /* storage blocked: every tag */ }
+let dealOrder = "shuffle";
+try { dealOrder = localStorage.getItem(ORDER_KEY) || "shuffle"; } catch (e) { /* storage blocked: shuffled */ }
 const inDeal = l => !dealTag || (dealTag === UNTAGGED ? !l.tags.length : dealTag === SUGGESTED ? hasSuggestions(l)
   : dealTag === UNCAPTURED ? isWeb(l.url) && !l.cap : shownTags(l).tags.includes(dealTag));
 
@@ -118,11 +121,28 @@ function takeData(d) {
   renderTagPick(d.links);
 }
 
-/* A new deal: every link in the chosen narrowing, shuffled. */
+/* The deck's order: shuffled (the Suggested deal by suggestion strength), oldest or newest first by the
+ * date a link was saved, or a site at a time, the site with most links first. Undated links come last. */
+function ordered(dealt) {
+  const when = l => String(l.date || "");
+  const oldest = (a, b) => (when(a) ? 0 : 1) - (when(b) ? 0 : 1) || when(a).localeCompare(when(b));
+  const newest = (a, b) => (when(a) ? 0 : 1) - (when(b) ? 0 : 1) || when(b).localeCompare(when(a));
+  if (dealOrder === "oldest") return dealt.sort(oldest);
+  if (dealOrder === "newest") return dealt.sort(newest);
+  if (dealOrder === "site") {
+    const site = l => (isWeb(l.url) ? hostOf(l.url) : "");
+    const count = new Map();
+    for (const l of dealt) count.set(site(l), (count.get(site(l)) || 0) + 1);
+    return dealt.sort((a, b) => (site(a) === "") - (site(b) === "") || count.get(site(b)) - count.get(site(a))
+      || site(a).localeCompare(site(b)) || newest(a, b));
+  }
+  return dealTag === SUGGESTED ? dealt.sort((a, b) => topSuggestion(b) - topSuggestion(a)) : shuffle(dealt);
+}
+
+/* A new deal: every link in the chosen narrowing, in the chosen order. */
 async function load() {
   takeData(await loadLinks());
-  const dealt = data.links.filter(inDeal);
-  deck = (dealTag === SUGGESTED ? dealt.sort((a, b) => topSuggestion(b) - topSuggestion(a)) : shuffle(dealt)).map(toCard);
+  deck = ordered(data.links.filter(inDeal)).map(toCard);
   index = 0;
   buildSide();
   render();
@@ -327,6 +347,12 @@ function buildSide() {
 
 function renderSide() {
   const card = deck[index];
+  // Links dealt before this card, whatever was done to them: dimmed, so the place in the pile shows.
+  const passed = new Set(deck.slice(0, index).map(c => c.link.key));
+  for (const r of sideRows) {
+    r.b.classList.toggle("passed", passed.has(r.key));
+    r.b.title = passed.has(r.key) ? "Passed this session" : "";
+  }
   const home = card ? (heldIn(card.link).find(h => onShow.has(h.stash.id))?.stash.id || "list") : null;
   let mark = null;
   for (const r of sideRows) {
@@ -571,6 +597,13 @@ function arm(el, card) {
     el.style.transform = "";
   });
 }
+
+$("deal-order").value = dealOrder;
+$("deal-order").onchange = () => {
+  dealOrder = $("deal-order").value;
+  try { localStorage.setItem(ORDER_KEY, dealOrder); } catch (e) { /* not remembered */ }
+  load();
+};
 
 $("deal-tag").onchange = () => {
   dealTag = $("deal-tag").value;

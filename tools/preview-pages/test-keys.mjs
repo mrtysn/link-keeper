@@ -673,6 +673,31 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
+// Cards: the deck's order, and links already passed dimmed in the sidebar
+{
+  const p = await page("cards.html");
+  const dateOf = async () => (await p.$eval(".card.top .when", e => e.textContent)).match(/saved (\d{4}-\d\d-\d\d)/)?.[1] || "";
+  const firsts = {};
+  for (const [order, cmp] of [["oldest", (a, b) => a <= b], ["newest", (a, b) => a >= b]]) {
+    await p.selectOption("#deal-order", order); await p.waitForTimeout(500);
+    const seen = [];
+    for (let i = 0; i < 4; i++) { seen.push(await dateOf()); await key(p, "s"); }
+    firsts[order] = seen[0];
+    ok(seen.every(Boolean) && seen.slice(1).every((d, i) => cmp(seen[i], d)), `cards: ${order} first deals by date (${seen.join(" ")})`);
+  }
+  ok(firsts.oldest < firsts.newest, `cards: the oldest and the newest decks start apart (${firsts.oldest} vs ${firsts.newest})`);
+  ok((await p.$$eval("#side button.passed", l => l.length)) === 4, "cards: the four passed links are dimmed in the sidebar");
+  ok(!(await p.$("#side button[aria-current].passed")), "cards: the link on show is not dimmed");
+  await key(p, "z");
+  await p.selectOption("#deal-order", "site"); await p.waitForTimeout(500);
+  const hosts = [];
+  for (let i = 0; i < 6; i++) { hosts.push(await p.$eval(".card.top .host", e => e.textContent)); await key(p, "s"); }
+  const runs = hosts.filter((h, i) => i === 0 || h !== hosts[i - 1]).length;
+  ok(runs <= new Set(hosts).size + 0, `cards: by site deals a site at a time (${hosts.join(" | ")})`);
+  ok(p.errs.length === 0, `cards order: no errors ${p.errs.join()}`);
+  await p.close();
+}
+
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);
