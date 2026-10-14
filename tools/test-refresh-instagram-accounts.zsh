@@ -81,5 +81,61 @@ check "IG_THREADS reads the named thread" test "$(count '(.url | test("CCC333"))
 check "...still without an account" test "$(count '.account != null')" = 0
 check "...and an unnamed thread stays out" test "$(count '.url | test("DDD444")')" = 0
 
+# --offline: nothing reaches out, and the last run's lookups survive. Every tool that would reach out
+# is replaced by one that only leaves a marker file; a control run without --offline shows the markers
+# would have appeared, so an empty marker folder means something.
+marks=$work/marks bin=$work/bin
+mkdir -p "$marks" "$bin" "$work/xdg/link-keeper" "$fake/tools/tag-model/.venv"
+: > "$work/xdg/link-keeper/telegram.session"
+for f in importers/enrich-x.py importers/enrich-web.py importers/telegram-pull.py tools/watch-reel.zsh tools/tag-model/run.zsh; do
+  print -r -- "#!/bin/zsh" > "$fake/$f"
+  print -r -- "touch ${(q)marks}/${f:t}" >> "$fake/$f"
+  chmod +x "$fake/$f"
+done
+print -r -- "#!/bin/zsh" > "$bin/ssh"
+print -r -- "touch ${(q)marks}/ssh; exit 1" >> "$bin/ssh"
+chmod +x "$bin/ssh"
+cat > "$fake/config.local.sh" <<EOF
+DATA_DIR="$work/data"
+TELEGRAM_EXPORT_DIR="$work/no-telegram"
+INSTAGRAM_EXPORT_DIR="$work/accounts/main"
+IG_THREADS="bob_3"
+LINK_INBOX_REMOTE=ghost:/nowhere
+TELEGRAM_API_ID=1
+SERVE_PORT=18791
+EOF
+print -r -- '{"kind":"tweet","url":"https://x.com/someone/status/1","text":"kept from the last run"}' > "$work/data/link-captures-x.jsonl"
+print -r -- '{"kind":"page","url":"https://kept.example/","title":"kept from the last run"}' > "$work/data/link-captures-web.jsonl"
+
+PATH=$bin:$PATH XDG_CONFIG_HOME=$work/xdg "$fake/tools/refresh.zsh" --offline --no-serve --no-open > "$work/offline.out" 2>&1 \
+  || { cat "$work/offline.out"; print "FAIL refresh.zsh --offline exited non-zero"; exit 1 }
+check "--offline reaches out to nothing (no marker files)" test -z "$(ls "$marks")"
+check "--offline keeps the last run's x.com record" test "$(count '.url == "https://x.com/someone/status/1"')" = 1
+check "--offline keeps the last run's web record" test "$(count '.url == "https://kept.example/"')" = 1
+check "--offline still parses the Instagram dump" test "$(count '(.url | test("CCC333")) and .thread == ["bob_3"]')" = 1
+check "--offline says it skipped the lookups" grep -q "skipped (--offline)" "$work/offline.out"
+
+# The tag suggestions and the handover come after the serve step, so these runs offer the file on
+# loopback and the test collects it, as the extension's list page would.
+run_served() {   # flags for refresh.zsh; runs it, collects the handover, waits for it to finish
+  PATH=$bin:$PATH XDG_CONFIG_HOME=$work/xdg "$fake/tools/refresh.zsh" --no-open "$@" > "$work/served.out" 2>&1 &
+  local pid=$! i
+  for i in {1..60}; do
+    curl -fsS -o /dev/null "http://127.0.0.1:18791/link-handoff.json" 2>/dev/null && break
+    sleep 0.5
+  done
+  wait $pid || true
+  sleep 1   # the tag run is detached
+}
+run_served --offline
+check "--offline hands the file over" grep -q "handover:" "$work/served.out"
+check "--offline skips the tag suggestions, and says so" grep -q "tag suggestions: skipped (--offline)" "$work/served.out"
+check "--offline still reaches out to nothing when it serves" test -z "$(ls "$marks")"
+
+run_served
+for m in ssh telegram-pull.py enrich-x.py enrich-web.py run.zsh; do
+  check "control: without --offline, $m runs" test -e "$marks/$m"
+done
+
 (( failed )) && { print "\nsome checks failed"; exit 1 }
 print "all passed"

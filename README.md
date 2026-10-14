@@ -588,6 +588,12 @@ as plain `URL<TAB>date`, which cannot carry the origin, so `importers/attach-dm-
 `thread` and `senders` back on their records after the merge. A link two accounts both hold becomes
 one record naming both (`account` is then a list) with every sender and thread. Without `IG_ACCOUNTS` the old single-export setup is unchanged.
 
+`tools/refresh.zsh --offline` brings a new Instagram dump in with no internet: it parses the dump, keeps the
+x.com and web lookups the last full run left, and hands the result to the extension, skipping the phone inbox, the
+Saved Messages puller, the lookups, the reel downloads and the tag suggestions. Links to other sites inside the
+dump and any new Telegram links wait for the next full run. The extension skips a link it already holds, so
+repeating an import is safe.
+
 When an export will not do, `docs/browser-agent-dm-run.md` is the brief for a Chrome-agent run over named DM threads:
 the approval, request count and stop rules it needs first, and the records it returns, which the refresh
 merges from `link-captures-extra.jsonl`.

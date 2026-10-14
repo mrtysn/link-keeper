@@ -13,6 +13,12 @@
 #   refresh.zsh <result.json> <outdir>
 #   refresh.zsh --no-serve          # rebuild only, do not offer it to the extension
 #   refresh.zsh --no-open           # offer it, but do not open the browser yourself
+#   refresh.zsh --offline           # no internet: parse the Instagram dump, keep the last lookups, hand over
+#
+# --offline skips every step that reaches out — the phone-inbox mirror, the Saved Messages puller, the
+# x.com and web lookups, the reel downloads, the tag suggestions — and keeps the files the last full
+# run left. Links in the Instagram dump are parsed and merged; links to other sites in it, and Telegram
+# links, wait for the next full run. The extension skips a link it already holds, so it is safe to repeat.
 #
 # Paths come from config.local.sh at this repo's root — copy config.local.sh.example and fill it in.
 # Nothing machine-specific is committed.
@@ -37,10 +43,12 @@ fi
 # parameters before the loop below ever reads them.
 serve=1
 open_page=1
+offline=0
 args=()
 for a in "$@"; do
   [[ $a == --no-serve ]] && { serve=0; continue }
   [[ $a == --no-open ]] && { open_page=0; continue }
+  [[ $a == --offline ]] && { offline=1; continue }
   args+=$a
 done
 
@@ -148,7 +156,9 @@ print "output : ${outdir/#$HOME/~}\n"
 
 # --- mirror the phone-share inbox from its server, when configured ----------------
 
-if [[ -n ${LINK_INBOX_REMOTE:-} ]]; then
+if (( offline )); then
+  print "--offline: no internet steps (phone inbox, Saved Messages, lookups, reel downloads, tag suggestions)"
+elif [[ -n ${LINK_INBOX_REMOTE:-} ]]; then
   print "0/8  links shared from the phone"
   r_host=${LINK_INBOX_REMOTE%%:*} r_path=${LINK_INBOX_REMOTE#*:}
   if ssh -o ConnectTimeout=6 -o BatchMode=yes "$r_host" cat "$r_path" > "$inbox.tmp" 2>/dev/null; then
@@ -163,7 +173,9 @@ fi
 # --- pull straight from Saved Messages, when a session exists ---------------------
 
 session=${XDG_CONFIG_HOME:-$HOME/.config}/link-keeper/telegram.session
-if [[ -n ${TELEGRAM_API_ID:-} && -f $session ]]; then
+if (( offline )); then
+  :
+elif [[ -n ${TELEGRAM_API_ID:-} && -f $session ]]; then
   print "0/8  new links from Saved Messages, no export needed"
   "$repo/importers/telegram-pull.py" --inbox "$inbox" \
     || print "  ! pull failed — continuing with what is already on disk"
@@ -190,7 +202,7 @@ for (( i = 1; i <= ${#ig_paths}; i++ )); do
   worklist+=$'\n'$("$repo/importers/instagram.py" "${ig_paths[$i]}" --other "${reply[@]}" --origins-out "$origins")
   origins_files+=("$origins")
 done
-if [[ -z ${worklist//$'\n'/} ]] && (( ! ${#ig_paths} )); then
+if [[ -z ${worklist//$'\n'/} ]] && (( ! ${#ig_paths} )) && (( ! offline )); then
   print -u2 "nothing to work with: no Telegram export under $TELEGRAM_EXPORT_DIR, no $inbox, no Instagram export"
   print -u2 "either export a chat, or set up the puller (importers/telegram-pull.py --login)"
   exit 1
@@ -200,16 +212,23 @@ fi
 # generic fetch of instagram.com yields a login wall or a stub record at best.
 enrich_input=$(print -r -- "$worklist" | grep -vE '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' || true)
 
-print "1/8  x.com via FxTwitter"
-# The previous run's records are reused, so only new ids are fetched and a transient failure
-# cannot erase a capture that already exists. The output must not be the reuse file itself.
-x_prev=$outdir/link-captures-x.prev.jsonl
-[[ -s $x_jsonl ]] && cp "$x_jsonl" "$x_prev"
-print -r -- "$enrich_input" | "$repo/importers/enrich-x.py" --reuse "$x_prev" > "$x_jsonl"
+if (( offline )); then
+  print "1/8  x.com via FxTwitter — skipped (--offline), keeping the last run's records"
+  print "\n2/8  everything else via og: tags and free APIs — skipped (--offline), keeping the last run's records"
+  [[ -e $x_jsonl ]] || : > "$x_jsonl"
+  [[ -e $web_jsonl ]] || : > "$web_jsonl"
+else
+  print "1/8  x.com via FxTwitter"
+  # The previous run's records are reused, so only new ids are fetched and a transient failure
+  # cannot erase a capture that already exists. The output must not be the reuse file itself.
+  x_prev=$outdir/link-captures-x.prev.jsonl
+  [[ -s $x_jsonl ]] && cp "$x_jsonl" "$x_prev"
+  print -r -- "$enrich_input" | "$repo/importers/enrich-x.py" --reuse "$x_prev" > "$x_jsonl"
 
-print "\n2/8  everything else via og: tags and free APIs"
-print -r -- "$enrich_input" \
-  | "$repo/importers/enrich-web.py" --failed-to "$unresolved" > "$web_jsonl"
+  print "\n2/8  everything else via og: tags and free APIs"
+  print -r -- "$enrich_input" \
+    | "$repo/importers/enrich-web.py" --failed-to "$unresolved" > "$web_jsonl"
+fi
 
 print "\n3/8  instagram, from its own export"
 : > "$ig_jsonl"
@@ -232,7 +251,7 @@ print "\n4/8  reels — packs for new instagram links, records from all of them"
 reels_dir=${REELS_DIR:-$outdir/reels}
 reels_jsonl=$outdir/link-captures-reels.jsonl
 reel_urls=$(print -r -- "$worklist" | cut -f1 | grep -E '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' | sort -u || true)
-if [[ -n $reel_urls ]]; then
+if [[ -n $reel_urls ]] && (( ! offline )); then
   print -r -- "$reel_urls" | REELS_DIR=$reels_dir xargs "$repo/tools/watch-reel.zsh" 2>&1 | grep -E "^packs:|! download failed" || true
 fi
 if [[ -d $reels_dir ]]; then
@@ -243,7 +262,7 @@ else
 fi
 # An instagram link whose pack failed (deleted reel, private post) must not vanish: it goes onto the
 # unresolved queue so the browser handoff still carries it.
-if [[ -n $reel_urls ]]; then
+if [[ -n $reel_urls ]] && (( ! offline )); then
   while IFS= read -r u; do
     code=$(print -r -- "$u" | sed -nE 's#.*instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+).*#\2#p')
     [[ -n $code && ! -s $reels_dir/$code/meta.json ]] && print -r -- "$u" >> "$unresolved"
@@ -346,7 +365,9 @@ wait $serve_pid
 # for the untagged links (tools/tag-model/). It can take a long time the first time, so it runs
 # detached and logs beside the other output; skipped with a line when its environment is not set up.
 tag_model=$here/tag-model
-if [[ -x $tag_model/run.zsh && -d $tag_model/.venv ]]; then
+if (( offline )); then
+  print "\ntag suggestions: skipped (--offline); the next full run makes them"
+elif [[ -x $tag_model/run.zsh && -d $tag_model/.venv ]]; then
   mkdir -p "$outdir/tag-model"
   print "\ntag suggestions: running in the background, log ${outdir/#$HOME/~}/tag-model/run.log"
   DATA_DIR=$outdir "$tag_model/run.zsh" >> "$outdir/tag-model/run.log" 2>&1 &!
