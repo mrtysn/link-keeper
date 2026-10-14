@@ -32,6 +32,8 @@ Reading
   tags [--json]                   the tag library with how many links carry each
   suggestions [--json]            links with a local model's tag suggestions (none once a link has tags),
                                   then each suggested tag with how many links it is suggested for
+  agent-tags [--json]             links carrying agent tags (tags a Claude agent wrote, a layer apart from yours),
+                                  then each agent tag with how many links carry it
   filter-rules                    the filtered-out rules, one per line
 
 Changing (needs Firefox running; each change is journaled)
@@ -40,6 +42,11 @@ Changing (needs Firefox running; each change is journaled)
   suggest-set FILE [--replace]    store tag suggestions from FILE, JSON {url: [{tag, p, by}]} with p 0..1 and
                                   by "system-one" (shown as Laya), "gutsy" or "model"; an empty list removes that link's entry, and
                                   --replace drops every other link's. The pages show them dimmed, F accepts
+  agent-tags-set FILE [--replace] [--by NAME]
+                                  store agent tags from FILE, JSON {url: [tags]}, written by the model NAME (default
+                                  "agent", e.g. haiku); an empty list removes that link's entry, and --replace drops
+                                  every other link's. They never change your tags or the suggestions; the pages show
+                                  them in an "agent" row of outlined chips after yours
   tag-create NAME [--hue 0-359]   tag-rename OLD NEW   tag-delete NAME   tag-recolor NAME HUE
   add URL... [--note TEXT]        put links on the reading list
   remove URL --stash ID | --list | --capture | --everywhere
@@ -57,7 +64,8 @@ Backups
   restore NAME                    replace the data with that file (the current state is saved first)
 
 A link shows [] for tags and, while it has suggestions, "suggested: tag 82%, …" after them; links --json
-carries them per link as suggested: [{tag, p, by}].
+carries them per link as suggested: [{tag, p, by}]. Agent tags show as "agent(haiku): a, b" and travel
+as agentTags: [tag] and agentBy.
 
 Output is plain lines; --json prints what the extension returned. Exit 1 on an error.`;
 
@@ -122,7 +130,7 @@ async function getData() {
   source = `backup of ${b.at}`;
   const s = b.storage;
   const joined = LINKS.joinLinks({ items: s.items || [], captures: s.captures || [], sessions: b.sessions || [],
-    thumbs: s.thumbs || {}, currentKey: s.current?.key || null, tags: s.linkTags || {}, suggestions: s.tagSuggestions || {} });
+    thumbs: s.thumbs || {}, currentKey: s.current?.key || null, tags: s.linkTags || {}, suggestions: s.tagSuggestions || {}, agentTags: s.agentTags || {} });
   return { ...JSON.parse(JSON.stringify(joined)), tagDefs: s.tagDefs, backup: b };
 }
 
@@ -175,7 +183,8 @@ const replyLine = r => {
 };
 
 const suggestedText = l => (l.suggested?.length ? `suggested: ${l.suggested.map(s => `${s.tag} ${Math.round(s.p * 100)}%`).join(", ")}` : "");
-const linkLine = l => [day(l.date), l.tags.length ? `[${l.tags.join(",")}]` : "[]", suggestedText(l), l.cap ? "captured" : "",
+const agentText = l => (l.agentTags?.length ? `agent${l.agentBy ? `(${l.agentBy})` : ""}: ${l.agentTags.join(", ")}` : "");
+const linkLine = l => [day(l.date), l.tags.length ? `[${l.tags.join(",")}]` : "[]", suggestedText(l), agentText(l), l.cap ? "captured" : "",
   l.copies.length > 1 ? `×${l.copies.length}` : "", l.title || l.cap?.title || "", l.url].filter(Boolean).join("  ");
 function note() { if (source && source !== "live") process.stderr.write(`(from the ${source}; Firefox is not running Link Keeper)\n`); }
 
@@ -239,6 +248,7 @@ const commands = {
     note();
     if (opt.json) return json(view);
     out([`${l.title || l.cap?.title || "(no title)"}`, l.url, `tags: ${l.tags.join(", ") || "none"}`, ...(l.suggested?.length ? [suggestedText(l)] : []),
+      ...(l.agentTags?.length ? [agentText(l)] : []),
       `list: ${l.list ? `${l.list.status}${l.list.loose ? " (captured, never queued)" : ""}` : "not on it"}`,
       `capture: ${l.cap ? `${l.cap.captured_at || "yes"}` : "none"}`,
       ...view.copies.map(c => `in stash ${c.stash}  ${day(c.stash_date)}  ${c.stash_name || ""}  (bookmark ${c.tab})`)].join("\n"));
@@ -294,6 +304,27 @@ const commands = {
     if (opt.json) return json({ links: withSome.length, tags: Object.fromEntries(tags) });
     out(`${withSome.length} links with suggestions`);
     for (const [t, n] of tags) out(`${String(n).padStart(5)}  ${t}`);
+  },
+
+  async "agent-tags"({ opt }) {
+    const d = await getData();
+    const use = {};
+    const withSome = d.links.filter(l => l.agentTags?.length);
+    for (const l of withSome) for (const t of l.agentTags) use[t] = (use[t] || 0) + 1;
+    const tags = Object.entries(use).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    note();
+    if (opt.json) return json({ links: withSome.map(l => ({ url: l.url, title: l.title || l.cap?.title || null, agentTags: l.agentTags, agentBy: l.agentBy })), tags: Object.fromEntries(tags) });
+    out(`${withSome.length} links with agent tags`);
+    for (const l of withSome) out(`  ${agentText(l)}  ${l.title || l.cap?.title || ""}  ${l.url}`.replace(/\s+$/, ""));
+    for (const [t, n] of tags) out(`${String(n).padStart(5)}  ${t}`);
+  },
+
+  async "agent-tags-set"({ pos, opt }) {
+    const file = need(pos[0], "FILE of agent tags");
+    let tags;
+    try { tags = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { throw new Error(`${file}: ${e.message}`); }
+    if (!tags || typeof tags !== "object" || Array.isArray(tags)) throw new Error(`${file} must hold a JSON object of url → [tag]`);
+    done(opt, await call("set-agent-tags", { tags, by: opt.by || "agent", replace: !!opt.replace }), r => `${r.count} links hold agent tags now`);
   },
 
   async "suggest-set"({ pos, opt }) {

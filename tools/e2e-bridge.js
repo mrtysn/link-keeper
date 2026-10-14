@@ -86,6 +86,33 @@ await check("agent-set tag suggestions show on links, step aside for tags, and u
   if ((await browser.storage.local.get("tagSuggestions")).tagSuggestions) throw new Error("undo left suggestions in storage");
 });
 
+await check("agent tags: merged, replaced and removed per link, apart from tags, and undo reverts them", async () => {
+  const agentOf = async url => (await getLinks()).links.find(l => l.key === keyOf(url));
+  const set = (tags, replace = false, by = "haiku") => agentRequest("call", { message: { type: "set-agent-tags", tags, by, replace } });
+  const listed = "https://example.org/listed";
+  const res = await set({ [CAP]: ["Dev  Tools", "ai", "ai"], [listed]: ["video"] });
+  if (!res.ok || res.count !== 2 || !res.undo) throw new Error(JSON.stringify(res));
+  const link = await agentOf(CAP);
+  if (link.agentTags.join() !== "dev tools,ai" || link.agentBy !== "haiku") throw new Error(JSON.stringify([link.agentTags, link.agentBy]));
+  await setTags(CAP, ["mine"]);
+  const tagged = await agentOf(CAP);
+  if (tagged.agentTags.length !== 2 || tagged.tags.join() !== "mine") throw new Error("agent tags and the owner's tags are not apart");
+  await setTags(CAP, []);
+  if ((await browser.storage.local.get("tagDefs")).tagDefs.list.some(t => t.name === "dev tools")) throw new Error("an agent tag entered the tag library");
+  const merged = await set({ [listed]: [] });
+  if (!merged.ok || merged.count !== 1 || (await agentOf(listed)).agentTags.length || (await agentOf(CAP)).agentTags.length !== 2) throw new Error(JSON.stringify(merged));
+  const replaced = await set({ [listed]: ["news"] }, true, "sonnet");
+  if (replaced.count !== 1 || (await agentOf(CAP)).agentTags.length || (await agentOf(listed)).agentBy !== "sonnet") throw new Error(JSON.stringify(replaced));
+  if ((await set({ [CAP]: "ai" })).ok) throw new Error("a malformed list was accepted");
+  if ((await set({ [CAP]: ["ai"] }, false, " ")).ok) throw new Error("a write with no author was accepted");
+  const u = await agentRequest("undo", {});
+  if (!u.ok) throw new Error(JSON.stringify(u));
+  if ((await agentOf(CAP)).agentTags.length !== 2) throw new Error("undo did not bring the replaced agent tags back");
+  await agentRequest("undo", {});
+  await agentRequest("undo", {});
+  if ((await browser.storage.local.get("agentTags")).agentTags) throw new Error("undo left agent tags in storage");
+});
+
 await check("agents cannot send what acts on tabs", async () => {
   for (const type of ["stash", "restore-stash", "next", "capture-url", "open-list", "queue-active"]) {
     const res = await agentRequest("call", { message: { type } });

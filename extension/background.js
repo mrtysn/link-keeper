@@ -1352,10 +1352,10 @@ allowPreviewFrames().catch(e => console.error("preview frames:", e));
 
 /* Every source joined into one dataset for the pages; joinLinks in links.js does the joining. */
 async function getLinks() {
-  const [items, captures, sessions, thumbs, current, tags, suggestions] =
+  const [items, captures, sessions, thumbs, current, tags, suggestions, agentTags] =
     [await getItems(), await getCaptures(), await getSessions(), await read("thumbs", {}), await getCurrent(), await read("linkTags", {}),
-      await read("tagSuggestions", {})];
-  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags, suggestions });
+      await read("tagSuggestions", {}), await read("agentTags", {})];
+  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags, suggestions, agentTags });
 }
 
 /* --- tags ------------------------------------------------------------------------
@@ -1370,7 +1370,11 @@ async function getLinks() {
  * tagSuggestions: { [link key]: { at, tags: [{ tag, p, by }] } } — what a local model suggests for a
  * link, best first (p is 0..1; by is "system-one", "gutsy" or "model"). Written only by agents
  * (set-tag-suggestions). The pages show them dimmed in a link's place until it has tags of its own;
- * accepting them is an ordinary set-tags, and the entry stays in storage, unshown. */
+ * accepting them is an ordinary set-tags, and the entry stays in storage, unshown.
+ *
+ * agentTags: { [link key]: { at, by, tags: ["tag", ...] } } — tags a Claude agent wrote (by is the
+ * model's name). A layer of its own: never the owner's tags, never a suggestion, shown in a labelled
+ * row of outlined chips after the owner's. Written only by agents (set-agent-tags). */
 const PRESET_TAGS = ["to-read", "to-watch", "to-try", "reference", "inspiration", "work", "personal", "buy",
   "dev", "ai", "design", "news", "video", "shopping", "music", "games"];
 const tagQueue = serial();
@@ -1423,6 +1427,24 @@ const setTagSuggestions = (suggestions, replace) => tagQueue(async () => {
   }
   await browser.storage.local.set({ tagSuggestions: all });
   return { ok: true, count: Object.keys(all).length, written };
+});
+
+/* Set the agent tags of the links named (url → [tag]), written by `by`; merges per link unless replace
+ * is true, which drops every other link's. An empty list takes a link's entry away. */
+const setAgentTags = (tags, by, replace) => tagQueue(async () => {
+  if (!tags || typeof tags !== "object" || Array.isArray(tags)) return { ok: false, error: "tags must be an object of url → [tag]" };
+  const author = String(by || "").trim().slice(0, 60);
+  if (!author) return { ok: false, error: "by must name the model that wrote the tags" };
+  const all = replace ? {} : await read("agentTags", {});
+  const at = new Date().toISOString();
+  for (const [url, list] of Object.entries(tags)) {
+    if (!Array.isArray(list)) return { ok: false, error: `${url}: expected a list of tag names` };
+    const names = tagList(list);
+    const key = keyOf(url);
+    if (names.length) all[key] = { at, by: author, tags: names }; else delete all[key];
+  }
+  await browser.storage.local.set({ agentTags: all });
+  return { ok: true, count: Object.keys(all).length };
 });
 
 /* Add tags to every tab of a stash. A link showing only suggestions or guesses keeps them, now as its own. */
@@ -1873,6 +1895,9 @@ async function handleMessage(msg) {
 
     case "set-tag-suggestions":
       return setTagSuggestions(msg.suggestions, !!msg.replace);
+
+    case "set-agent-tags":
+      return setAgentTags(msg.tags, msg.by, !!msg.replace);
 
     case "tag-stash":
       return tagStash(msg.id, msg.tags);

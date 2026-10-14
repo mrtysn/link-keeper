@@ -17,6 +17,9 @@
  *   suggested — a local model's stored suggestions [{ tag, p, by }], best first, while tags is empty, else []
  *               (stored in tagSuggestions, keyed like the link; by is "system-one", "gutsy" or "model";
  *               one tag may come from several sources, one entry each)
+ *   agentTags — the tags a Claude agent wrote, [] when none; a layer of their own, apart from tags and
+ *               suggested, and never counted as the owner's (stored in agentTags, keyed like the link)
+ *   agentBy — the model that wrote them (e.g. "haiku"), else null
  *   kinds   — what kind of thing it is, read off its site or capture ("code", "video", …); never stored
  *   guessed — kinds while tags is empty, else []: what the pages show dimmed in place of tags
  */
@@ -88,6 +91,13 @@ function suggestionsFor(map, key) {
   return out.filter((s, i) => out.findIndex(o => o.tag === s.tag && o.by === s.by) === i);
 }
 
+/* A link's agent tags, cleaned: { tags, by }, each tag once. Empty tags and by null when it has none. */
+function agentTagsFor(map, key) {
+  const entry = map?.[key];
+  const tags = Array.isArray(entry?.tags) ? [...new Set(entry.tags.map(cleanTag).filter(Boolean))] : [];
+  return { tags, by: tags.length && entry.by ? String(entry.by) : null };
+}
+
 const hrefOf = l => (typeof l === "string" ? l : l?.resolved || l?.href) || null;
 
 /* What the pages show of a capture. */
@@ -122,7 +132,7 @@ const LIST_VERDICT = { kept: "keep", skipped: "drop" };
 
 /* items and captures as stored, sessions as getSessions gives them, currentKey the reading list's
  * current entry. Returns { links, stashes }, stashes in their own order with each tab's link key. */
-function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {}, suggestions = {} }) {
+function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {}, suggestions = {}, agentTags = {} }) {
   const capBy = new Map();
   for (const c of captures) {
     if (c.source_url) capBy.set(keyOf(c.source_url), c);
@@ -184,6 +194,9 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     link.date = link.list?.saved_at || link.list?.added_at || stashed;
     link.tags = (tags[link.key] || []).slice();
     link.suggested = link.tags.length ? [] : suggestionsFor(suggestions, link.key);
+    const agent = agentTagsFor(agentTags, link.key);
+    link.agentTags = agent.tags;
+    link.agentBy = agent.by;
     link.kinds = guessTags(link.url, link.cap);
     link.guessed = link.tags.length ? [] : link.kinds;
   }

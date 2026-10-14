@@ -192,12 +192,12 @@ async function bridgeStatus() {
  * left out opens, closes, captures or navigates tabs, which stays with the person at the browser. */
 const AGENT_READS = new Set(["status", "page-info", "filter-rules", "link-counts", "sessions", "links", "export",
   "export-list", "stash-settings", "get-folder"]);
-const AGENT_WRITES = new Set(["set-tags", "set-tag-suggestions", "tag-stash", "rename-tag", "delete-tag", "create-tag", "recolor-tag",
+const AGENT_WRITES = new Set(["set-tags", "set-tag-suggestions", "set-agent-tags", "tag-stash", "rename-tag", "delete-tag", "create-tag", "recolor-tag",
   "add", "remove", "restore-items", "rename-stash", "delete-stash", "move-stash", "move-stashed", "flag-stash",
   "put-back", "set-filter-rules", "filter-out-page", "import-captures", "import-stashes", "set-stash-source",
   "set-stash-settings", "toggle-excluded", "set-folder"]);
 // What an agent's change can touch in storage; the journal keeps the ones it did.
-const JOURNAL_KEYS = ["items", "captures", "linkTags", "tagSuggestions", "tagDefs", "filterRules", "filteredAuto", "stashMeta",
+const JOURNAL_KEYS = ["items", "captures", "linkTags", "tagSuggestions", "agentTags", "tagDefs", "filterRules", "filteredAuto", "stashMeta",
   "stashSettings", "folder"];
 
 const agentQueue = serial();

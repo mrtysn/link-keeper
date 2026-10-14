@@ -37,10 +37,11 @@ const storage = {
   linkTags: { [LINKS.keyOf("https://example.org/b")]: ["ai"] },
   tagDefs: { seeded: true, list: [{ name: "ai", hue: null }, { name: "dev", hue: null }] },
   tagSuggestions: {},
+  agentTags: {},
 };
 const sessions = [{ id: "s1", name: "Oct 6", created_at: "2026-10-06T09:00:00Z", source: "tabs", tabs: [
   { id: "t1", url: "https://example.org/c", title: "Sea" }, { id: "t2", url: "https://example.org/b", title: "Bee" }] }];
-const joined = () => JSON.parse(JSON.stringify(LINKS.joinLinks({ items: storage.items, captures: storage.captures, sessions, tags: storage.linkTags, suggestions: storage.tagSuggestions })));
+const joined = () => JSON.parse(JSON.stringify(LINKS.joinLinks({ items: storage.items, captures: storage.captures, sessions, tags: storage.linkTags, suggestions: storage.tagSuggestions, agentTags: storage.agentTags })));
 const sent = [];   // the pages' messages agents sent through "call"
 
 const bridge = spawn("/usr/bin/python3", [path.join(REPO, "native/link-keeper-bridge.py")], { env, stdio: ["pipe", "pipe", "inherit"] });
@@ -97,6 +98,14 @@ function answer(m) {
         else delete storage.tagSuggestions[LINKS.keyOf(url)];
       }
       result = { ok: true, count: Object.keys(storage.tagSuggestions).length };
+    }
+    else if (msg.type === "set-agent-tags") {
+      if (msg.replace) storage.agentTags = {};
+      for (const [url, list] of Object.entries(msg.tags)) {
+        if (list.length) storage.agentTags[LINKS.keyOf(url)] = { at: "2026-10-14T00:00:00Z", by: msg.by, tags: list };
+        else delete storage.agentTags[LINKS.keyOf(url)];
+      }
+      result = { ok: true, count: Object.keys(storage.agentTags).length };
     }
     else if (msg.type === "delete-stash") result = { ok: true, removed: msg.ids.length };
     else if (msg.type === "filter-rules") result = { rules: ["reddit.com"] };
@@ -264,6 +273,61 @@ await check("agents may send set-tag-suggestions, and the journal covers the key
   assert(keys.includes('"tagSuggestions"'), "tagSuggestions is not a journaled key");
 });
 
+await check("CLI agent-tags-set sends the file as set-agent-tags: merging per link, replacing with --replace, removing on an empty list", async () => {
+  const f = suggestFile("agent-tags.json");
+  f.write({ "https://example.org/a": ["Dev  Tools", "ai"], "https://example.org/c": ["video"] });
+  const r = await cli("agent-tags-set", f.file, "--by", "haiku");
+  assert(r.code === 0 && /2 links hold agent tags now/.test(r.out), r.out);
+  let msg = sent.at(-1);
+  assert(msg.type === "set-agent-tags" && msg.by === "haiku" && msg.replace === false
+    && JSON.stringify(msg.tags["https://example.org/a"]) === '["Dev  Tools","ai"]', JSON.stringify(msg));
+  f.write({ "https://example.org/b": ["x"] });
+  const merged = await cli("agent-tags-set", f.file);
+  msg = sent.at(-1);
+  assert(merged.code === 0 && /3 links hold agent tags now/.test(merged.out) && msg.by === "agent" && msg.replace === false, merged.out + JSON.stringify(msg));
+  f.write({ "https://example.org/c": [] });
+  const removed = await cli("agent-tags-set", f.file);
+  assert(removed.code === 0 && /2 links hold agent tags now/.test(removed.out), removed.out);
+  f.write({ "https://example.org/a": ["ai"] });
+  const rep = await cli("agent-tags-set", f.file, "--replace", "--by", "sonnet");
+  msg = sent.at(-1);
+  assert(rep.code === 0 && /1 links hold agent tags now/.test(rep.out) && msg.replace === true && msg.by === "sonnet", rep.out + JSON.stringify(msg));
+  f.write([1]);
+  const bad = await cli("agent-tags-set", f.file);
+  assert(bad.code === 1 && /JSON object/.test(bad.out), bad.out);
+  const none = await cli("agent-tags-set", path.join(work, "no-such.json"));
+  assert(none.code === 1, none.out);
+});
+
+await check("links carry agentTags and agentBy apart from tags and suggestions; agent-tags and link show them", async () => {
+  const f = suggestFile("agent-tags2.json");
+  f.write({ "https://example.org/a": ["Dev  Tools", "ai"], "https://example.org/b": ["ai", "ai"] });
+  assert((await cli("agent-tags-set", f.file, "--replace", "--by", "haiku")).code === 0, "set");
+  const got = JSON.parse((await cli("links", "--json", "--all")).out);
+  const by = u => got.links.find(l => l.url.endsWith(u));
+  assert(by("/a").agentTags.join() === "dev tools,ai" && by("/a").agentBy === "haiku", JSON.stringify([by("/a").agentTags, by("/a").agentBy]));
+  assert(by("/b").agentTags.join() === "ai", "a tag given twice shows once: " + by("/b").agentTags);
+  assert(by("/b").tags.join() === "ai,dev", "the owner's tags are untouched by agent tags: " + by("/b").tags);
+  assert(by("/a").tags.length === 0 && by("/a").suggested.map(s => s.tag).join() === "dev,ai", "agent tags are not tags and leave the suggestions alone");
+  assert(by("/c").agentTags.length === 0 && by("/c").agentBy === null, "a link with none carries some");
+  const t = await cli("agent-tags");
+  assert(t.code === 0 && t.out.startsWith("2 links with agent tags") && /agent\(haiku\): dev tools, ai/.test(t.out) && /2  ai/.test(t.out) && /1  dev tools/.test(t.out), t.out);
+  const tj = JSON.parse((await cli("agent-tags", "--json")).out);
+  assert(tj.links.length === 2 && tj.tags.ai === 2 && tj.tags["dev tools"] === 1 && tj.links[0].agentBy === "haiku", JSON.stringify(tj));
+  const one = await cli("link", "https://example.org/a");
+  assert(/^agent\(haiku\): dev tools, ai$/m.test(one.out) && /^tags: none$/m.test(one.out), one.out);
+  const line = await cli("links");
+  assert(/agent\(haiku\): dev tools, ai/.test(line.out), line.out);
+});
+
+await check("agents may send set-agent-tags, and the journal covers the key it writes", async () => {
+  const bridgeJs = fs.readFileSync(path.join(REPO, "extension/bridge.js"), "utf8");
+  const writes = bridgeJs.match(/AGENT_WRITES = new Set\(\[([^\]]*)\]/s)?.[1] || "";
+  const keys = bridgeJs.match(/JOURNAL_KEYS = \[([^\]]*)\]/s)?.[1] || "";
+  assert(writes.includes('"set-agent-tags"'), "set-agent-tags is not an agent write");
+  assert(keys.includes('"agentTags"'), "agentTags is not a journaled key");
+});
+
 await check("CLI remove refuses a link held in two places unless told which", async () => {
   const r = await cli("remove", "https://example.org/b");
   assert(r.code === 1 && /2 places/.test(r.out) && /--stash s1/.test(r.out) && /--capture/.test(r.out), r.out);
@@ -293,6 +357,8 @@ await check("with the bridge gone, the CLI reads the latest backup and refuses c
   assert(cj.replies.length === 1 && cj.replies[0].likes === 12 && cj.replies[0].self === true, JSON.stringify(cj.replies));
   const sg = await cli("suggestions");
   assert(sg.code === 0 && sg.out.includes("1 links with suggestions") && /from the backup of/.test(sg.out), sg.out);
+  const ag = await cli("agent-tags");
+  assert(ag.code === 0 && ag.out.includes("2 links with agent tags") && /from the backup of/.test(ag.out), ag.out);
   const w = await cli("tag", "https://example.org/b", "--add", "x");
   assert(w.code === 1 && /not running/.test(w.out), w.out);
 });
