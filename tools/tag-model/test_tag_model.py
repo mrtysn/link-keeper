@@ -202,3 +202,20 @@ def test_a_rerun_asks_only_about_new_links(corpus, tmp_path):
     second = suggest_mod.suggest(corpus, LIBRARY, tmp_path, encode, system_one_only=True, ask_fn=stub, report=lambda *_: None)
     assert len(asked) == 3 and set(second) == set(first) | {"https://cook.example/newer"}
     assert second["https://cook.example/new"] == first["https://cook.example/new"]
+
+
+def test_a_link_system_one_cannot_answer_is_skipped(corpus, tmp_path):
+    def ask(request):
+        if "oven" in request["state"]:
+            raise RuntimeError("HTTP Error 500")
+        return {t: 0.9 for t in request["questions"]}
+    links = [l for l in corpus if "oven" in l.text][:1] + [l for l in corpus if "oven" not in l.text][:3]
+    got = s1.score_links(links, ["games"], {}, 0.7, ask_fn=ask, report=lambda *_: None)
+    assert links[0].url not in got and len(got) == 3
+
+
+def test_system_one_failing_every_link_stops_the_run(corpus):
+    def ask(request):
+        raise RuntimeError("connection refused")
+    with pytest.raises(RuntimeError, match="in a row"):
+        s1.score_links(corpus[:10], ["games"], {}, 0.7, ask_fn=ask, report=lambda *_: None)

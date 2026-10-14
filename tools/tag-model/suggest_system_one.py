@@ -35,6 +35,7 @@ from tagdata import Link, Suggestion
 
 DEFAULT_THRESHOLD = 0.7
 TIMING_BATCH = 10
+MAX_FAILURES_IN_A_ROW = 5
 ASK_TIMEOUT_SECONDS = 120
 START_WAIT_SECONDS = 60
 
@@ -149,6 +150,8 @@ def score_links(links: list[Link], tags: list[str], meanings: dict[str, str], th
     found: dict[str, list[Suggestion]] = {}
     started = time.time()
     asked = 0
+    failed: list[str] = []
+    in_a_row = 0
     for link in links:
         probs: dict[str, float] = {}
         missing = []
@@ -160,7 +163,19 @@ def score_links(links: list[Link], tags: list[str], meanings: dict[str, str], th
             else:
                 probs[tag] = hit
         if missing:
-            answers = ask_fn(build_request(link, missing, meanings))
+            try:
+                answers = ask_fn(build_request(link, missing, meanings))
+            except RuntimeError as err:
+                # One link the server cannot answer is skipped; several in a row mean the server is down.
+                failed.append(link.url)
+                in_a_row += 1
+                report(f"skipped {link.url}: {err}")
+                if in_a_row >= MAX_FAILURES_IN_A_ROW:
+                    if cache:
+                        cache.save()
+                    raise RuntimeError(f"system-one failed {in_a_row} links in a row; stopping") from err
+                continue
+            in_a_row = 0
             probs.update(answers)
             if cache:
                 for tag, p in answers.items():
@@ -175,6 +190,8 @@ def score_links(links: list[Link], tags: list[str], meanings: dict[str, str], th
         found[link.url] = [Suggestion(tag, p, tagdata.SOURCE_SYSTEM_ONE) for tag, p in probs.items() if p >= threshold]
     if cache:
         cache.save()
+    if failed:
+        report(f"system-one could not answer {len(failed)} links; they get no suggestions this run")
     if asked < TIMING_BATCH:
         report(f"asked about {asked} of {len(links)} links ({len(links) - asked} answered from the cache)"
                + (f"; {(time.time() - started) / asked:.2f} s per link" if asked else ""))
