@@ -1120,13 +1120,27 @@ function renderDuplicates() {
       el("div", { className: "dup-head" }, srcIcon(link.url),
         el("div", {}, el("div", { className: `dup-title${title ? "" : " plain"}`, textContent: title || shortUrl(link.url), title: link.url }),
           title && el("div", { className: "dup-url", textContent: shortUrl(link.url) }))));
+    const boxes = [];
+    // One toggle per card: ticks every copy that can be removed, or clears them when all are ticked.
+    const free = copies.filter(c => !c.locked);
+    const all = el("button", { className: "dup-all", type: "button" });
+    const paintAll = () => { all.textContent = free.every(c => picked.has(c.id)) ? "Clear" : "Select all"; };
+    all.onclick = () => {
+      const on = !free.every(c => picked.has(c.id));
+      for (const c of free) on ? picked.add(c.id) : picked.delete(c.id);
+      for (const b of boxes) if (!b.disabled) b.checked = on;
+      paintAll(); paintDupCount();
+    };
+    if (free.length > 1) card.firstChild.append(all);
     for (const c of copies) {
       const box2 = el("input", { type: "checkbox", checked: picked.has(c.id), disabled: c.locked });
-      box2.onchange = () => { box2.checked ? picked.add(c.id) : picked.delete(c.id); paintDupCount(); };
+      boxes.push(box2);
+      box2.onchange = () => { box2.checked ? picked.add(c.id) : picked.delete(c.id); paintAll(); paintDupCount(); };
       card.append(el("label", { className: `dup-row${c.locked ? " locked" : ""}` }, box2,
         el("span", { className: "dup-where", textContent: c.label }),
         el("span", { className: "dup-detail", textContent: c.locked ? `${c.detail} · locked` : c.detail })));
     }
+    paintAll();
     box.append(card);
   }
   paintDupCount();

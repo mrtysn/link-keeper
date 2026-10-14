@@ -481,7 +481,8 @@ a 22rem popup.
 **Duplicates (N)…**, shown when any link is held in more than one place among the sources on show
 (two stashes, or a stash and the reading list), lists each such link with a checkbox per copy:
 which stash, when, and its place in it, or its reading-list status. Nothing starts ticked, a locked
-stash's copy cannot be, and **Remove N copies** asks once, then removes only what was ticked — saying
+stash's copy cannot be; **Select all** on a card ticks every removable copy of that link (and
+**Clear** unticks them), and **Remove N copies** asks once, then removes only what was ticked — saying
 so when a link would lose every copy.
 
 Clicking a reading-list title opens it in a new tab and marks that entry current, so a
