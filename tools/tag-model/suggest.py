@@ -57,8 +57,10 @@ def suggest(links, tag_library, folder, encode, *, system_one_only=False, thresh
     metrics_path = folder / "metrics.json"
     metrics = json.loads(metrics_path.read_text()) if metrics_path.is_file() and not system_one_only else {}
     found, covered = model_suggestions(untagged, folder, encode, metrics, threshold)
-    rest = [t for t in tag_library if t not in covered]
-    report(f"{len(untagged)} untagged links; {len(covered)} tags by trained heads, {len(rest)} by system-one")
+    rest = [t for t in tag_library if t not in covered and t not in tagdata.PERSONAL_TAGS]
+    waiting = len([t for t in tag_library if t not in covered]) - len(rest)
+    report(f"{len(untagged)} untagged links; {len(covered)} tags by trained heads, {len(rest)} by system-one, "
+           f"{waiting} personal tags waiting for the owner's examples")
     if rest and untagged:
         meanings = tagdata.tag_meanings(folder)
         cache = s1.AnswerCache(folder / "system-one-answers.json", keep_unused=trial)

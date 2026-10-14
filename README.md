@@ -208,7 +208,10 @@ link's title, site and the first 1,500 characters of its captured text. Once a t
 a **Jeffy** classifier (a frozen English sentence encoder, `BAAI/bge-large-en-v1.5`, about 1.3 GB
 downloaded once, with a logistic-regression head per tag) trained on your own tagging takes over for
 that tag. A head is kept only if its held-out precision is at least 0.7; otherwise system-one keeps
-that tag. Links carrying `filtered-out` are ignored.
+that tag. Links carrying `filtered-out` are ignored. Personal tags — what you mean to do with a link
+(`to-read`, `to-try`, `reference`, …) or an idea of yours (`leverage`, `numbness`, …), listed in
+`PERSONAL_TAGS` in `tagdata.py` — are never asked of system-one, since a page's text cannot show
+them; they are suggested only once a head trained on your tagging holds them.
 
     tools/tag-model/run.zsh --setup      # once: the Python environment (uv)
     tools/tag-model/run.zsh              # train, then suggest and send (link-keeper suggest-set --replace)

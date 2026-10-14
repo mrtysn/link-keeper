@@ -53,7 +53,7 @@ def corpus():
     return links
 
 
-LIBRARY = ["cook", "code", "noise", "gamble"]
+LIBRARY = ["cook", "code", "noise", "games"]
 
 
 def test_train_save_load_suggest(corpus, tmp_path):
@@ -61,7 +61,7 @@ def test_train_save_load_suggest(corpus, tmp_path):
     assert metrics["labelled_links"] == 120
     assert metrics["tags"]["cook"]["enabled"] and metrics["tags"]["code"]["enabled"]
     assert metrics["tags"]["cook"]["precision"] >= 0.7
-    assert metrics["skipped"] == {"gamble": 0}
+    assert metrics["skipped"] == {"games": 0}
     assert json.loads((tmp_path / "metrics.json").read_text())["tags"]["cook"]["head"] == "cook"
     assert (tmp_path / "heads" / "cook" / "manifest.json").is_file()
 
@@ -82,7 +82,7 @@ def test_train_save_load_suggest(corpus, tmp_path):
     cook = {i["tag"]: i for i in result["https://cook.example/new"]}
     assert cook["cook"]["by"] == "model" and cook["cook"]["p"] > 0.5
     assert "code" not in cook or cook["code"]["p"] < cook["cook"]["p"]
-    assert any(i["by"] == "system-one" and i["tag"] == "gamble" for i in result["https://cook.example/new"])
+    assert any(i["by"] == "system-one" and i["tag"] == "games" for i in result["https://cook.example/new"])
     assert all("cook" not in q["questions"] for q in asked)  # a covered tag is not asked about
 
 
@@ -112,8 +112,19 @@ def test_system_one_only_ignores_heads(corpus, tmp_path):
     assert all(len(items) == 4 for items in result.values())  # four tags, all at 0.8: capped at 4
 
 
+def test_personal_tags_are_never_asked_of_system_one(corpus, tmp_path):
+    asked = set()
+    def ask(request):
+        asked.update(request["questions"])
+        return {t: 0.9 for t in request["questions"]}
+    result = suggest_mod.suggest(corpus, LIBRARY + ["leverage", "to-read"], tmp_path, encode,
+                                 system_one_only=True, ask_fn=ask, report=lambda *_: None)
+    assert asked and not asked & {"leverage", "to-read"}
+    assert all(i["tag"] not in ("leverage", "to-read") for items in result.values() for i in items)
+
+
 def test_threshold_keeps_only_what_clears_it(corpus, tmp_path):
-    probs = {"cook": 0.95, "code": 0.69, "noise": 0.71, "gamble": 0.2}
+    probs = {"cook": 0.95, "code": 0.69, "noise": 0.71, "games": 0.2}
     result = suggest_mod.suggest(corpus, LIBRARY, tmp_path, encode, system_one_only=True,
                                  ask_fn=lambda r: probs, report=lambda *_: None)
     assert [i["tag"] for i in result["https://cook.example/new"]] == ["cook", "noise"]

@@ -154,6 +154,17 @@ def load_links() -> list[Link]:
     return links
 
 
+# Tags that say what the owner means to do with a link, or an idea of theirs, rather than what the page
+# is about. A page's text cannot show them, and system-one guessed them on cookware pages, so they
+# are never asked of system-one: they are suggested only by a head trained on the owner's own tags.
+PERSONAL_TAGS = {
+    "to-read", "to-watch", "to-try", "reference", "inspiration", "work", "personal", "random",
+    "leverage", "numbness", "enhancement", "crowd", "capital", "niche", "network", "gamble",
+    "addiction", "discipline", "focus", "content", "text", "image", "experience", "cv", "portfolio",
+    "principles", "ambitions", "goals", "experimental",
+}
+
+
 def tag_meanings(model_folder: Path) -> dict[str, str]:
     """The built-in one-line meanings, overridden by the owner's tag-meanings.json."""
     meanings = dict(DEFAULT_TAG_MEANINGS)
