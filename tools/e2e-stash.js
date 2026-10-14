@@ -288,10 +288,11 @@ await kase("Duplicates: every copy of a link gets a checkbox, nothing is ticked,
   const card = await until(() => [...d.querySelectorAll(".dup-card")].find(c => c.textContent.includes("dup.example/x")), "a card for the duplicated link");
   yes(card, "a card for the duplicated link");
   const rows = [...card.querySelectorAll(".dup-row")];
-  eq(rows.map(r => r.querySelector(".dup-where").textContent), ["Dup one", "Dup two", "Reading list"], "one row per copy");
+  eq(rows.map(r => r.querySelector(".dup-where").textContent).sort(), ["Dup one", "Dup two", "Reading list"], "one row per copy");
+  eq(rows[0].querySelector(".dup-where").textContent, "Reading list", "the newest copy comes first");
   eq(rows.map(r => r.querySelector("input").checked), [false, false, false], "nothing ticked");
   yes(d.getElementById("dups-remove").disabled, "nothing to remove yet");
-  rows[1].querySelector("input").click();
+  rows.find(r => r.querySelector(".dup-where").textContent === "Dup two").querySelector("input").click();
   view.confirm = () => true;
   d.getElementById("dups-remove").click();
   await until(async () => !(await getSessions()).some(s => s.name === "Dup two"), "the ticked copy to go");
@@ -299,6 +300,14 @@ await kase("Duplicates: every copy of a link gets a checkbox, nothing is ticked,
   eq(all.find(s => s.name === "Dup one")?.tabs.length, 2, "the unticked stash keeps its copy");
   eq(all.some(s => s.name === "Dup two"), false, "the ticked copy went, and its emptied stash with it");
   yes((await getItems()).some(i => i.url === "https://dup.example/x"), "the reading-list copy stays");
+  // It is in the Trash, and Restore writes the emptied stash again with the tab in it.
+  const trash = (await getTrash());
+  eq(trash.map(e => e.url), ["https://dup.example/x"], "the ticked copy is in the Trash");
+  const back = await restoreFromTrash(trash.map(e => e.id));
+  eq(back.restored, 1, "Restore puts it back");
+  const again = (await getSessions()).find(s => s.name === "Dup two");
+  eq(again?.tabs.map(t => t.url), ["https://dup.example/x"], "its stash is written again with the tab");
+  eq((await getTrash()).length, 0, "and the Trash is empty");
   await browser.tabs.remove(tab.id);
 });
 
