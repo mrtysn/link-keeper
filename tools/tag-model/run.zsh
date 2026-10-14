@@ -39,8 +39,9 @@ for a in "$@"; do
   esac
 done
 
+cd "$here"
 # The data folder is the one the refresh uses; tagdata.py resolves it from DATA_DIR / config.local.sh.
-folder=$(uv run --project "$here" python -c 'import tagdata; print(tagdata.model_dir())' )
+folder=$(uv run python -c 'import tagdata; print(tagdata.model_dir())')
 lock=$folder/run.lock
 if [[ -f $lock ]] && kill -0 "$(<"$lock")" 2>/dev/null; then
   print "tag model: another run is in progress (pid $(<"$lock")); skipping"
@@ -49,7 +50,6 @@ fi
 print $$ > "$lock"
 trap 'rm -f "$lock"' EXIT
 
-cd "$here"
 if (( train )); then
   uv run python train.py
 fi
