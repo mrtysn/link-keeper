@@ -233,6 +233,11 @@ file sent to the add-on. A one-line meaning for an abstract tag (the question sy
 comes from `tag-meanings.json` in that folder when you add one, else from a built-in list in
 `tagdata.py`. Tests: `cd tools/tag-model && uv run pytest test_tag_model.py`.
 
+`compare_backends.py --b-port PORT` asks system-one and a second server with the same wire shape
+(gutsy-inference serves on 8765) the same tag questions about English links with captured text, and
+writes `compare/answers.json` and `compare/compare.md` in that folder: speed, agreement and every
+link where they differ. With `--labelled` it scores both against the links you have tagged.
+
 ### Acting on a link — the same on every page
 
 Links, Cards and Tags offer one set of actions on a link, drawn the same way and answering to
