@@ -478,8 +478,10 @@ a 22rem popup.
   Open or **Open in this tab**, Move, **To list**, the stash moves when grouped by stash, and a
   **Remove from …** for each *other* place it is held.
 
-**Duplicates (N)…**, shown when any link is held in more than one place among the sources on show
-(two stashes, or a stash and the reading list), lists each such link with a checkbox per copy:
+**Duplicates (N)…**, shown when any address is held in more than one place among the sources on show
+(two stashes, or a stash and the reading list; addresses are compared as written, `#fragment` included,
+so Gmail's messages, which differ only by it, are not duplicates of one another), lists each such link
+with a checkbox per copy:
 when, which stash, and its reading-list status, newest first; a card with more than five copies shows
 three and "+N more". Nothing starts ticked, and a locked stash's copy cannot be. A card's **Keep newest**
 and **Keep oldest** tick every other copy, **Tick all** every one; the same two for every card sit above

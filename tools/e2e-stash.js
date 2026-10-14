@@ -311,6 +311,21 @@ await kase("Duplicates: every copy of a link gets a checkbox, nothing is ticked,
   await browser.tabs.remove(tab.id);
 });
 
+await kase("Duplicates: pages that differ only by their #fragment (Gmail messages) are not duplicates of each other", async () => {
+  const res = await importStashes([
+    { name: "Mail one", tabs: [{ url: "https://mail.example/u/0/#inbox/AAA", title: "Mail A" }, { url: "https://mail.example/u/0/#inbox/BBB", title: "Mail B" }] },
+    { name: "Mail two", tabs: [{ url: "https://mail.example/u/0/#inbox/AAA", title: "Mail A" }, { url: "https://mail.example/u/0/#inbox/CCC", title: "Mail C" }] },
+  ], "text");
+  yes(res.ok, res.error);
+  const { tab, doc: d } = await openPage("list.html?group=stash", d => hasRows(d) && d.getElementById("dups") && !d.getElementById("dups").hidden, "the Duplicates button");
+  d.getElementById("dups").click();
+  const cards = await until(() => [...d.querySelectorAll(".dup-card")].filter(c => c.textContent.includes("mail.example")), "the cards for mail.example");
+  eq(cards.length, 1, "one card, for the one address held twice");
+  yes(cards[0].textContent.includes("#inbox/AAA") || cards[0].textContent.includes("Mail A"), "and it is the one held twice");
+  eq(cards[0].querySelectorAll(".dup-row").length, 2, "with its two copies");
+  await browser.tabs.remove(tab.id);
+});
+
 await kase("Tags: the ✎ editor on a List row saves a tag for the URL, every page shows it, and Group by Tag files it", async () => {
   const res = await importStashes([{ name: "Tag me", tabs: [{ url: "https://github.com/tagged/repo", title: "A repo" }, { url: "https://tag.example/two" }] }], "text");
   yes(res.ok, res.error);

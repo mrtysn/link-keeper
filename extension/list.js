@@ -1103,28 +1103,40 @@ const picked = new Set();   // copy ids: "tab:<bookmark id>" or "list:<link key>
 let dupSets = [];
 let dupSync = [];           // one function per card on show, to redraw its boxes from `picked`
 
+/* Copies are grouped by the address as written, fragment included. A link's key ignores the
+ * fragment, so every Gmail message (mail.google.com/mail/u/0/#inbox/<id>) shares one key and would
+ * look like one link held dozens of times. */
+const exactUrl = url => String(url).replace(/\/+$/, "");
+
 function duplicateSets() {
   const out = [];
   for (const link of data.links) {
-    const copies = link.copies.filter(c => visibleStash(c.stash)).map(c => {
+    const buckets = new Map();   // exact address -> its copies
+    const add = (url, copy) => buckets.set(exactUrl(url), [...(buckets.get(exactUrl(url)) || []), { ...copy, url }]);
+    for (const c of link.copies.filter(c => visibleStash(c.stash))) {
       const stash = stashById(c.stash);
       const at = stash.tabs.findIndex(t => t.id === c.tab);
       const label = stashName(stash);
       const kind = stash.source === "import" ? "imported" : "stashed";
-      return { id: `tab:${c.tab}`, stash, tab: c.tab, locked: stash.locked, at: Date.parse(stash.created_at) || 0,
-        when: whenOf(stash.created_at), label, hint: `tab ${at + 1} of ${stash.tabs.length}`,
-        detail: label === whenOf(stash.created_at) ? kind : `${kind} ${whenOf(stash.created_at)}` };
-    });
+      add(stash.tabs[at].url, { id: `tab:${c.tab}`, stash, tab: c.tab, locked: stash.locked, at: Date.parse(stash.created_at) || 0,
+        title: stash.tabs[at].title || null, when: whenOf(stash.created_at), label, hint: `tab ${at + 1} of ${stash.tabs.length}`,
+        detail: label === whenOf(stash.created_at) ? kind : `${kind} ${whenOf(stash.created_at)}` });
+    }
     if (link.list && !link.list.loose && data.sources.has("list")) {
       const LIST = { pending: "not opened yet", seen: "opened", kept: "opened", skipped: "opened" };
       const added = Date.parse(link.list.added_at);
       // A list entry with no date is the one you still act on: it counts as the newest.
-      copies.push({ id: `list:${link.key}`, list: true, locked: false, at: Number.isNaN(added) ? Number.MAX_SAFE_INTEGER : added,
-        when: link.list.added_at ? whenOf(link.list.added_at) : "", label: "Reading list", hint: "",
+      add(link.url, { id: `list:${link.key}`, list: true, locked: false, at: Number.isNaN(added) ? Number.MAX_SAFE_INTEGER : added,
+        title: link.title, when: link.list.added_at ? whenOf(link.list.added_at) : "", label: "Reading list", hint: "",
         detail: LIST[link.list.status] || link.list.status });
     }
-    copies.sort((a, b) => b.at - a.at);
-    if (copies.length > 1) out.push({ link, copies });
+    for (const [, copies] of buckets) {
+      if (copies.length < 2) continue;
+      copies.sort((a, b) => b.at - a.at);
+      const url = copies[0].url;
+      const same = exactUrl(url) === exactUrl(link.url);
+      out.push({ link: { ...link, url, title: copies.find(c => c.title)?.title || (same ? link.title : null), cap: same ? link.cap : null }, copies });
+    }
   }
   return out.sort((a, b) => b.copies.length - a.copies.length || (labelOf(a.link) || a.link.url).localeCompare(labelOf(b.link) || b.link.url));
 }
