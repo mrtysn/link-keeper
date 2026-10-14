@@ -1,5 +1,5 @@
 /* The links in the sources chosen in the top bar, one card at a time, shuffled — narrowed, if you
- * like, to one tag, the untagged ones or those not captured yet.
+ * like, to one tag, the untagged ones, those holding tag suggestions, or those not captured yet.
  *
  * A card shows what is known: a captured page carries its author, title, text, images and
  * screenshot; a stashed tab never captured shows its tab title and address.
@@ -75,9 +75,13 @@ function toCard(link) {
 const TAG_KEY = "cardsTag";
 const UNTAGGED = "\u0000untagged";
 const UNCAPTURED = "\u0000uncaptured";
+// Untagged links that hold stored tag suggestions, dealt most confident first.
+const SUGGESTED = "\u0000suggested";
+const hasSuggestions = l => !l.tags.length && !!l.suggested?.length;
+const topSuggestion = l => l.suggested?.[0]?.p || 0;
 let dealTag = "";
 try { dealTag = localStorage.getItem(TAG_KEY) || ""; } catch (e) { /* storage blocked: every tag */ }
-const inDeal = l => !dealTag || (dealTag === UNTAGGED ? !l.tags.length
+const inDeal = l => !dealTag || (dealTag === UNTAGGED ? !l.tags.length : dealTag === SUGGESTED ? hasSuggestions(l)
   : dealTag === UNCAPTURED ? isWeb(l.url) && !l.cap : shownTags(l).tags.includes(dealTag));
 
 function renderTagPick(links) {
@@ -88,12 +92,14 @@ function renderTagPick(links) {
   sel.append(el("option", { value: "", textContent: `Every link (${links.length})` }));
   const untagged = links.filter(l => !l.tags.length).length;
   if (untagged) sel.append(el("option", { value: UNTAGGED, textContent: `Untagged (${untagged})` }));
+  const suggested = links.filter(hasSuggestions).length;
+  if (suggested) sel.append(el("option", { value: SUGGESTED, textContent: `Suggested (${suggested})` }));
   const uncaptured = links.filter(l => isWeb(l.url) && !l.cap).length;
   if (uncaptured) sel.append(el("option", { value: UNCAPTURED, textContent: `Not captured (${uncaptured})` }));
   for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
     sel.append(el("option", { value: t, textContent: `${t} (${n})` }));
   }
-  if (dealTag && ![...sel.options].some(o => o.value === dealTag)) sel.append(el("option", { value: dealTag, textContent: `${dealTag === UNTAGGED ? "Untagged" : dealTag === UNCAPTURED ? "Not captured" : dealTag} (0)` }));
+  if (dealTag && ![...sel.options].some(o => o.value === dealTag)) sel.append(el("option", { value: dealTag, textContent: `${dealTag === UNTAGGED ? "Untagged" : dealTag === SUGGESTED ? "Suggested" : dealTag === UNCAPTURED ? "Not captured" : dealTag} (0)` }));
   sel.value = dealTag;
 }
 
@@ -115,7 +121,8 @@ function takeData(d) {
 /* A new deal: every link in the chosen narrowing, shuffled. */
 async function load() {
   takeData(await loadLinks());
-  deck = shuffle(data.links.filter(inDeal).map(toCard));
+  const dealt = data.links.filter(inDeal);
+  deck = (dealTag === SUGGESTED ? dealt.sort((a, b) => topSuggestion(b) - topSuggestion(a)) : shuffle(dealt)).map(toCard);
   index = 0;
   buildSide();
   render();

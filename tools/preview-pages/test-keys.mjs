@@ -181,6 +181,24 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "suggest: no errors " + p.errs.join("; "));
   await p.close();
 }
+
+// The Suggested deck: only untagged links holding suggestions
+{
+  const p = await page("cards.html?suggest");
+  const label = await p.$eval("#deal-tag", s => [...s.options].find(o => o.value === "\u0000suggested")?.textContent || "");
+  ok(/^Suggested \(\d+\)$/.test(label), `suggested deck: the selector offers it with a count (${label})`);
+  await p.selectOption("#deal-tag", "\u0000suggested"); await p.waitForTimeout(600);
+  let all = true;
+  for (let i = 0; i < 5; i++) {
+    const c = await p.$$eval(".card.top .tags .tag", l => l.map(e => e.classList.contains("guess")));
+    all = all && c.length > 0 && c.every(Boolean);
+    await key(p, "s");
+  }
+  ok(all, "suggested deck: every card dealt shows suggestions and no tags of its own");
+  await p.selectOption("#deal-tag", ""); await p.waitForTimeout(300);
+  ok(!p.errs.length, "suggested deck: no errors " + p.errs.join("; "));
+  await p.close();
+}
 {
   // Without suggestions F accepts the site guess.
   const p = await page("cards.html");

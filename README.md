@@ -182,7 +182,8 @@ entry stays in storage after the link is tagged, unshown.
 - **Tagging many in a row** works on every page: Enter on the empty field moves to the next link
   with its editor already open, so `T`, type, Enter, Enter, type, … runs down the links; Escape
   stops. Narrow first to the links that need it: **Untagged** is a tag chip on Links, and
-  an option in Cards' tag selector.
+  an option in Cards' tag selector. Cards' **Suggested** deals only the untagged links holding
+  stored suggestions, most confident first, so `F` and a fix clear them quickly.
 - A stash heading's **⋯ → Tag all tabs…** adds one tag to every tab in it.
 - List has a row of tag chips — any of them, or **Untagged** for the links with none of their own —
   and **Group by Tag**, where a link shows under each of its tags. Cards deals one tag at a time.
