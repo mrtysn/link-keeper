@@ -614,7 +614,13 @@ gap: it downloads the MP4 anonymously (yt-dlp, no login involved), transcribes t
 (mlx-whisper), and extracts one frame per second — a watch-pack an agent can read instead of a video
 only a human could watch. Idempotent per reel; point it at a capture file with `--from`. A carousel post is not a video at
 all, so it is saved slide by slide instead — each image at full size, each video slide with its own
-frames and transcript — which is what a post whose slides *are* the content needs.
+frames and transcript — which is what a post whose slides *are* the content needs. Each pack also gets
+`sheet.jpg` (a contact sheet of the *distinct* frames, at most 24 tiles of 240 px, and `sheet-2.jpg` when
+there are more; a carousel's video slides get `s02-sheet.jpg` and so on) and a one-page `summary.md`
+(caption, duration, the first 1,200 characters of the transcript, the tile times). An agent reads those
+first, a few thousand tokens instead of about 880 per per-second frame, and opens `frames/` only on demand.
+`watch-reel.zsh --summarize <packdir|shortcode>...` or `--summarize-all` adds them to packs that already
+exist, offline; it skips a pack that has a `summary.md` unless given `--force`.
 
 ### Triaging a pile of saved links
 
