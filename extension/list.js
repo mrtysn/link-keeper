@@ -370,7 +370,6 @@ function rowEl(link, ctx) {
   meta.append(...whereBadges(link, ctx));
   const container = ctx ? ctx.tab.container : link.copies.find(c => c.container)?.container;
   if (container) meta.append(el("span", { className: "badge", textContent: "Container", title: container }));
-  if (ctx?.tab.seen_at) meta.append(el("time", { dateTime: ctx.tab.seen_at, textContent: `opened ${whenOf(ctx.tab.seen_at)}` }));
   if (link.list?.note) meta.append(el("span", { className: "note", textContent: link.list.note }));
   const chips = tagChips(link);
   if (chips) meta.append(chips);
@@ -813,8 +812,6 @@ const previewShowing = link => previewMode === "keep" || (previewMode === "this"
 let previewTimer = null;
 let detailFor = null;
 
-// Kept and skipped are judgements from before 5.38; a list entry now reads as opened or not.
-const LIST_STATUS = { pending: "not opened yet", seen: "opened", kept: "opened", skipped: "opened" };
 
 function renderDetail() {
   const box = $("detail");
@@ -850,7 +847,6 @@ function renderDetail() {
   box.append(LinkActions.bar(row.target));
 
   const badges = el("div", { className: "badges" });
-  if (tab?.seen_at) badges.append(el("span", { className: "badge", textContent: `opened ${whenOf(tab.seen_at)}` }));
   if (tab?.container) badges.append(el("span", { className: "badge", textContent: "Container" }));
   if (stash?.source === "import") badges.append(el("span", { className: "badge", textContent: "Imported" }));
   if (kind === "other") badges.append(el("span", { className: "badge", textContent: "Opens as a stand-in" }));
@@ -886,7 +882,7 @@ function knownBox(row) {
   const dm = dmOriginText(c);
   if (dm) facts.append(el("li", { textContent: `Direct message: ${dm}` }));
   if (c?.reply_count) facts.append(el("li", { textContent: `${c.reply_count} ${c.reply_count === 1 ? "reply" : "replies"} captured` }));
-  if (link.list) facts.append(el("li", { textContent: `On the reading list: ${LIST_STATUS[link.list.status] || link.list.status}` }));
+  if (link.list) facts.append(el("li", { textContent: "On the reading list" }));
   for (const copy of link.copies) {
     if (stash && copy.stash === stash.id) continue;
     const s = stashById(copy.stash);
@@ -1127,12 +1123,11 @@ function duplicateSets() {
         detail: label === whenOf(stash.created_at) ? kind : `${kind} ${whenOf(stash.created_at)}` });
     }
     if (link.list && !link.list.loose && data.sources.has("list")) {
-      const LIST = { pending: "not opened yet", seen: "opened", kept: "opened", skipped: "opened" };
       const added = Date.parse(link.list.added_at);
       // A list entry with no date is the one you still act on: it counts as the newest.
       add(link.url, { id: `list:${link.key}`, list: true, locked: false, at: Number.isNaN(added) ? Number.MAX_SAFE_INTEGER : added,
         title: link.title, when: link.list.added_at ? whenOf(link.list.added_at) : "", label: "Reading list", hint: "",
-        detail: LIST[link.list.status] || link.list.status });
+        detail: "on the list" });
     }
     for (const [, copies] of buckets) {
       if (copies.length < 2) continue;
@@ -1497,7 +1492,7 @@ function importDone(text) {
 }
 
 const captureSummary = res => `${res.added} new, ${res.enriched} filled in, ${res.skipped} already known` +
-  `${res.marked ? `, ${res.marked} taken off the queue` : ""}; ${res.total} captures in all`;
+  `; ${res.total} captures in all`;
 
 /* Writing a few hundred bookmarks takes seconds, so the panel counts them as Firefox reports each
  * one, then stays open with the result instead of vanishing. */
@@ -1572,7 +1567,7 @@ async function takePendingRefresh() {
   const bits = [];
   if (records.length) {
     const out = await send({ type: "import-captures", records });
-    bits.push(`${records.length} read: ${out.added} new, ${out.enriched} filled in${out.marked ? `, ${out.marked} off the queue` : ""}`);
+    bits.push(`${records.length} read: ${out.added} new, ${out.enriched} filled in`);
   }
   if (queue.length) {
     const out = await send({ type: "add", urls: queue });

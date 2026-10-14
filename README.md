@@ -124,7 +124,7 @@ On macOS these are bound with `MacCtrl`, so they are the literal **Control** key
 Firefox's own Browser Console, so Control is both freer and less surprising. Rebind any of them
 in `about:addons` → gear → *Manage Extension Shortcuts*.
 
-Opening or capturing a reading-list link marks it **seen** (opened).
+Opening or capturing a link records nothing about the link: there is no opened, seen, kept or skipped state.
 
 The **popup** is about the page you are on. Two lines say whether you hold it already — **Held**:
 each stash as its day (or name) and tab count, and the reading list; **Captured**: the day, or not
@@ -295,7 +295,7 @@ number row works as reddit's keyboard navigation (RES) has it.
 | `F` | accept the suggested tags as the link's tags (Cards then deals the next card) |
 | `E` (`3`) | capture: load it in a background tab and save its text, images and links |
 | `Q` (`⌘⌫`) | remove this copy — from its stash, or from the reading list — then on to the next link |
-| `4` | open — a stashed tab reopens through its stash, keeping its container and marking it opened |
+| `4` | open — a stashed tab reopens through its stash, keeping its container |
 | `⇧4` | open with the other stash effect: taken out of the stash if the setting keeps it, and the reverse |
 | `L` `M` | to the reading list · move to another stash (a field filters the stashes) |
 | `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
@@ -336,12 +336,13 @@ marks an element with `Peek.mark(node, kind, id)`, and a new kind is one `Peek.k
 
 Whether a link was captured shows the same way everywhere: a **captured** badge (its date on hover)
 or a dashed **not captured** on a row, card or the detail pane's header, and a page icon beside the title in Links'
-rows and the Cards sidebar. A card also says when its tab was last opened.
+rows and the Cards sidebar. 
 
-There is no Keep, Drop or skipped state: a link was opened (or captured) or it was not. Keep and Drop left
-the pages in 5.38, and their code is gone; a one-time data patch turned reading-list entries marked
-kept or skipped into opened, and gave a stashed tab that had been judged an opened mark dated at its
-judgement. Verdicts already stored stay in storage, unread.
+There is no opened, seen, kept, dropped or skipped state, and nothing marks a link automatically: opening
+or capturing it changes nothing about it. Keep and Drop left the pages in 5.38, and their code is gone;
+the automatic opened marks went after them. Marks and verdicts already stored stay in storage, unread.
+A link has a context (the stash, import, thread or phone share it came from) and one flag, trashed. A
+flag for links you went over and want out of focus, set by hand, is reserved and not built.
 
 Only walking repeats while held, so a held key cannot remove a run of links. Keys never act
 while a field has the keyboard; `Esc` leaves it. What plain Open does to the stash is **Settings →
@@ -385,8 +386,8 @@ default key, *Stash only this tab* and *Show stashed tabs*, can be bound in Fire
 Stashes are **Firefox bookmarks**, as TidyTab's were: *Other Bookmarks / Link Keeper stashes*, one
 folder per stash named after its time (or what you rename it to), one bookmark per tab in tab order.
 So they outlive the extension, travel with Firefox Sync, and can be edited in Firefox's own library;
-the page shows what the bookmarks hold. What a bookmark cannot carry — a tab's container, its
-Keep/Drop mark, when it was opened, and a stash's lock and star — sits beside it in the add-on's
+the page shows what the bookmarks hold. What a bookmark cannot carry — a tab's container and a stash's
+lock and star — sits beside it in the add-on's
 storage; an uninstall loses those, never a tab. A reinstall finds the folder again by its name.
 Stashes made before 5.9 move into bookmarks once, when 5.9 first runs; the old record is kept aside
 (`sessions_before_bookmarks`) rather than deleted.
@@ -408,7 +409,7 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
   closes until every bookmark has been read back and found present. If writing fails partway, the
   half-written folder is taken back out and nothing closes.
 - **Open all** reopens every web page unloaded — each one loads when you switch to it — in its
-  original container. By default the stash stays, with each entry marked opened; **Settings** can
+  original container. By default the stash stays as it is; **Settings** can
   make opening take the tabs out instead, as OneTab can. A tab's back/forward history does not
   come back; that lives in Firefox's session, not in a URL.
 - Firefox lets no extension open a `file:` URL, an `about:` page or another extension's page. Local
@@ -736,7 +737,7 @@ section, one of them showing its heading only after scrolling.
 ### Getting the data out
 
 List's **Export** menu writes `link-captures.jsonl` (captures), `link-worklist.jsonl` (the reading
-list, with each entry's status, if you want to see what you skipped) or every stash as JSON, to
+list) or every stash as JSON, to
 Downloads. Nothing clears the store in bulk, so exporting twice is fine.
 
 ## What gets extracted

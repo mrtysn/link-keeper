@@ -55,7 +55,7 @@ const LinkActions = (() => {
   }
 
   const stashRecord = s => ({ id: s.id, name: s.name, created_at: s.created_at, source: s.source, format: s.format, locked: s.locked, starred: s.starred });
-  const tabRecord = c => ({ url: c.tab.url, title: c.tab.title, index: c.index, container: c.tab.container, seen_at: c.tab.seen_at });
+  const tabRecord = c => ({ url: c.tab.url, title: c.tab.title, index: c.index, container: c.tab.container });
   const putBack = c => send({ type: "put-back", stash: stashRecord(c.stash), tabs: [tabRecord(c)] });
   const fail = (res, fallback) => ({ ok: false, say: res?.error ? res.error[0].toUpperCase() + res.error.slice(1) : fallback });
 

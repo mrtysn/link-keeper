@@ -204,8 +204,7 @@ const Peek = (() => {
     if (src === "list") {
       const l = link.list;
       if (!l) return null;
-      const rows = [["Status", { pending: "not opened yet", seen: "opened" }[l.status] || l.status],
-        ["Added", l.added_at && whenOf(l.added_at)], ["Saved", l.saved_at && whenOf(l.saved_at)],
+      const rows = [["Added", l.added_at && whenOf(l.added_at)], ["Saved", l.saved_at && whenOf(l.saved_at)],
         ["Note", l.note], ["Kept from", l.loose ? "a page you were on, not the list itself" : null]].filter(r => r[1]);
       return el("div", {}, head(SOURCE.list, linkTitle(link)),
         el("dl", { className: "pk-facts" }, ...rows.flatMap(([k, v]) => [el("dt", { textContent: k }), el("dd", { textContent: v })])),

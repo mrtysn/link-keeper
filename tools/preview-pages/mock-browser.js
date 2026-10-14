@@ -85,8 +85,7 @@
       { id: `bm${++n}`, url: "file:///Users/someone/dev/notes/out/2026-09-27-report.html", title: "Companion Link Report" },
       { id: `bm${++n}`, url: "moz-extension://4b1c/bookmarks.html", title: "Visual bookmarks" });
     const first = tabs.slice(0, 7).map((t, i) => ({
-      ...t, ...(i === 1 && { seen_at: "2026-09-28T09:12:00Z" }), ...(i === 2 && { container: "firefox-container-7" }),
-      ...(i === 5 && { seen_at: "2026-09-28T09:20:00Z" }),
+      ...t, ...(i === 2 && { container: "firefox-container-7" }),
     }));
     const second = tabs.slice(7, 13);
     const third = [{ ...tabs[0], id: `bm${++n}` }, ...tabs.slice(13),
@@ -108,7 +107,7 @@
     state = {
       sessions: mockSessions(),
       trash: [],
-      items: M.dump.items.map(r => ({ url: r.url, status: r.status, added_at: r.added_at, saved_at: toIso(r.saved_at), title: r.title, note: r.note })),
+      items: M.dump.items.map(r => ({ url: r.url, added_at: r.added_at, saved_at: toIso(r.saved_at), title: r.title, note: r.note })),
       captures: rows.filter(r => r.cap).map(r => ({
         url: r.url, title: r.cap.title, author: r.cap.handle ? { handle: r.cap.handle } : undefined, text: r.cap.text, kind: r.cap.kind,
         account: r.cap.account, thread: r.cap.thread, senders: r.cap.senders,
@@ -255,7 +254,6 @@
           case "restore-stash": {
             const remove = !!msg.flip;   // the mock's setting is "keep"
             if (remove) takeTabs(msg.id, msg.ids);
-            else for (const t of findStash(msg.id)?.tabs || []) if (msg.ids.includes(t.id)) t.seen_at = new Date().toISOString();
             return { ok: true, restored: msg.ids.length, removed: remove, viaHelper: 0, standins: 0 };
           }
           case "delete-stash": {
@@ -294,7 +292,7 @@
             const taken = takeTabs(msg.id, msg.ids).filter(t => /^https?:/.test(t.url));
             const have = new Set(stored().items.map(i => keyOf(i.url)));
             const fresh = taken.filter(t => !have.has(keyOf(t.url)));
-            stored().items.push(...fresh.map(t => ({ url: t.url, title: t.title, status: "pending", added_at: new Date().toISOString(), saved_at: s.created_at })));
+            stored().items.push(...fresh.map(t => ({ url: t.url, title: t.title, added_at: new Date().toISOString(), saved_at: s.created_at })));
             return { ok: true, added: fresh.length, moved: taken.length };
           }
           case "move-stashed": {

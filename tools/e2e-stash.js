@@ -87,8 +87,8 @@ const kase = async (name, fn) => runCheck(name, async () => { await resetState()
 await kase("stashes kept in storage.local move into bookmarks, and the old record is set aside", async () => {
   const old = [
     { id: "a", created_at: "2026-09-28T10:00:00Z", name: "Before bookmarks", tabs: [
-      { url: "https://example.com/one", title: "One", seen_at: "2026-09-27T00:00:00Z" }, { url: "file:///tmp/x.pdf" }, { url: "about:preferences" }] },
-    { id: "b", created_at: "2026-09-20T10:00:00Z", tabs: [{ url: "moz-extension://someone-else/page.html", seen_at: "2026-09-21T00:00:00Z" }] },
+      { url: "https://example.com/one", title: "One", container: "firefox-container-2" }, { url: "file:///tmp/x.pdf" }, { url: "about:preferences" }] },
+    { id: "b", created_at: "2026-09-20T10:00:00Z", tabs: [{ url: "moz-extension://someone-else/page.html" }] },
     // The shape of a real pile: 249 web pages, then 54 of mixed kinds.
     { id: "c", created_at: "2026-09-19T10:00:00Z", tabs: Array.from({ length: 249 }, (_, i) => ({ url: `https://site-${i % 40}.example/p/${i}`, title: `Page ${i}` })) },
     { id: "d", created_at: "2026-09-18T10:00:00Z", tabs: Array.from({ length: 54 }, (_, i) => ({
@@ -99,7 +99,7 @@ await kase("stashes kept in storage.local move into bookmarks, and the old recor
   const s = await getSessions();
   eq(s.map(x => x.tabs.length), [3, 1, 249, 54], "tabs per stash");
   eq(s[0].name, "Before bookmarks", "name");
-  eq(s[0].tabs[0].seen_at, "2026-09-27T00:00:00Z", "opened mark kept");
+  eq(s[0].tabs[0].container, "firefox-container-2", "container kept");
   const root = await rootFolder();
   yes(root, "no root folder in Other Bookmarks");
   const [tree] = await browser.bookmarks.getSubTree(root.id);
@@ -149,7 +149,7 @@ await kase("restore opens every tab unloaded and keeps the stash marked", async 
   eq(after.length - before, s.tabs.length, "one tab per bookmark");
   const back = after.filter(t => s.tabs.some(x => x.url === t.url));
   yes(back.every(t => t.discarded), "restored tabs are unloaded");
-  yes((await getSessions())[0].tabs.every(t => t.seen_at), "marked restored");
+  yes((await getSessions())[0].tabs.every(t => !t.seen_at), "opening records no mark");
   await browser.tabs.remove(back.map(t => t.id));
 });
 

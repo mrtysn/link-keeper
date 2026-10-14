@@ -5,12 +5,11 @@
  * and by the page previews and tests, which call it with made-up data.
  *
  * A link is one URL, however many places hold it:
- *   { key, url, title, sources: ["tabs" | "import" | "list"], list, cap, copies, seen, date,
+ *   { key, url, title, sources: ["tabs" | "import" | "list"], list, cap, copies, date,
  *     tags, kinds, guessed }
- *   list    — its reading-list entry { status, added_at, saved_at, note, current, loose }, or null
+ *   list    — its reading-list entry { added_at, saved_at, note, current, loose }, or null
  *   cap     — what was read off the page, or null
- *   copies  — one per stash that holds it: { stash, tab, seen_at, container }
- *   seen    — opened or captured at some point, by any copy
+ *   copies  — one per stash that holds it: { stash, tab, container }
  *   date    — when it was set aside: saved, added to the list, or stashed, whichever is known
  *   tags    — the tags set by hand, or [] (stored in linkTags, keyed like the link)
  *   suggested — a local model's stored suggestions [{ tag, p, by }], best first, while tags is empty, else []
@@ -156,7 +155,7 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     const link = linkFor(i.url, i.title);
     link.url = i.url;   // the list's spelling is the one its own actions match on
     link.list = {
-      status: i.status, added_at: i.added_at || null, saved_at: i.saved_at || null,
+      added_at: i.added_at || null, saved_at: i.saved_at || null,
       note: i.note || link.cap?.note || null, current: currentKey === link.key, loose: false,
     };
     addSource(link, "list");
@@ -168,7 +167,7 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     const link = linkFor(c.url, c.title);
     if (link.list) continue;
     // Captured, never queued: done with as a queue item, but not judged — keep is a separate press.
-    link.list = { status: "seen", added_at: c.captured_at || null, saved_at: isoDate(c.posted), note: c.note || null, current: false, loose: true };
+    link.list = { added_at: c.captured_at || null, saved_at: isoDate(c.posted), note: c.note || null, current: false, loose: true };
     addSource(link, "list");
   }
 
@@ -176,16 +175,15 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     const source = s.source === "import" ? "import" : "tabs";
     const tabs = s.tabs.map(t => {
       const link = linkFor(t.url, t.title);
-      link.copies.push({ stash: s.id, tab: t.id, seen_at: t.seen_at || null, container: t.container || null });
+      link.copies.push({ stash: s.id, tab: t.id, container: t.container || null });
       addSource(link, source);
-      return { id: t.id, key: link.key, url: t.url, title: t.title || null, seen_at: t.seen_at || null, container: t.container || null };
+      return { id: t.id, key: link.key, url: t.url, title: t.title || null, container: t.container || null };
     });
     return { id: s.id, name: s.name, created_at: s.created_at, locked: !!s.locked, starred: !!s.starred, source, format: s.format || null, tabs };
   });
   const stashAt = new Map(stashes.map(s => [s.id, s.created_at]));
 
   for (const link of byKey.values()) {
-    link.seen = !!(link.cap || (link.list && link.list.status !== "pending") || link.copies.some(c => c.seen_at));
     const stashed = link.copies.map(c => stashAt.get(c.stash)).filter(Boolean).sort()[0] || null;
     link.date = link.list?.saved_at || link.list?.added_at || stashed;
     link.tags = (tags[link.key] || []).slice();

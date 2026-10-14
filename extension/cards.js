@@ -160,8 +160,6 @@ function cardEl(card, top) {
   if (card.saved_at) bits.push(`saved ${String(card.saved_at).slice(0, 10)}`);
   if (card.kind && card.kind !== "page") bits.push(card.kind);
   if (card.code_blocks) bits.push(`${card.code_blocks} code block${card.code_blocks > 1 ? "s" : ""}`);
-  const restored = card.link.copies.map(c => c.seen_at).filter(Boolean).sort().pop();
-  if (restored) bits.push(`opened ${dayOf(restored)}`);
   const when = Object.assign(document.createElement("div"), { className: "when", textContent: `${bits.join(" · ")} ` });
   when.append(...[readBadge(card.link)].filter(Boolean));
   names.append(when);
@@ -266,8 +264,6 @@ function cardEl(card, top) {
 
 /* Where a card came from. The newest stash on show is its home, where the sidebar marks it; the card
  * names the other places the same URL is held. */
-// Kept and skipped are judgements from before 5.38; a list entry now reads as opened or not.
-const LIST_STATUS = { pending: "not opened yet", seen: "opened", kept: "opened", skipped: "opened" };
 
 function heldIn(link) {
   return link.copies
@@ -282,7 +278,7 @@ function contextEl(card) {
   const facts = [];
   // The other stashes holding it, previewed on hover.
   if (held.length > 1) facts.push(Peek.mark(el("span", { className: "peekable", textContent: `Also in ${plural(held.length - 1, "other stash")}: ${held.slice(1, 3).map(h => stashName(h.stash)).join(", ")}${held.length > 3 ? ", …" : ""}` }), "held", link.key));
-  if (link.list && held.length) facts.push(`on the reading list: ${LIST_STATUS[link.list.status] || link.list.status}`);
+  if (link.list && held.length) facts.push("on the reading list");
   if (isWeb(link.url)) {
     const host = hostOf(link.url);
     const same = deck.slice(index).filter(c => c.link.key !== link.key && isWeb(c.url) && hostOf(c.url) === host).length;

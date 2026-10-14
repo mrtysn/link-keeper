@@ -441,7 +441,7 @@ await check("restore all brings every tab back — web unloaded in its container
   }
   const [after] = await stashes(bg);
   assert.equal(after.tabs.length, session.tabs.length, "stash kept");
-  assert.ok(after.tabs.every(t => t.seen_at), "marked seen");
+  assert.ok(after.tabs.every(t => !t.seen_at), "opening records no mark");
 });
 
 await check("with 'remove after restore', restored tabs leave the stash — unless it is locked", async () => {
@@ -519,37 +519,6 @@ await check("move to list carries title and stash date, and empties the stash", 
   assert.ok((await stashes(bg))[0].tabs.every(t => !/^https?:/.test(t.url)), "local and browser pages stay in the stash");
 });
 
-await check("Keep and Drop are gone: kept and skipped list entries become opened, a judged stashed tab gets an opened mark, once", async () => {
-  const { browser, store } = makeBrowser([]);
-  store.sessions = [
-    { id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/" }, { url: "https://2.example/" }, { url: "https://3.example/" }] },
-  ];
-  store.items = [
-    { url: "https://k.example/", status: "kept", kept_at: "2026-09-01T00:00:00Z" },
-    { url: "https://s.example/", status: "skipped", seen_at: "2026-09-02T00:00:00Z" },
-    { url: "https://p.example/", status: "pending" },
-    { url: "https://o.example/", status: "seen", seen_at: "2026-09-03T00:00:00Z" },
-  ];
-  const bg = await load(browser);
-  // Verdicts as an older version stored them, beside the bookmarks.
-  const [before] = await stashes(bg);
-  store.stashMeta.tabs[before.tabs[0].id] = { verdict: "drop", judged_at: "2026-09-29T00:00:00Z" };
-  store.stashMeta.tabs[before.tabs[1].id] = { verdict: "keep", seen_at: "2026-09-30T00:00:00Z" };
-  await bg.applyDataPatches();
-  assert.deepEqual(store.items.map(i => i.status), ["seen", "seen", "pending", "seen"]);
-  assert.equal(store.items[0].seen_at, "2026-09-01T00:00:00Z", "a kept entry is opened when it was kept");
-  assert.equal(store.items[0].kept_at, undefined);
-  const [a] = await stashes(bg);
-  assert.deepEqual(a.tabs.map(t => t.seen_at), ["2026-09-29T00:00:00Z", "2026-09-30T00:00:00Z", undefined], "a judged tab is opened at its judgement; one with a mark keeps it");
-  assert.equal(a.tabs[0].verdict, "drop", "the stored verdict itself is left alone");
-  assert.equal(plain(store.dataPatches["2026-10-15-opened-or-not"]).entries, 2);
-  assert.equal(plain(store.dataPatches["2026-10-15-opened-or-not"]).tabs, 1);
-  const links = plain(await browser.handle({ type: "links" })).links;
-  assert.equal(links.find(l => l.url === "https://1.example/").seen, true);
-  assert.equal(links.find(l => l.url === "https://3.example/").seen, false);
-  assert.equal(links.every(l => !("verdict" in l)), true);
-});
-
 await check("a locked stash gives up nothing: no delete, remove, move to list or drag out", async () => {
   const { browser, store } = makeBrowser([]);
   store.sessions = [
@@ -616,7 +585,7 @@ await check("import writes stashes in the order given, with dates, names and ope
   await bg.stashTabs({ windowId: 1, scope: "tab", tabId: 3 });
   const res = await browser.handle({ type: "import-stashes", stashes: [
     { name: "From OneTab", created_at: "2020-01-02T03:04:05Z", tabs: [{ url: "https://a.example/", title: "A" }, { url: "https://a.example/" }, { url: "not a url" }, { url: 7 }] },
-    { tabs: [{ url: "file:///r/x.pdf", seen_at: "2026-09-21T00:00:00Z" }] },
+    { tabs: [{ url: "file:///r/x.pdf", container: "firefox-container-4" }] },
     { name: "empty", tabs: [{ url: "junk" }] },
   ] });
   assert.equal(res.ok, true, res.error);
@@ -627,7 +596,7 @@ await check("import writes stashes in the order given, with dates, names and ope
   assert.equal(all[0].name, "From OneTab");
   assert.equal(all[0].created_at, "2020-01-02T03:04:05.000Z");
   assert.equal(all[0].tabs[0].title, "A");
-  assert.equal(all[1].tabs[0].seen_at, "2026-09-21T00:00:00Z");
+  assert.equal(all[1].tabs[0].container, "firefox-container-4");
   assert.equal((await browser.handle({ type: "import-stashes", stashes: [{ tabs: [] }] })).ok, false);
 });
 
@@ -658,8 +627,8 @@ await check("stashes from storage.local move into bookmarks once, with every mar
   const { browser, store } = makeBrowser([]);
   const old = [
     { id: "new", created_at: "2026-09-28T10:00:00Z", name: "Named", tabs: [
-      { url: "https://1.example/", title: "One", container: "firefox-container-3", seen_at: "2026-09-28T11:00:00Z" },
-      { url: "file:///r/2.pdf", seen_at: "2026-09-28T12:00:00Z" }] },
+      { url: "https://1.example/", title: "One", container: "firefox-container-3" },
+      { url: "file:///r/2.pdf" }] },
     { id: "old", created_at: "2026-09-20T10:00:00Z", tabs: [{ url: "about:preferences" }] },
     { id: "empty", created_at: "2026-09-19T10:00:00Z", tabs: [] },
   ];
@@ -668,9 +637,9 @@ await check("stashes from storage.local move into bookmarks once, with every mar
   const all = await stashes(bg);
   assert.deepEqual(all.map(s => s.created_at), ["2026-09-28T10:00:00Z", "2026-09-20T10:00:00Z"], "dates kept as they were");
   assert.equal(all[0].name, "Named");
-  assert.deepEqual(all[0].tabs.map(t => [t.url, t.title, t.container, t.seen_at]), [
-    ["https://1.example/", "One", "firefox-container-3", "2026-09-28T11:00:00Z"],
-    ["file:///r/2.pdf", undefined, undefined, "2026-09-28T12:00:00Z"]]);
+  assert.deepEqual(all[0].tabs.map(t => [t.url, t.title, t.container]), [
+    ["https://1.example/", "One", "firefox-container-3"],
+    ["file:///r/2.pdf", undefined, undefined]]);
   assert.equal(store.sessions, undefined, "the old key is gone");
   assert.deepEqual(store.sessions_before_bookmarks, old, "and kept aside whole");
   await stashes(bg);
@@ -753,12 +722,11 @@ await check("links: one row per URL across stashes and the reading list, capture
   assert.deepEqual(x.sources.sort(), ["list", "tabs"]);
   assert.equal(x.copies.length, 2);
   assert.equal(x.cap.text, "hello");
-  assert.equal(x.list.status, "seen");
   assert.equal(x.date, "2026-09-01T00:00:00Z", "the list's date wins over the stash's");
   assert.equal(links.find(l => l.url === "https://t.example/short").cap.title, "Article");
   assert.equal(links.find(l => l.url === "file:///r/a.html").cap, null);
   const only = links.find(l => l.url === "https://only.example/");
-  assert.deepEqual([only.sources, only.seen], [["list"], false]);
+  assert.deepEqual(only.sources, ["list"]);
   assert.deepEqual(st.map(s => [s.source, s.tabs.length]), [["tabs", 3], ["tabs", 1]]);
   assert.equal(st[0].tabs[0].key, "status:123");
 });
@@ -894,8 +862,8 @@ await check("capturing a link is not keeping it: the queue moves on, every check
   const by = (l, u) => l.find(x => x.url === u);
   await browser.handle({ type: "import-captures", records: [{ url: "https://q.example/1", text: "x" }, { url: "https://s.example/1", text: "y" }] });
   let l = await links();
-  assert.equal(by(l, "https://q.example/1").list.status, "seen", "a captured list entry leaves the queue as opened");
-  assert.equal(by(l, "https://s.example/1").seen, true, "a captured stashed link counts as seen");
+  assert.equal(by(l, "https://q.example/1").list.status, undefined, "a capture marks nothing on the list entry");
+  assert.equal(store.items[0].status, "pending", "and does not touch what is stored");
 
   // Before 5.32: kept by capturing alone goes back; a pressed keep, or a keep with no capture, stays.
   const old = makeBrowser([]);
@@ -904,7 +872,7 @@ await check("capturing a link is not keeping it: the queue moves on, every check
   old.store.captures = [{ url: "https://a.example/", text: "x" }, { url: "https://b.example/", text: "y", verdict: "keep" }];
   const bg = await load(old.browser);
   await bg.applyDataPatches();
-  assert.deepEqual(old.store.items.map(i => i.status), ["seen", "seen", "seen"], "the old patch resets a, and the opened-or-not patch settles the others");
+  assert.deepEqual(old.store.items.map(i => i.status), ["seen", "kept", "kept"]);
   assert.equal(old.store.dataPatches["2026-10-07-capture-is-not-keep"].reset, 1);
 });
 
@@ -989,7 +957,7 @@ await check("tags travel in exports and come back with imports", async () => {
 await check("the popup's view buttons switch to an open viewer instead of opening another, and count per source", async () => {
   const tabs = makeTabs(3);
   const { browser, store } = makeBrowser(tabs);
-  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://s.example/1", seen_at: "2026-09-29T00:00:00Z" }, { url: "https://s.example/2" }] }];
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://s.example/1" }, { url: "https://s.example/2" }] }];
   store.items = [{ url: "https://s.example/2", status: "pending" }, { url: "https://l.example/", status: "pending" }];
   const ctx = await load(browser);
   store.linkTags = { [vm.runInContext('keyOf("https://s.example/1")', ctx)]: ["read later"] };
@@ -1062,7 +1030,7 @@ await check("data patch: a fingerprint that does not match changes nothing and s
 
 await check("removing keeps a copy in the trash for 30 days, and restoring puts it back where it was", async () => {
   const { browser, store } = makeBrowser([]);
-  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/", title: "One" }, { url: "https://2.example/", seen_at: "2026-09-28T09:00:00Z" }, { url: "https://3.example/" }] }];
+  store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/", title: "One" }, { url: "https://2.example/", container: "firefox-container-5" }, { url: "https://3.example/" }] }];
   store.items = [{ url: "https://list.example/", title: "Listed", added_at: "2026-09-01T00:00:00Z", status: "pending" }];
   const bg = await load(browser);
   const urls = async () => (await stashes(bg)).flatMap(s => s.tabs.map(t => t.url));
@@ -1077,7 +1045,7 @@ await check("removing keeps a copy in the trash for 30 days, and restoring puts 
   const back = await browser.handle({ type: "trash-restore", ids: del.trashed });
   assert.equal(back.restored, 1);
   assert.deepEqual(await urls(), ["https://1.example/", "https://2.example/", "https://3.example/"], "back at its place");
-  assert.equal((await stashes(bg))[0].tabs[1].seen_at, "2026-09-28T09:00:00Z", "with its marks");
+  assert.equal((await stashes(bg))[0].tabs[1].container, "firefox-container-5", "with its marks");
   assert.equal((await trash()).length, 0);
 
   // An undo takes the entries out again instead of leaving them to be restored twice.

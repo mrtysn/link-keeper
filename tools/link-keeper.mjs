@@ -249,7 +249,7 @@ const commands = {
     if (opt.json) return json(view);
     out([`${l.title || l.cap?.title || "(no title)"}`, l.url, `tags: ${l.tags.join(", ") || "none"}`, ...(l.suggested?.length ? [suggestedText(l)] : []),
       ...(l.agentTags?.length ? [agentText(l)] : []),
-      `list: ${l.list ? `${l.list.status}${l.list.loose ? " (captured, never queued)" : ""}` : "not on it"}`,
+      `list: ${l.list ? (l.list.loose ? "captured, never queued" : "on it") : "not on it"}`,
       `capture: ${l.cap ? `${l.cap.captured_at || "yes"}` : "none"}`,
       ...view.copies.map(c => `in stash ${c.stash}  ${day(c.stash_date)}  ${c.stash_name || ""}  (bookmark ${c.tab})`)].join("\n"));
     if (opt.text && l.cap?.text) out(`\n${l.cap.text}`);
