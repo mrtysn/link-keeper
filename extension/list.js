@@ -370,6 +370,8 @@ function rowEl(link, ctx) {
   if (chips) meta.append(chips);
   meta.append(tagButton(link, () => render()));
   main.append(meta);
+  const agent = agentRow(link);
+  if (agent) main.append(agent);
 
   if (cap?.links?.length) {
     main.append(el("div", { className: "inner" }, ...cap.links.slice(0, 5).map(url => linkChip(url, shortUrl(url), url))));

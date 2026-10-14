@@ -176,6 +176,8 @@ function cardEl(card, top) {
     className: "title", textContent: headline(card),
   }));
   if (suggestions) el.append(suggestions);
+  const agent = agentRow(card.link);
+  if (agent) el.append(agent);
 
   const body = (card.text || "").replace(/\s+/g, " ").trim();
   if (body && !headline(card).includes(body.slice(0, 40))) {

@@ -113,7 +113,7 @@ function reloadOnChanges(load, busy = () => false) {
     timer = setTimeout(() => (busy() || editing() || window.LinkActions?.saving() ? soon() : load()), 150);
   };
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagSuggestions", "tagDefs", "favicons"].some(k => changes[k])) soon();
+    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagSuggestions", "agentTags", "tagDefs", "favicons"].some(k => changes[k])) soon();
   });
   for (const ev of ["onCreated", "onRemoved", "onChanged", "onMoved"]) browser.bookmarks?.[ev].addListener(soon);
   window.LinkSources.onChange(load);
@@ -272,6 +272,22 @@ function tagChips(link) {
   return tags.length ? el("span", { className: "tags" }, ...tags.map(t => tagChip(t, guessed, titles[t]))) : null;
 }
 
+/* Agent tags: what a Claude agent wrote for the link, a layer of their own. A labelled row of outlined
+ * chips after the owner's filled ones, so they differ by form and by place; never editable here and
+ * never counted as the owner's. Null when the link has none. */
+function agentRow(link) {
+  if (!link.agentTags?.length) return null;
+  const by = link.agentBy || "an agent";
+  const chips = link.agentTags.map(t => {
+    const chip = el("span", { className: "tag agent", textContent: t, title: `Tagged ${t} by ${by}, not by you` });
+    chip.style.setProperty("--h", tagHue(t));
+    return chip;
+  });
+  return el("div", { className: "agentrow" },
+    el("span", { className: "label", textContent: "agent", title: `Tags written by ${by}; they are not your tags` }),
+    el("span", { className: "tags" }, ...chips));
+}
+
 /* Suggestions under a field, matched with spaces and punctuation ignored, so "gamejam" finds
  * "game jam". ↑↓ choose, Enter or Tab takes the highlighted one, Escape closes. Enter takes a
  * suggestion only when it begins with what was typed, so a new tag can still be typed. */
@@ -367,7 +383,8 @@ function tagEditor(link, onSaved, { order = null, limit = 0 } = {}) {
   const status = el("span", { className: "tagstatus" });
   const palette = el("div", { className: "palette", role: "group" });
   palette.setAttribute("aria-label", "Tags to pick");
-  const box = el("div", { className: "tagger" }, chips, input, status, palette);
+  const agent = agentRow(link);
+  const box = el("div", { className: "tagger" }, chips, input, status, agent, palette);
 
   /* The palette: every tag there is, a click (or 1–9 on an empty field) toggling it on this link;
    * typing narrows it, and a name it lacks is offered as a new tag. */

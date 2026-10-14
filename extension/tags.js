@@ -186,7 +186,7 @@ function rowEl(link) {
   meta.append(...[verdictBadge(link), readBadge(link)].filter(Boolean));
   const others = (link.tags || []).filter(t => t !== chosen);
   if (others.length) meta.append(el("span", { className: "tags" }, ...others.map(t => tagChip(t))));
-  const li = el("li", {}, srcIcon(link.url), el("div", { className: "main" }, a, meta), LinkActions.bar({ link }, { compact: true }));
+  const li = el("li", {}, srcIcon(link.url), el("div", { className: "main" }, a, meta, agentRow(link)), LinkActions.bar({ link }, { compact: true }));
   li.dataset.key = link.key;
   if (link.key === cursor) li.classList.add("lk-cursor");
   li.addEventListener("pointerdown", () => setCursor(link.key, false));

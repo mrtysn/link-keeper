@@ -59,3 +59,17 @@
 .suggestlist div { display: flex; gap: 12px; justify-content: space-between; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
 .suggestlist div.on, .suggestlist div:hover { background: var(--chip); }
 .suggestlist i { color: var(--dim); font-style: normal; font-variant-numeric: tabular-nums; }
+
+/* Agent tags: their own labelled row after the owner's tags, as solid outlined chips — the owner's are
+   filled, a suggestion's dashed — so the three layers differ in form as well as place. */
+.agentrow { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; }
+.tagger .agentrow { flex-basis: 100%; }
+.agentrow .label { color: var(--dim); font-size: .6875rem; font-weight: 600; letter-spacing: .04em; }
+.agentrow .tags { gap: 4px; }
+.tag.agent {
+  color: var(--ink); background: none; border: 1.5px solid hsl(var(--h, 250) 45% 45%);
+  line-height: calc(1.6em - 3px);
+}
+@media (prefers-color-scheme: dark) {
+  .tag.agent { color: var(--ink); background: none; border-color: hsl(var(--h, 250) 55% 68%); }
+}
