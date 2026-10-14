@@ -30,6 +30,7 @@ const domainSel = new Set();   // empty = every domain
 const tagSel = new Set();      // empty = every tag; UNTAGGED = links with no tag set by hand
 const UNTAGGED = "\u0000untagged";
 let domainsExpanded = false;
+let tagsExpanded = false;
 let renaming = null;
 let dragging = null;
 
@@ -293,7 +294,11 @@ LinkKeys.listen({
   detail: () => togglePane(), preview: () => { if (!pane) togglePane(true); setPreview(previewShowing(detailLink()) ? "off" : "this"); },
   escape: () => { document.querySelector(".tagpop")?.remove(); },
 }, { labels: { "group-prev": "◂ section", "group-next": "section ▸" } });
-$("keys").append(...LinkKeys.hint(["prev", "next", "group-next", "tags", "read", "remove", "open", "detail"]));
+// The Keys toggle shows or hides the key guide, and says whether it is showing.
+$("t-keys").onclick = () => LinkKeys.toggleGuide();
+const paintKeysToggle = () => $("t-keys").setAttribute("aria-pressed", String(!!document.getElementById("key-guide")));
+new MutationObserver(paintKeysToggle).observe(document.body, { childList: true });
+paintKeysToggle();
 
 // Space and ⇧Space scroll a long detail pane.
 addEventListener("keydown", e => {
@@ -635,6 +640,23 @@ function bucketsOf(visible) {
  * Multi-select: clicking narrows to the chosen set, clicking again releases; nothing selected means
  * no narrowing. The long tail hides behind an expander so fifty one-off domains do not swallow the
  * toolbar. */
+/* A row of chips under a toggle that shows it whole or as one line. Selected chips come first, so
+ * they stay in sight on the collapsed line; Clear sits beside the toggle for the same reason. */
+function chipRow(box, label, expanded, flip, chips, selected, clear) {
+  const toggle = el("button", { className: "rowtoggle", textContent: `${label} ${expanded ? "▴" : "▾"}`,
+    title: expanded ? "Show one line" : "Show them all" });
+  toggle.setAttribute("aria-expanded", String(expanded));
+  toggle.onclick = flip;
+  box.classList.toggle("collapsed", !expanded);
+  box.append(toggle);
+  if (selected.size) {
+    const x = el("button", { className: "chip ghost", textContent: `Clear ${label.toLowerCase()}` });
+    x.onclick = clear;
+    box.append(x);
+  }
+  box.append(...chips);
+}
+
 function renderDomainChips() {
   const box = $("domains");
   box.textContent = "";
@@ -643,8 +665,7 @@ function renderDomainChips() {
     const h = siteOf(l.url);
     counts.set(h, (counts.get(h) || 0) + 1);
   }
-  const hosts = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  const shown = domainsExpanded ? hosts : hosts.slice(0, 12);
+  const hosts = [...counts.entries()].sort((a, b) => (domainSel.has(b[0]) - domainSel.has(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
   const chip = (host, n) => {
     const icon = host === "Local files" ? srcIcon("file:///") : host === "Browser pages" ? srcIcon("about:blank") : srcIcon(`https://${host}/`);
     const b = el("button", { className: "chip" }, icon, host, el("span", { className: "n", textContent: n }));
@@ -653,20 +674,8 @@ function renderDomainChips() {
     b.onclick = () => { domainSel.has(host) ? domainSel.delete(host) : domainSel.add(host); render(); };
     return b;
   };
-  for (const [host, n] of shown) box.append(chip(host, n));
-  // Selected domains always stay visible, even from the collapsed tail.
-  for (const host of domainSel) if (!shown.some(([h]) => h === host)) box.append(chip(host, counts.get(host) || 0));
-  if (hosts.length > 12) {
-    const more = el("button", { className: "chip ghost", textContent: domainsExpanded ? "Show fewer" : `${hosts.length - 12} more` });
-    more.setAttribute("aria-expanded", String(domainsExpanded));
-    more.onclick = () => { domainsExpanded = !domainsExpanded; render(); };
-    box.append(more);
-  }
-  if (domainSel.size) {
-    const clear = el("button", { className: "chip ghost", textContent: "Clear domains" });
-    clear.onclick = () => { domainSel.clear(); render(); };
-    box.append(clear);
-  }
+  chipRow(box, "Sites", domainsExpanded, () => { domainsExpanded = !domainsExpanded; render(); },
+    hosts.map(([host, n]) => chip(host, n)), domainSel, () => { domainSel.clear(); render(); });
 }
 
 /* Tag toggles, as the domain ones: nothing selected means no narrowing, several mean any of them.
@@ -687,17 +696,13 @@ function renderTagChips() {
     b.onclick = () => { tagSel.has(id) ? tagSel.delete(id) : tagSel.add(id); render(); };
     return b;
   };
-  box.append(el("span", { className: "rowlabel", textContent: "Tags" }));
-  if (untagged) box.append(chip(UNTAGGED, "Untagged", untagged));
   const hand = new Set(data.links.flatMap(l => l.tags));
-  for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
-    box.append(chip(t, t, n, tagChip(t, !hand.has(t), "Suggested, not on any link as a tag yet")));
-  }
-  if (tagSel.size) {
-    const clear = el("button", { className: "chip ghost", textContent: "Clear tags" });
-    clear.onclick = () => { tagSel.clear(); render(); };
-    box.append(clear);
-  }
+  const chips = [];
+  if (untagged) chips.push(chip(UNTAGGED, "Untagged", untagged));
+  const ordered = [...counts.entries()].sort((a, b) => (tagSel.has(b[0]) - tagSel.has(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
+  for (const [t, n] of ordered) chips.push(chip(t, t, n, tagChip(t, !hand.has(t), "Suggested, not on any link as a tag yet")));
+  if (tagSel.has(UNTAGGED)) chips.sort((a, b) => (b.getAttribute("aria-pressed") === "true") - (a.getAttribute("aria-pressed") === "true"));
+  chipRow(box, "Tags", tagsExpanded, () => { tagsExpanded = !tagsExpanded; render(); }, chips, tagSel, () => { tagSel.clear(); render(); });
 }
 
 function setFilter(which) {
@@ -757,7 +762,6 @@ function renderRows() {
   $("sub").textContent = total
     ? `${plural(total, "link")} · ${counts.captured} captured · ${counts.untagged} untagged${stashBit}`
     : "Nothing to show";
-  $("bar-captured").style.width = total ? `${counts.captured / total * 100}%` : "0";
   const names = { all: "All", captured: "Captured", uncaptured: "Not captured", local: "Local & browser", filtered: "Filtered out" };
   for (const f of FILTERS) $(`f-${f}`).replaceChildren(`${names[f]} `, el("span", { className: "n", textContent: counts[f] }));
   $("groupby").value = group;

@@ -463,6 +463,11 @@ a throwaway headless Firefox — real tabs, real bookmarks, a temporary profile 
 *Open list* in the popup opens it — the readable view when there are hundreds of links, rather than
 a 22rem popup.
 
+- The top of the page is three bands before the list: the counts and the page actions (only **Stash this
+  window** is filled; the rest are quiet text buttons, and one whose panel is open is outlined), the
+  filter box, the five filters as one segmented control, the grouping and the view switches (a tick means
+  on, **Keys** shows the key guide), then one line each of **Sites** and **Tags** chips whose label opens
+  them whole. Selected chips come first so they stay in sight on the one line.
 - **Group by** Stash (each stash under its heading with its actions, then the reading list's links),
   Domain (local files and browser pages under their own names), State, Day, Month, or flat newest-
   or oldest-first. Grouped by stash, a URL in two stashes is a row in each; everywhere else it is
