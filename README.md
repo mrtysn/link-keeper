@@ -486,7 +486,7 @@ and **Keep oldest** tick every other copy, **Tick all** every one; the same two 
 the list. **Move N copies to Trash** needs no confirm, since the Trash undoes it, except when some link would
 be left with no copy outside the Trash; the footer counts what is ticked and says so.
 
-**Trash (N)…** lists what was removed, one card per removal, each row saying how many days remain.
+**Trash (N)…**, always beside Duplicates (N = 0 when empty), lists what was removed, one card per removal, each row saying how many days remain.
 Everything removed from a stash or the reading list — Q, a stash's Delete, Duplicates, the CLI's
 `remove`, **Clear dropped** — waits there for 30 days (the add-on's storage, key `trash`, so backups
 carry it). **Restore** puts a tab back in its stash at its old place with its marks, writing a deleted

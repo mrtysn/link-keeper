@@ -1274,7 +1274,6 @@ async function loadTrash() {
   const res = await send({ type: "trash-list" });
   trashEntries = res?.entries || [];
   trashDays = res?.days || 30;
-  $("trash").hidden = !trashEntries.length && $("trash-panel").hidden;
   $("trash").textContent = `Trash (${trashEntries.length})…`;
   if (!$("trash-panel").hidden) renderTrash();
 }

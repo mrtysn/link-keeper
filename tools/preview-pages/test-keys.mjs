@@ -600,6 +600,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const p = await page("list.html");
   const hidden = sel => p.$eval(sel, e => e.hidden);
   ok(!(await hidden("#dups")), "duplicates: the button shows when a link is held twice");
+  ok(!(await hidden("#trash")) && (await p.$eval("#trash", e => e.textContent)) === "Trash (0)…", "trash: the button shows from the start, empty");
   const label = await p.$eval("#dups", e => e.textContent);
   await p.click("#dups"); await p.waitForTimeout(300);
   ok(await p.$eval("#dups-h", e => e === document.activeElement), "duplicates: opening puts focus on the panel heading");
