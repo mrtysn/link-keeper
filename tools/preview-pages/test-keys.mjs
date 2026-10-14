@@ -153,17 +153,18 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const skipped = () => p.$eval("#t-skipped", e => e.textContent);
   const tagsOf = url => p.evaluate(async u => (await browser.runtime.sendMessage({ type: "links" })).links.find(l => l.url === u)?.tags, url);
   const chips = () => p.$$eval(".card.top .tags .tag", l => l.map(e => ({ text: e.textContent, guess: e.classList.contains("guess"), title: e.title })));
-  // The first dozen links carry tags by hand in the mock; skip to one that shows suggestions.
-  for (let i = 0; i < 20 && !(await chips()).some(c => c.guess); i++) await key(p, "s");
+  // The first dozen links carry tags by hand in the mock, and some hold the same tag from two sources
+  // (the merged case has its own block below); skip to one with a single source per tag.
+  for (let i = 0; i < 40 && !((await chips()).some(c => c.guess) && (await chips()).every(c => !/ and /.test(c.title))); i++) await key(p, "s");
   const c = await chips();
   ok(c.map(x => x.text).join() === "dev,ai" && c.every(x => x.guess), `suggest: the card shows the suggestions dimmed, best first (${c.map(x => x.text)})`);
-  ok(c[0]?.title === "Suggested by the tag model (82%)" && c[1]?.title === "Suggested by system-one (64%)", `suggest: each chip says who suggested it and how sure (${c.map(x => x.title).join(" | ")})`);
+  ok(c[0]?.title === "Suggested by your tag model (82%)" && c[1]?.title === "Suggested by Laya (64%)", `suggest: each chip says who suggested it and how sure (${c.map(x => x.title).join(" | ")})`);
   ok(await p.$eval('#key-guide [data-cmd="accept"]', e => !e.classList.contains("idle") && e.textContent.startsWith("F")), "suggest: F is live in the key guide");
   ok(/accept/.test(await p.$eval("#keys-line", e => e.textContent)), "suggest: the keys line names F");
   // The editor says the same, and the first change keeps the rest of what was shown.
   const url = await href();
   await key(p, "t");
-  ok(/Suggested by the tag model and system-one: dev 82%, ai 64%/.test(await p.$eval(".tagpop .tagstatus", e => e.textContent)), "suggest: the editor's status line says who suggested them");
+  ok(/Suggested by your tag model and Laya: dev 82%, ai 64%/.test(await p.$eval(".tagpop .tagstatus", e => e.textContent)), "suggest: the editor's status line says who suggested them");
   await p.click('.tagpop .chips .tag button[title="Remove dev"]'); await p.waitForTimeout(300);
   ok((await tagsOf(url)).join() === "ai", `suggest: removing one wrong suggestion keeps the rest as tags (${await tagsOf(url)})`);
   await key(p, "Escape");
@@ -179,6 +180,37 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await key(p, "Meta+z"); await p.waitForTimeout(400);
   ok((await href()) === url && (await tagsOf(url)).length === 0 && (await chips()).every(x => x.guess), "suggest: undo brings the card back, untagged, suggestions showing");
   ok(!p.errs.length, "suggest: no errors " + p.errs.join("; "));
+  await p.close();
+}
+
+// A tag two sources suggested shows once, with every source in its title; Cards labels the row
+{
+  const p = await page("cards.html?suggest");
+  const href = () => p.$eval(".card.top .open", e => e.href);
+  const top = () => p.$eval(".card.top .title", e => e.textContent.slice(0, 40));
+  const tagsOf = url => p.evaluate(async u => (await browser.runtime.sendMessage({ type: "links" })).links.find(l => l.url === u)?.tags, url);
+  const chips = () => p.$$eval(".card.top .tags .tag", l => l.map(e => ({ text: e.textContent, title: e.title })));
+  for (let i = 0; i < 40 && !(await chips()).some(c => / and /.test(c.title)); i++) await key(p, "s");
+  const c = await chips(), url = await href();
+  ok(c.map(x => x.text).join() === "dev,ai", `merged: each tag appears once (${c.map(x => x.text)})`);
+  ok(c[0]?.title === "Suggested by Laya (90%) and your tag model (82%)" && c[1]?.title === "Suggested by Laya (64%) and Gutsy (60%)",
+    `merged: a chip's title lists every source with its percentage (${c.map(x => x.title).join(" | ")})`);
+  const row = await p.$eval(".card.top .suggestrow", e => ({ label: e.querySelector(".label")?.textContent, text: e.textContent.replace(/\s+/g, " "),
+    marks: [...e.querySelectorAll(".sugby b")].map(b => b.textContent).join(""), hint: e.querySelector(".hint")?.textContent, tags: e.querySelectorAll(".tag").length,
+    afterTitle: e.previousElementSibling?.classList.contains("title"), dashed: getComputedStyle(e).borderTopStyle })).catch(() => null);
+  ok(row && row.label === "Suggested" && row.afterTitle && row.dashed === "dashed", `merged: Cards draws a labelled, outlined row under the title (${JSON.stringify(row)})`);
+  ok(row && ["dev", "ai", "90%", "82%", "64%", "60%"].every(t => row.text.includes(t)) && row.marks === "LMLG",
+    `merged: the row shows each tag with its percentages and source marks (${row?.text})`);
+  ok(row?.hint === "F to accept" && row.tags === 2, `merged: the row says F accepts (${row?.hint})`);
+  ok(await p.$eval(".card.top .head .tags", () => false).catch(() => true), "merged: no second set of chips in the card's corner");
+  await key(p, "t");
+  const line = await p.$eval(".tagpop .tagstatus", e => e.textContent);
+  ok(line === "Suggested by Laya, your tag model and Gutsy: dev 90% (Laya) + 82% (your tag model), ai 64% (Laya) + 60% (Gutsy)", `merged: the editor's status line names the sources (${line})`);
+  await key(p, "Escape");
+  const before = await top();
+  await key(p, "f"); await p.waitForTimeout(400);
+  ok((await top()) !== before && (await tagsOf(url)).join() === "dev,ai", `merged: F accepts the merged set once each (${await tagsOf(url)})`);
+  ok(!p.errs.length, "merged: no errors " + p.errs.join("; "));
   await p.close();
 }
 
@@ -212,6 +244,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
     const tags = await p.evaluate(async u => (await browser.runtime.sendMessage({ type: "links" })).links.find(l => l.url === u)?.tags, url);
     ok(tags.length > 0 && (await href()) !== url, `suggest: F accepts the site guess too (${tags})`);
   } else ok(true, "suggest: the sample has no site guess to accept");
+  ok(!(await p.$(".card.top .suggestrow")), "suggest: a site-guess card has no suggested row");
   ok(!p.errs.length, "suggest: no errors on Cards without suggestions " + p.errs.join("; "));
   await p.close();
 }

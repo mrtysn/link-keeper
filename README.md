@@ -161,13 +161,17 @@ dashed: `code` (GitHub, GitLab…), `video`, `post`, `discussion`, `game`, `pape
 and removing every tag brings the guess back.
 
 **Suggestions** from a local model take the guesses' place, dimmed the same way, until the link has
-tags of its own: a chip's hover says who suggested it and how sure — *Suggested by the tag model
-(82%)*, or *by system-one* — and the editor's status line lists them. `F` accepts everything shown
+tags of its own: a chip's hover says who suggested it and how sure — *Suggested by your tag model
+(82%)*, *by Laya* (system-one) or *by Gutsy* — and the editor's status line lists them. A tag two
+sources both suggested shows once, its hover naming each: *Suggested by Laya (90%) and Gutsy (60%)*;
+chips run in order of their highest percentage. In Cards a link with stored suggestions also gets a
+labelled **Suggested** row under the title, dashed so it reads as not yet your tags: each tag with
+every source's mark (L Laya, G Gutsy, M your tag model) and percentage, and an *F to accept* hint. `F` accepts everything shown
 as the link's tags in one step (site guesses too) and, in Cards, deals the next card; `⌘Z` takes it
 back. To fix one instead, open the editor and change it: the first change saves what was shown plus
 the change, so removing one wrong suggestion keeps the rest. They are stored apart from tags
-(`tagSuggestions`, `{ [link key]: { at, tags: [{ tag, p, by }] } }`, `p` 0–1, `by` `system-one` or
-`model`) and written only by agents: `link-keeper suggest-set FILE [--replace]` (FILE is JSON
+(`tagSuggestions`, `{ [link key]: { at, tags: [{ tag, p, by }] } }`, `p` 0–1, `by` `system-one`, `gutsy` or
+`model`; any other `by` is stored as `system-one`, and one tag may be held from several sources) and written only by agents: `link-keeper suggest-set FILE [--replace]` (FILE is JSON
 `{url: [{tag, p, by}]}`; an empty list removes a link's entry), `link-keeper suggestions` for what is
 stored, and `link-keeper links --json` carries `suggested` per link (empty once it has tags). The
 entry stays in storage after the link is tagged, unshown.

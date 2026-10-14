@@ -18,7 +18,7 @@
 #   note     the popup's note field open, as after "Capture with a note…"
 #   tab=new|about|<url>   the popup's page: not saved, a browser page, or that URL (default: one
 #            held in two stashes)
-#   suggest  every link carries stored tag suggestions (dev 82% by the model, ai 64% by system-one)
+#   suggest  every link carries stored tag suggestions (dev 82% by the model, ai 64% by Laya; every third link also dev 90% by Laya and ai 60% by Gutsy)
 #   light    drop the dark-scheme rules to show the light palette
 #   empty    nothing stashed
 #   settings, import, dups   list.html with that panel open

@@ -166,13 +166,16 @@ function cardEl(card, top) {
   when.append(...[verdictBadge(card.link), readBadge(card.link)].filter(Boolean));
   names.append(when);
   head.append(mono, names);
-  const chips = tagChips(card.link);
+  // Stored suggestions get their own labelled row under the title; own tags and site guesses stay in the corner.
+  const suggestions = suggestionRow(card.link);
+  const chips = suggestions ? null : tagChips(card.link);
   if (chips) head.append(chips);
   el.append(head);
 
   el.append(Object.assign(document.createElement("div"), {
     className: "title", textContent: headline(card),
   }));
+  if (suggestions) el.append(suggestions);
 
   const body = (card.text || "").replace(/\s+/g, " ").trim();
   if (body && !headline(card).includes(body.slice(0, 40))) {
@@ -469,10 +472,13 @@ function openTags() {
   if (!deck[index] || !top) return;
   const pop = anchoredPopover(top.querySelector(".head"), tagEditor(deck[index].link, () => {
     // Redraw the card under the popover with its new tags; the popover stays.
-    const head = $("stage").querySelector(".card.top .head");
-    head?.querySelector(".tags")?.remove();
-    const chips = tagChips(deck[index].link);
-    if (chips && head) head.append(chips);
+    const top = $("stage").querySelector(".card.top");
+    top?.querySelector(".head .tags")?.remove();
+    top?.querySelector(".suggestrow")?.remove();
+    const suggestions = suggestionRow(deck[index].link);
+    const chips = suggestions ? null : tagChips(deck[index].link);
+    if (chips) top?.querySelector(".head")?.append(chips);
+    if (suggestions) top?.querySelector(".title")?.after(suggestions);
   }));
   pop.classList.add("cards-tagpop");
 }

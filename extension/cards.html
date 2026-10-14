@@ -170,6 +170,19 @@
   }
   .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .card .head .tags { margin-left: auto; justify-content: flex-end; max-width: 45%; }
+  /* Stored tag suggestions: outlined and dashed, so they read as not yet the owner's tags. */
+  .suggestrow {
+    flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; padding: .5rem .7rem;
+    border: 1px dashed var(--accent); border-radius: .7rem; font-size: .875rem;
+  }
+  .suggestrow .label { color: var(--accent); font-weight: 700; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
+  .suggestrow .tags { gap: .35rem .8rem; }
+  .suggestrow .sug { display: inline-flex; align-items: center; gap: .3rem; }
+  .suggestrow .tag { font-size: .875rem; color: var(--ink); border: 1px dashed var(--accent); }
+  .suggestrow .sugby { color: var(--ink); font-size: .8125rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .suggestrow .sugby b { color: var(--accent); }
+  .suggestrow .hint { margin-left: auto; color: var(--dim); font-size: .8125rem; white-space: nowrap; }
+  .suggestrow kbd { font: 700 .75rem/1 ui-sans-serif, -apple-system, sans-serif; padding: .15rem .4rem; border: 1px solid var(--field); border-bottom-width: 2px; border-radius: .3rem; color: var(--ink); }
   #msg { text-align: center; color: var(--dim); font-size: .8rem; min-height: 1.1rem; margin-top: .6rem; }
 </style>
 </head>
