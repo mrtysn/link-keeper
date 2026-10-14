@@ -571,6 +571,10 @@ as plain `URL<TAB>date`, which cannot carry the origin, so `importers/attach-dm-
 `thread` and `senders` back on their records after the merge. A link two accounts both hold keeps the
 first account's record on import. Without `IG_ACCOUNTS` the old single-export setup is unchanged.
 
+When an export will not do, `docs/browser-agent-dm-run.md` is the brief for a Chrome-agent run over named DM threads:
+the approval, request count and stop rules it needs first, and the records it returns, which the refresh
+merges from `link-captures-extra.jsonl`.
+
 A reel is a video, so a captured URL is not yet captured content. `tools/watch-reel.zsh` closes that
 gap: it downloads the MP4 anonymously (yt-dlp, no login involved), transcribes the audio locally
 (mlx-whisper), and extracts one frame per second — a watch-pack an agent can read instead of a video
