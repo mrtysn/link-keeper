@@ -17,7 +17,7 @@ if (why) {
   $("why").append(`Link Keeper could not reopen this local file itself: ${why}.`);
   if (/not installed/.test(why)) {
     $("why").append(" Run ", Object.assign(document.createElement("code"), { textContent: "native/install.zsh" }),
-      " in the link-keeper repo once, and restores will open local files directly.");
+      " in the link-keeper repo once, and a stash will open local files directly.");
   }
 }
 

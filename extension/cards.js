@@ -161,7 +161,7 @@ function cardEl(card, top) {
   if (card.kind && card.kind !== "page") bits.push(card.kind);
   if (card.code_blocks) bits.push(`${card.code_blocks} code block${card.code_blocks > 1 ? "s" : ""}`);
   const restored = card.link.copies.map(c => c.seen_at).filter(Boolean).sort().pop();
-  if (restored) bits.push(`restored ${dayOf(restored)}`);
+  if (restored) bits.push(`opened ${dayOf(restored)}`);
   const when = Object.assign(document.createElement("div"), { className: "when", textContent: `${bits.join(" · ")} ` });
   when.append(...[verdictBadge(card.link), readBadge(card.link)].filter(Boolean));
   names.append(when);

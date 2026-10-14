@@ -292,7 +292,7 @@ const LinkActions = (() => {
     // The four things done to a link — tag it, capture it, remove it, or skip it (the walking keys) —
     // and Open. Remove takes out only the copy on show; every other copy is a separate ⋯ item.
     const copy = copyOf(t);
-    const open = btn("open", "Open", "primary", copy ? `Reopen this tab; ${LinkKeys.showOf("open-other")} uses the other restore option` : "Open it in a new tab");
+    const open = btn("open", "Open", "primary", copy ? `Reopen this tab; ${LinkKeys.showOf("open-other")} uses the other after-opening option` : "Open it in a new tab");
     const tagsB = btn("tags", "Tags", "", "Edit its tags", a => tags(t, a));
     const capture = web && btn("read", link.cap ? "Capture again" : "Capture", "", "Load it in a background tab and save its text, images and links");
     const where = copy ? stashName(copy.stash) : "the reading list";

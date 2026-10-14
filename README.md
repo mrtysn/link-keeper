@@ -294,7 +294,7 @@ number row works as reddit's keyboard navigation (RES) has it.
 | `F` | accept the suggested tags as the link's tags (Cards then deals the next card) |
 | `E` (`3`) | capture: load it in a background tab and save its text, images and links |
 | `Q` (`⌘⌫`) | remove this copy — from its stash, or from the reading list — then on to the next link |
-| `4` | open — a stashed tab reopens through its stash, keeping its container and marking it restored |
+| `4` | open — a stashed tab reopens through its stash, keeping its container and marking it opened |
 | `⇧4` | open with the other stash effect: taken out of the stash if the setting keeps it, and the reverse |
 | `L` `M` | to the reading list · move to another stash (a field filters the stashes) |
 | `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
@@ -335,14 +335,14 @@ marks an element with `Peek.mark(node, kind, id)`, and a new kind is one `Peek.k
 
 Whether a link was captured shows the same way everywhere: a **captured** badge (its date on hover)
 or a dashed **not captured** on a row, card or the detail pane's header, and a page icon beside the title in Links'
-rows and the Cards sidebar. A card also says when its tab was last restored.
+rows and the Cards sidebar. A card also says when its tab was last opened.
 
 Keep and Drop, the verdicts of versions before 5.38, are gone from the pages; marks already stored
 stay in storage untouched, and nothing reads them.
 
 Only walking repeats while held, so a held key cannot remove a run of links. Keys never act
 while a field has the keyboard; `Esc` leaves it. What plain Open does to the stash is **Settings →
-After restoring** on the Links page; `⇧4` does the other.
+After opening** on the Links page; `⇧4` does the other.
 
 ### Cards — one at a time
 
@@ -383,7 +383,7 @@ Stashes are **Firefox bookmarks**, as TidyTab's were: *Other Bookmarks / Link Ke
 folder per stash named after its time (or what you rename it to), one bookmark per tab in tab order.
 So they outlive the extension, travel with Firefox Sync, and can be edited in Firefox's own library;
 the page shows what the bookmarks hold. What a bookmark cannot carry — a tab's container, its
-Keep/Drop mark, when it was restored, and a stash's lock and star — sits beside it in the add-on's
+Keep/Drop mark, when it was opened, and a stash's lock and star — sits beside it in the add-on's
 storage; an uninstall loses those, never a tab. A reinstall finds the folder again by its name.
 Stashes made before 5.9 move into bookmarks once, when 5.9 first runs; the old record is kept aside
 (`sessions_before_bookmarks`) rather than deleted.
@@ -404,9 +404,9 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 - A stash is the only record of the tabs it closes (Firefox remembers 25 closed tabs), so no tab
   closes until every bookmark has been read back and found present. If writing fails partway, the
   half-written folder is taken back out and nothing closes.
-- **Restore all** reopens every web page unloaded — each one loads when you switch to it — in its
-  original container. By default the stash stays, with each entry marked restored; **Settings** can
-  make a restore take the tabs out instead, as OneTab can. A tab's back/forward history does not
+- **Open all** reopens every web page unloaded — each one loads when you switch to it — in its
+  original container. By default the stash stays, with each entry marked opened; **Settings** can
+  make opening take the tabs out instead, as OneTab can. A tab's back/forward history does not
   come back; that lives in Firefox's session, not in a URL.
 - Firefox lets no extension open a `file:` URL, an `about:` page or another extension's page. Local
   files reopen through `native/open-local-files.py`, a native-messaging helper that accepts only
@@ -417,7 +417,7 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 - **Move to list** hands a group's web pages, or one, to the reading list with its title and the
   stash date, and takes them out of the stash; local files and browser pages stay. **Delete…** asks first.
 - **Star** keeps a stash at the top. **Lock** makes it unable to lose a tab: no delete, no remove,
-  no move to the list or dragging out, and restoring always keeps it.
+  no move to the list or dragging out, and opening always keeps it.
 - Drag a row to reorder it or drop it into another stash (ahead of or after the row it lands on, or
   last on a stash's heading); the row's **⋯** menu moves it up, down or to another stash. A stash emptied
   this way goes.
@@ -468,7 +468,7 @@ a 22rem popup.
   one row.
 - Filter box searches URLs, titles, captured text, notes and embedded links; domain chips narrow to
   sites.
-- State chips narrow to what is left (never opened, restored or read), seen, kept or dropped.
+- State chips narrow to what is left (never opened or read), seen, kept or dropped.
 - A state mark per row, told apart by shape as well as colour: a ring for left, a dot for seen, a
   tick for kept, a cross for dropped. The reading list's current item carries a *Current* badge and
   a line down its left edge.
@@ -491,7 +491,7 @@ Everything removed from a stash or the reading list — Q, a stash's Delete, Dup
 `remove`, **Clear dropped** — waits there for 30 days (the add-on's storage, key `trash`, so backups
 carry it). **Restore** puts a tab back in its stash at its old place with its marks, writing a deleted
 stash again once, and a reading-list link back on the list; **Delete forever** and **Empty Trash** ask
-first. Moving a link (to the list, between stashes), restoring tabs with "take out of the stash", and
+first. Moving a link (to the list, between stashes), opening tabs with "take out of the stash", and
 undoing a move leave nothing in it; `⌘Z` after a removal takes its entry out again. Entries older than
 30 days are dropped whenever the Trash is read, and at start. A capture removed through the CLI's
 `remove --capture` is not kept.

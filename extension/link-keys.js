@@ -36,7 +36,7 @@ const LinkKeys = (() => {
     { cmd: "read", show: ["E", "3"], does: "capture its text and images" },
     { cmd: "remove", show: ["Q", `${MOD}⌫`], does: "remove this copy, then next" },
     { cmd: "open", show: ["4"], does: "open" },
-    { cmd: "open-other", show: ["⇧4"], does: "open, other restore" },
+    { cmd: "open-other", show: ["⇧4"], does: "open, the other way" },
     { cmd: "list", show: ["L"], does: "to the reading list" },
     { cmd: "move", show: ["M"], does: "move to a stash" },
     { cmd: "undo", show: [`${MOD}Z`], does: "undo" },

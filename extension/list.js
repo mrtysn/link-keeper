@@ -365,7 +365,7 @@ function rowEl(link, ctx) {
   meta.append(...whereBadges(link, ctx));
   const container = ctx ? ctx.tab.container : link.copies.find(c => c.container)?.container;
   if (container) meta.append(el("span", { className: "badge", textContent: "Container", title: container }));
-  if (ctx?.tab.seen_at) meta.append(el("time", { dateTime: ctx.tab.seen_at, textContent: `restored ${whenOf(ctx.tab.seen_at)}` }));
+  if (ctx?.tab.seen_at) meta.append(el("time", { dateTime: ctx.tab.seen_at, textContent: `opened ${whenOf(ctx.tab.seen_at)}` }));
   if (link.list?.note) meta.append(el("span", { className: "note", textContent: link.list.note }));
   const chips = tagChips(link);
   if (chips) meta.append(chips);
@@ -535,7 +535,7 @@ function stashHeading(stash, shown) {
   const locked = stash.locked;
   const imported = stash.source === "import";
   h2.append(el("div", { className: "gacts" },
-    button("Restore all", "primary", settings.afterRestore === "remove" && !locked
+    button("Open all", "primary", settings.afterRestore === "remove" && !locked
       ? "Reopen every tab, unloaded until you switch to it, and take them out of the stash"
       : "Reopen every tab, unloaded until you switch to it; the stash stays",
     () => act({ type: "restore-stash", id: stash.id }, restoredText)),
@@ -545,7 +545,7 @@ function stashHeading(stash, shown) {
           (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : "")), locked),
     toggle(stash.starred ? "★ Starred" : "☆ Star", stash.starred, "Starred stashes stay at the top",
       () => act({ type: "flag-stash", id: stash.id, starred: !stash.starred })),
-    toggle(locked ? "Locked" : "Lock", locked, "A locked stash cannot lose a tab: no delete, remove or move out, and restoring keeps it",
+    toggle(locked ? "Locked" : "Lock", locked, "A locked stash cannot lose a tab: no delete, remove or move out, and opening keeps it",
       () => act({ type: "flag-stash", id: stash.id, locked: !locked })),
     ...popoverMenu("⋯", `More actions for the stash ${stashName(stash)}`, [
       { text: "Rename", run: () => { renaming = stash.id; render(); } },
@@ -846,7 +846,7 @@ function renderDetail() {
   box.append(LinkActions.bar(row.target));
 
   const badges = el("div", { className: "badges" });
-  if (tab?.seen_at) badges.append(el("span", { className: "badge", textContent: `restored ${whenOf(tab.seen_at)}` }));
+  if (tab?.seen_at) badges.append(el("span", { className: "badge", textContent: `opened ${whenOf(tab.seen_at)}` }));
   if (tab?.container) badges.append(el("span", { className: "badge", textContent: "Container" }));
   if (stash?.source === "import") badges.append(el("span", { className: "badge", textContent: "Imported" }));
   if (kind === "other") badges.append(el("span", { className: "badge", textContent: "Opens as a stand-in" }));

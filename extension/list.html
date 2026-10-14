@@ -384,7 +384,7 @@
       <button id="trash" hidden aria-expanded="false" aria-controls="trash-panel" title="Links you removed, kept for 30 days">Trash…</button>
       <button id="import" aria-expanded="false" aria-controls="import-panel" title="Import stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links, or capture JSONL for the reading list">Import…</button>
       <span id="export-slot"></span>
-      <button id="settings" aria-expanded="false" aria-controls="settings-panel" title="What happens after stashing and restoring, and sites never to stash">Settings</button>
+      <button id="settings" aria-expanded="false" aria-controls="settings-panel" title="What happens after stashing and opening, and sites never to stash">Settings</button>
       <button class="primary" id="stash" title="Stash the selected tabs, or every other tab in this window, and close them">Stash this window</button>
     </div>
   </header>
@@ -415,7 +415,7 @@
     <div class="seg viewtoggles" role="group" aria-label="View">
       <button class="chip" id="t-pane" aria-pressed="false" title="The selected link in full beside the list (V)">Detail</button>
       <button class="chip" id="t-compact" aria-pressed="false" title="Rows as icon and title only">Compact</button>
-      <button class="chip" id="t-tools" aria-pressed="true" title="Restore all, Move to list, Star, Lock and ⋯ on each stash heading">Stash tools</button>
+      <button class="chip" id="t-tools" aria-pressed="true" title="Open all, Move to list, Star, Lock and ⋯ on each stash heading">Stash tools</button>
     </div>
     <span id="only" hidden></span>
   </div>
@@ -480,8 +480,8 @@
         <label><input type="radio" name="after-stash" value="stay"> <span>Stay where I am <span class="hint">(a new tab if the window would close)</span></span></label>
       </fieldset>
       <fieldset>
-        <legend>After restoring <span class="hint">(<kbd>⇧4</kbd> does the opposite, once)</span></legend>
-        <label><input type="radio" name="after-restore" value="keep"> <span>Keep the tabs here, marked restored</span></label>
+        <legend>After opening <span class="hint">(<kbd>⇧4</kbd> does the opposite, once)</span></legend>
+        <label><input type="radio" name="after-restore" value="keep"> <span>Keep the tabs here, marked opened</span></label>
         <label><input type="radio" name="after-restore" value="remove"> <span>Take them out of the stash <span class="hint">(locked stashes keep theirs)</span></span></label>
       </fieldset>
       <fieldset>
