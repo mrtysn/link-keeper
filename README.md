@@ -442,6 +442,10 @@ by default with the pane, and then hovering a title previews the link), and **St
 hides the buttons on stash headings. `?stash=<id>` opens one stash alone, with an **Only … ×**
 banner to show everything again; a stash's hover preview links there.
 
+**Select** puts a checkbox on every row (shift-click ticks the run since the last tick). A bar at the foot
+counts what is ticked: **Tag…** adds one tag, picked or typed, to all of them and keeps the tags they had;
+**Select all shown** ticks everything the filters leave; **Done** clears the ticks and hides the bar.
+
 The **live preview**, inside the detail pane, shows the page itself, half a second after you land on a
 link: **Off** as each link opens, **This link** (`P`) for the link you are on only, or **Keep on** for
 every link until turned off — the one setting remembered. Most sites

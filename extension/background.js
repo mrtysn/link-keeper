@@ -1534,6 +1534,18 @@ async function tagStash(id, add) {
   });
 }
 
+/* Add tags to each of these links, keeping the tags they already carry. */
+async function tagLinks(urls, add) {
+  const extra = tagList(add);
+  if (!extra.length) return { ok: false, error: "no tag given" };
+  const keys = [...new Set((Array.isArray(urls) ? urls : []).map(u => keyOf(String(u))))];
+  if (!keys.length) return { ok: false, error: "no links given" };
+  return editTags(all => {
+    for (const k of keys) all[k] = tagList([...(all[k] || []), ...extra]);
+    return { ok: true, tagged: keys.length };
+  });
+}
+
 /* Rename a tag everywhere; renaming onto an existing tag merges the two. */
 const renameTag = (from, to) => editTags((all, lib) => {
   const a = cleanTag(from), b = cleanTag(to);
@@ -1921,6 +1933,9 @@ async function handleMessage(msg) {
 
     case "tag-stash":
       return tagStash(msg.id, msg.tags);
+
+    case "tag-links":
+      return tagLinks(msg.urls, msg.tags);
 
     case "rename-tag":
       return renameTag(msg.from, msg.to);

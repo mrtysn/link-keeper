@@ -1041,6 +1041,19 @@ await check("data patch: the opened marks, verdicts and statuses are stripped on
   assert.deepEqual(store.stashMeta.tabs, { t1: { container: "firefox-container-1" } });
 });
 
+await check("tag-links adds a tag to every link given and keeps the tags they had", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.items = [{ url: "https://a.example/" }, { url: "https://b.example/" }, { url: "https://c.example/" }];
+  store.linkTags = { "a.example": ["old"] };
+  await load(browser);
+  const res = await browser.handle({ type: "tag-links", urls: ["https://a.example/", "https://b.example/"], tags: ["Fresh "] });
+  assert.deepEqual(plain(res), { ok: true, tagged: 2 });
+  assert.deepEqual(store.linkTags["a.example"], ["old", "fresh"]);
+  assert.deepEqual(store.linkTags["b.example"], ["fresh"]);
+  assert.equal(store.linkTags["c.example"], undefined, "a link not given is untouched");
+  assert.equal((await browser.handle({ type: "tag-links", urls: ["https://a.example/"], tags: [""] })).ok, false);
+});
+
 await check("removing keeps a copy in the trash for 30 days, and restoring puts it back where it was", async () => {
   const { browser, store } = makeBrowser([]);
   store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/", title: "One" }, { url: "https://2.example/", container: "firefox-container-5" }, { url: "https://3.example/" }] }];

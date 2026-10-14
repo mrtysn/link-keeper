@@ -211,6 +211,14 @@
             await saveTags();
             return { ok: true, tags };
           }
+          case "tag-links": {
+            const extra = [...new Set((msg.tags || []).map(t => String(t).toLowerCase().trim()).filter(Boolean))];
+            if (!extra.length) return { ok: false, error: "no tag given" };
+            const keys = [...new Set((msg.urls || []).map(keyOf))];
+            for (const k of keys) mockTags[k] = [...new Set([...(mockTags[k] || []), ...extra])];
+            await saveTags();
+            return { ok: true, tagged: keys.length };
+          }
           // The tag library, as the background keeps it (tagDefs): made, recoloured, renamed or merged, deleted.
           case "create-tag": {
             const t = String(msg.name || "").toLowerCase().replace(/\s+/g, " ").trim();

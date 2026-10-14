@@ -139,6 +139,17 @@
   }
   @media (hover: hover) { ul.rows > li:hover { background: var(--panel); } }
   ul.rows > li.current { box-shadow: inset 2px 0 0 var(--accent); }
+  /* Select: a checkbox leads each row, and a bar at the foot tags what is ticked. */
+  .tick { display: none; margin: 4px 0 0; }
+  body.selecting .tick { display: block; }
+  body.selecting ul.rows > li { grid-template-columns: 18px 16px 14px minmax(0, 1fr) auto; }
+  body.selecting.compact ul.rows > li, body.selecting.pane ul.rows > li { grid-template-columns: 18px 16px 12px minmax(0, 1fr); }
+  .selbar {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px;
+    padding: 8px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
+  }
+  .selbar[hidden] { display: none; }
   /* "Not captured" is the usual state, so a row says nothing; the detail pane and the Not captured filter do. */
   ul.rows .lk-unread { display: none; }
   /* A row's buttons show on the row under the pointer, the one the keys are on, or one holding focus;
@@ -435,6 +446,7 @@
     <div class="seg viewtoggles" role="group" aria-label="View">
       <button class="chip" id="t-pane" aria-pressed="false" title="The selected link in full beside the list (V)">Detail</button>
       <button class="chip" id="t-compact" aria-pressed="false" title="Rows as icon and title only">Compact</button>
+      <button class="chip" id="t-select" aria-pressed="false" title="Tick links to tag them together">Select</button>
       <button class="chip" id="t-tools" aria-pressed="true" title="Open all, Move to list, Star, Lock and ⋯ on each stash heading">Stash tools</button>
       <button class="chip" id="t-keys" aria-pressed="false" title="Show or hide the key guide (?)">Keys</button>
     </div>
@@ -537,6 +549,13 @@
     </div>
   </section>
 
+  <div class="selbar" id="selbar" hidden role="region" aria-label="Selected links">
+    <span id="sel-count" aria-live="polite"></span>
+    <button type="button" class="small" id="sel-tag">Tag…</button>
+    <button type="button" class="small" id="sel-all" title="Tick every link now shown">Select all shown</button>
+    <button type="button" class="small" id="sel-clear">Clear</button>
+    <button type="button" class="small primary" id="sel-done">Done</button>
+  </div>
   <p id="msg" role="status"></p>
   <div class="domains" id="domains" role="group" aria-label="Domains; with none selected, all are shown"></div>
   <div class="domains" id="tagchips" role="group" aria-label="Tags; with none selected, all are shown"></div>

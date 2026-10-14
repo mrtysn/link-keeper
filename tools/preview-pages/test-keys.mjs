@@ -649,6 +649,30 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
+// Select: tick links, a shift-click ticks the run between, Tag… tags them all
+{
+  const p = await page("list.html");
+  ok(await p.$eval("#selbar", e => e.hidden), "select: the bar is hidden until Select is pressed");
+  ok(!(await p.$eval("ul.rows > li .tick", e => e.offsetParent !== null)), "select: no checkboxes before");
+  await p.click("#t-select");
+  ok(!(await p.$eval("#selbar", e => e.hidden)) && (await p.$eval("ul.rows > li .tick", e => e.offsetParent !== null)), "select: the bar and the checkboxes show");
+  ok(await p.$eval("#sel-tag", e => e.disabled), "select: Tag… waits for a tick");
+  const ticks = await p.$$("ul.rows > li .tick");
+  await ticks[0].click();
+  await ticks[3].click({ modifiers: ["Shift"] });
+  const n = await p.$$eval("ul.rows > li .tick:checked", l => l.length);
+  ok(n >= 4, `select: shift-click ticks the run (${n} ticked)`);
+  ok(/selected/.test(await p.$eval("#sel-count", e => e.textContent)), "select: the bar counts them");
+  await p.click("#sel-tag"); await p.waitForTimeout(200);
+  ok(!!(await p.$(".tagpop .tagger input")), "select: Tag… opens a field");
+  await p.fill(".tagpop .tagger input", "bulk test"); await p.keyboard.press("Enter"); await p.waitForTimeout(500);
+  ok(/Tagged \d+ links? bulk test/.test(await p.$eval("#msg", e => e.textContent)), "select: it says what it tagged");
+  await p.click("#sel-done"); await p.waitForTimeout(200);
+  ok(await p.$eval("#selbar", e => e.hidden) && !(await p.$("ul.rows > li .tick:checked")), "select: Done hides the bar and clears the ticks");
+  ok(p.errs.length === 0, `select: no errors ${p.errs.join()}`);
+  await p.close();
+}
+
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

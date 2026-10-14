@@ -217,6 +217,87 @@ function cursorRow(li, target) {
   li.addEventListener("pointerdown", () => setCursor(id, false));
 }
 
+/* --- selecting: tick links, tag them together --------------------------------------
+ * Select puts a checkbox on every row; shift-click ticks the run between two. A link is ticked by its
+ * key, so it stays ticked in every stash that shows it. Tag… adds one tag to all of them. */
+
+let selecting = false;
+const ticked = new Set();
+let lastTick = null;   // the row index of the last tick, the other end of a shift-click
+
+function paintSelectBar() {
+  $("selbar").hidden = !selecting;
+  $("t-select").setAttribute("aria-pressed", String(selecting));
+  document.body.classList.toggle("selecting", selecting);
+  $("sel-count").textContent = ticked.size ? `${plural(ticked.size, "link")} selected` : "Tick links to tag them";
+  $("sel-tag").disabled = $("sel-clear").disabled = !ticked.size;
+}
+
+function paintTicks() {
+  for (const r of rowsOnPage) {
+    const box = r.li.querySelector(":scope > .tick");
+    if (box) box.checked = ticked.has(r.target.link.key);
+  }
+  paintSelectBar();
+}
+
+function tickBox(li, link) {
+  const box = el("input", { type: "checkbox", className: "tick", title: "Select this link; shift-click ticks the run since the last one" });
+  box.setAttribute("aria-label", `Select ${labelOf(link) || shortUrl(link.url)}`.slice(0, 120));
+  box.checked = ticked.has(link.key);
+  box.addEventListener("pointerdown", e => e.stopPropagation());
+  box.onclick = e => {
+    e.stopPropagation();
+    const at = rowsOnPage.findIndex(r => r.li === li);
+    const run = e.shiftKey && lastTick !== null && rowsOnPage[lastTick]
+      ? rowsOnPage.slice(Math.min(at, lastTick), Math.max(at, lastTick) + 1) : [rowsOnPage[at]];
+    for (const r of run) box.checked ? ticked.add(r.target.link.key) : ticked.delete(r.target.link.key);
+    lastTick = at;
+    paintTicks();
+  };
+  return box;
+}
+
+function setSelecting(on) {
+  selecting = on;
+  if (!on) ticked.clear();
+  lastTick = null;
+  paintTicks();
+}
+
+function bulkTagPopover(anchor) {
+  const urls = [...ticked].map(k => data.links.find(l => l.key === k)?.url).filter(Boolean);
+  if (!urls.length) return;
+  const input = el("input", { type: "text", placeholder: `tag ${plural(urls.length, "link")}, Enter`, autocomplete: "off", spellcheck: false });
+  input.setAttribute("aria-label", `Tag ${plural(urls.length, "link")}`);
+  const palette = el("div", { className: "palette", role: "group" });
+  palette.setAttribute("aria-label", "Tags to pick");
+  const box = el("div", { className: "tagger" }, input, palette);
+  const apply = async tag => {
+    const name = cleanTag(tag);
+    if (!name) return;
+    const res = await send({ type: "tag-links", urls, tags: [name] });
+    pop.dispatchEvent(new Event("tagdone"));
+    say(res?.ok ? `Tagged ${plural(res.tagged, "link")} ${name}` : res?.error || "That did not work");
+    await load();
+  };
+  const draw = () => {
+    const q = input.value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    palette.textContent = "";
+    for (const t of tagPool().filter(n => !q || n.toLowerCase().replace(/[^a-z0-9]/g, "").includes(q))) {
+      const b = el("button", { type: "button", className: "tag pick", title: `Tag ${plural(urls.length, "link")} ${t}` }, t);
+      b.style.setProperty("--h", tagHue(t));
+      b.addEventListener("pointerdown", e => e.preventDefault());
+      b.onclick = () => apply(t);
+      palette.append(b);
+    }
+  };
+  input.oninput = draw;
+  input.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); apply(input.value); } };
+  draw();
+  const pop = anchoredPopover(anchor, box);
+}
+
 function setCursor(id, scroll = true) {
   cursorId = id;
   for (const r of rowsOnPage) r.li.classList.toggle("lk-cursor", r.id === id);
@@ -420,6 +501,7 @@ function rowEl(link, ctx) {
   const target = { link, ...ctx };
   li.append(LinkActions.bar(target, { compact: true, extra: rowExtras(link, ctx) }));
   cursorRow(li, target);
+  li.prepend(tickBox(li, link));
 
   if (ctx) dragRow(li, link, ctx);
   return li;
@@ -741,6 +823,7 @@ function render() {
 
 function renderRows() {
   rowsOnPage = [];
+  lastTick = null;
   renderDomainChips();
   renderTagChips();
   renderSettings();
@@ -1623,6 +1706,11 @@ function download(name, type, body) {
   $("export-slot").replaceWith(trigger, menu);
 }
 
+$("t-select").onclick = () => setSelecting(!selecting);
+$("sel-done").onclick = () => setSelecting(false);
+$("sel-clear").onclick = () => { ticked.clear(); lastTick = null; paintTicks(); };
+$("sel-all").onclick = () => { for (const r of rowsOnPage) ticked.add(r.target.link.key); paintTicks(); };
+$("sel-tag").onclick = () => bulkTagPopover($("sel-tag"));
 $("t-pane").onclick = () => togglePane();
 $("t-compact").onclick = () => { setPref(pane ? COMPACT_PANE_KEY : COMPACT_KEY, !compactNow()); applyView(); };
 $("t-tools").onclick = () => { setPref(TOOLS_KEY, !pref(TOOLS_KEY, true)); applyView(); };
