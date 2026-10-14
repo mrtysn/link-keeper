@@ -1,0 +1,12 @@
+[project]
+name = "link-keeper-tag-model"
+version = "0.1.0"
+description = "Tag suggestions for Link Keeper: system-one guesses, Jeffy heads trained on the owner's tags"
+requires-python = ">=3.11,<3.14"
+dependencies = ["jeffy-classify", "numpy", "scikit-learn"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
