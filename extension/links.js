@@ -102,6 +102,21 @@ function agentTagsFor(map, key) {
 const hrefOf = l => (typeof l === "string" ? l : l?.resolved || l?.href) || null;
 
 /* What the pages show of a capture. */
+/* Whether a capture record holds anything read from the page. An importer that knows only where a
+ * link was sent (importers/x-archive.py) writes a record with none: the link is not captured, and only
+ * its origin is kept. */
+const capHasContent = c => !!(c.text || c.title || c.images?.length || c.screenshot || c.links?.length || c.replies?.length || c.code_blocks?.length);
+
+/* Where a DM link came from, when an importer recorded it, or null. */
+function originOf(c) {
+  const o = {
+    account: Array.isArray(c?.account) ? c.account.join(", ") : c?.account || null,
+    thread: Array.isArray(c?.thread) ? c.thread : [],
+    senders: Array.isArray(c?.senders) ? c.senders : [],
+  };
+  return o.account || o.thread.length || o.senders.length ? o : null;
+}
+
 function capView(c, thumbs = {}) {
   return {
     title: c.title || null,
@@ -112,10 +127,6 @@ function capView(c, thumbs = {}) {
     note: c.note || null,
     posted: c.posted || null,
     captured_at: c.captured_at || null,
-    // Where a DM link came from, when an importer recorded it (importers/instagram.py).
-    account: Array.isArray(c.account) ? c.account.join(", ") : c.account || null,
-    thread: Array.isArray(c.thread) ? c.thread : [],
-    senders: Array.isArray(c.senders) ? c.senders : [],
     links: (c.links || []).map(hrefOf).filter(Boolean),
     reply_links: (c.reply_links || []).map(l => ({ href: hrefOf(l), from: l.from || null, self: !!l.self })).filter(l => l.href),
     reply_count: (c.replies || []).length,
@@ -143,7 +154,7 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     let link = byKey.get(key);
     if (!link) {
       const c = capBy.get(key);
-      link = { key, url, title: null, sources: [], list: null, cap: c ? capView(c, thumbs) : null, copies: [] };
+      link = { key, url, title: null, sources: [], list: null, cap: c && capHasContent(c) ? capView(c, thumbs) : null, origin: originOf(c), copies: [] };
       byKey.set(key, link);
     }
     if (!link.title && title) link.title = title;
@@ -167,7 +178,8 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     const link = linkFor(c.url, c.title);
     if (link.list) continue;
     // Captured, never queued: done with as a queue item, but not judged — keep is a separate press.
-    link.list = { added_at: c.captured_at || null, saved_at: isoDate(c.posted), note: c.note || null, current: false, loose: true };
+    // saved_at is when an importer found it sent (a DM's date); posted, when the post was made.
+    link.list = { added_at: c.captured_at || null, saved_at: isoDate(c.saved_at) || isoDate(c.posted), note: c.note || null, current: false, loose: true };
     addSource(link, "list");
   }
 

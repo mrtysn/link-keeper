@@ -44,11 +44,12 @@ function labelOf(link) {
  * row or card, a page icon beside the title in a sidebar. Only web pages can be read, so only they get "not
  * read". */
 const readAt = link => link.cap?.captured_at || null;
-/* Where a DM link came from — account, threads, senders — or null when no importer recorded it. */
-function dmOriginText(cap) {
-  if (!cap || !(cap.account || cap.thread?.length || cap.senders?.length)) return null;
-  return [cap.account && `account ${cap.account}`, cap.thread?.length && `thread ${cap.thread.join(", ")}`,
-    cap.senders?.length && `sent by ${cap.senders.join(", ")}`].filter(Boolean).join(" · ");
+/* Where a DM link came from — account, threads, senders (links.js originOf) — or null when no importer
+ * recorded it. */
+function dmOriginText(o) {
+  if (!o || !(o.account || o.thread?.length || o.senders?.length)) return null;
+  return [o.account && `account ${o.account}`, o.thread?.length && `thread ${o.thread.join(", ")}`,
+    o.senders?.length && `sent by ${o.senders.join(", ")}`].filter(Boolean).join(" · ");
 }
 const dayOf = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { dateStyle: "medium" }); };
 function readBadge(link) {

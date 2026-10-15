@@ -826,6 +826,26 @@ await check("capturing a link is not keeping it: the queue moves on, every check
   assert.equal(old.store.dataPatches["2026-10-07-capture-is-not-keep"].reset, 1);
 });
 
+await check("a DM link with no page read is not captured, keeps its origin and date, and a later read fills it in", async () => {
+  const { browser, store } = makeBrowser([]);
+  const bg = await load(browser);
+  const links = async () => plain(await browser.handle({ type: "links" })).links;
+  const dm = { kind: "tweet", url: "https://x.com/a/status/1", text: null, title: null, saved_at: "2024-02-06", via: "x-archive",
+    account: "main", thread: ["@friend"], senders: ["@friend", "@me"] };
+  await browser.handle({ type: "import-captures", records: [dm] });
+  let l = (await links()).find(x => x.url === dm.url);
+  assert.equal(l.cap, null, "a bare record is not a capture");
+  assert.deepEqual(l.origin, { account: "main", thread: ["@friend"], senders: ["@friend", "@me"] }, "its origin is kept");
+  assert.equal(l.list.saved_at.slice(0, 10), "2024-02-06", "dated by when it was sent");
+  await browser.handle({ type: "import-captures", records: [{ url: dm.url, text: "the tweet", via: "fxtwitter" }] });
+  l = (await links()).find(x => x.url === dm.url);
+  assert.equal(l.cap.text, "the tweet", "a later record with text fills it in");
+  assert.deepEqual(l.origin?.thread, ["@friend"], "and the origin stays");
+  const captures = bg.replaceCapture(store.captures, { url: dm.url, text: "read in the browser" });
+  assert.deepEqual([captures.length, captures[0].text, captures[0].senders], [1, "read in the browser", ["@friend", "@me"]],
+    "capturing it again keeps who sent it");
+});
+
 await check("site icons: saved from tabs as they are stashed, as data when readable, else as their address", async () => {
   const tabs = makeTabs(4);
   tabs[2].favIconUrl = "data:image/png;base64,AAAA";

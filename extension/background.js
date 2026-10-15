@@ -32,6 +32,16 @@ async function setCaptures(captures) {
   await browser.storage.local.set({ captures });
 }
 
+/* A new capture of a link replaces its record, keeping where an importer found it sent (the DM's
+ * account, thread and senders), which a page read cannot know. */
+const ORIGIN_FIELDS = ["account", "thread", "senders"];
+function replaceCapture(captures, record) {
+  const key = keyOf(record.url);
+  const old = captures.find(r => keyOf(r.url) === key);
+  for (const f of ORIGIN_FIELDS) if (old?.[f] && !record[f]) record[f] = old[f];
+  return [...captures.filter(r => keyOf(r.url) !== key), record];
+}
+
 /* --- trash ---------------------------------------------------------------------- */
 
 /* What is removed from a stash or the reading list waits here for TRASH_DAYS, with what it takes to
@@ -461,8 +471,7 @@ async function captureUrl(url, note = "") {
     await resolveReplyLinks(record);
 
     const captures = await getCaptures();
-    const key = keyOf(record.url);
-    await setCaptures([...captures.filter(r => keyOf(r.url) !== key), record]);
+    await setCaptures(replaceCapture(captures, record));
 
     return { ok: true, record };
   } finally {
@@ -525,8 +534,7 @@ async function captureActive(note = "", withShot = false) {
   }
 
   const captures = await getCaptures();
-  const key = keyOf(record.url);
-  await setCaptures([...captures.filter(r => keyOf(r.url) !== key), record]);
+  await setCaptures(replaceCapture(captures, record));
 
   return { ok: true, record, total: (await getCaptures()).length };
 }

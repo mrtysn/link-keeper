@@ -182,7 +182,7 @@ const Peek = (() => {
       text && !linkTitle(link).replace(/\s+/g, " ").includes(text.slice(0, 40)) ? el("p", { className: "pk-text", textContent: text.length > 320 ? `${text.slice(0, 320)}…` : text }) : null,
       state.childElementCount ? state : null,
       agentRow(link),
-      dmOriginText(cap) ? el("p", { className: "pk-note", textContent: `Direct message: ${dmOriginText(cap)}` }) : null,
+      dmOriginText(link.origin) ? el("p", { className: "pk-note", textContent: `Direct message: ${dmOriginText(link.origin)}` }) : null,
       where.length ? el("p", { className: "pk-note", textContent: `In ${where.slice(0, 3).join(", ")}${where.length > 3 ? ` and ${where.length - 3} more` : ""}` }) : null);
   });
 

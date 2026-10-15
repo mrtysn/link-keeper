@@ -1326,7 +1326,7 @@ function knownBox(row) {
   // What Open does differently for this link.
   if (tab?.container) facts.append(el("li", { textContent: "Opens in its Firefox container, signed in as it was" }));
   if (kind === "other") facts.append(el("li", { textContent: "Firefox will not let Link Keeper open this address: Open shows a page with it to copy into the address bar" }));
-  const dm = dmOriginText(c);
+  const dm = dmOriginText(link.origin);
   if (dm) facts.append(el("li", { textContent: `Direct message: ${dm}` }));
   if (c?.reply_count) facts.append(el("li", { textContent: `${c.reply_count} ${c.reply_count === 1 ? "reply" : "replies"} captured` }));
   for (const copy of link.copies) {
