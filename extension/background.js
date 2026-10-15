@@ -2030,6 +2030,19 @@ async function handleMessage(msg) {
     case "list-backups":
       return hostCall("list-backups").catch(e => ({ ok: false, error: String(e.message || e) }));
 
+    // What a restore would change: counts here now, and in the backup.
+    case "compare-backup": {
+      const res = await hostCall("read-backup", { name: String(msg.name || "") }).catch(e => ({ ok: false, error: String(e.message || e) }));
+      if (!res.ok) return res;
+      if (res.data?.format !== "link-keeper-backup" || !res.data.storage) return { ok: false, error: "not a Link Keeper backup" };
+      const count = s => ({
+        "reading list": (s.items || []).length, captures: (s.captures || []).length,
+        "tagged links": Object.keys(s.linkTags || {}).length, tags: (s.tagDefs?.list || []).length,
+        "in the Trash": (s.trash || []).length, "filter rules": Array.isArray(s.filterRules) ? s.filterRules.length : DEFAULT_FILTER_RULES.length,
+      });
+      return { ok: true, at: res.data.at, now: count(await browser.storage.local.get(null)), file: count(res.data.storage) };
+    }
+
     case "restore-backup": {
       const res = await hostCall("read-backup", { name: String(msg.name || "") }).catch(e => ({ ok: false, error: String(e.message || e) }));
       return res.ok ? restoreBackup(res.data, "chosen in Settings") : res;

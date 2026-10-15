@@ -138,6 +138,16 @@ await check("wiped storage comes back from the latest backup by itself", async (
   if (!got.storageId || !got.restoredFrom) throw new Error("not marked restored");
 });
 
+await check("Settings compares a backup with what is here before restoring it", async () => {
+  await backupNow("agent");
+  const res = await handleMessage({ type: "compare-backup", name: "latest.json" });
+  if (!res.ok) throw new Error(JSON.stringify(res));
+  for (const k of ["reading list", "captures", "tagged links", "tags", "in the Trash", "filter rules"]) {
+    if (typeof res.now[k] !== "number" || res.now[k] !== res.file[k]) throw new Error(`${k}: ${res.now[k]} vs ${res.file[k]}`);
+  }
+  if ((await handleMessage({ type: "compare-backup", name: "no-such.json" })).ok) throw new Error("a missing file compared");
+});
+
 await check("a restore into a profile with no stashes writes them again", async () => {
   for (const s of await getSessions()) await removeStashFolder(s.id);
   const back = await hostCall("read-backup", { name: "latest.json" });

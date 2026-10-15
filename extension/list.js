@@ -1168,7 +1168,11 @@ $("backup-now").onclick = async () => {
 };
 $("backup-restore").onclick = async () => {
   const name = $("backup-pick").value;
-  if (!name || !confirm(`Replace tags, captures, the reading list and settings with ${name}? What is here now is saved to a pre-restore file first.`)) return;
+  if (!name) return;
+  const cmp = await send({ type: "compare-backup", name });
+  if (!cmp?.ok) return say(`Not restored: ${cmp?.error || "the backup could not be read"}`);
+  const rows = Object.keys(cmp.now).map(k => `  ${k}: ${cmp.now[k]} → ${cmp.file[k]}${cmp.now[k] === cmp.file[k] ? "" : cmp.file[k] < cmp.now[k] ? `  (${cmp.now[k] - cmp.file[k]} fewer)` : `  (${cmp.file[k] - cmp.now[k]} more)`}`);
+  if (!confirm(`Restore the backup of ${new Date(cmp.at).toLocaleString()}?\n\nNow → after restoring:\n${rows.join("\n")}\n\nWhat is here now is saved to a pre-restore file first, so this can be undone by restoring that file. Stashes stay as they are.`)) return;
   const res = await send({ type: "restore-backup", name });
   say(res.ok ? `Restored the backup of ${new Date(res.backup_at).toLocaleString()}${res.stashes ? `, and wrote ${plural(res.stashes, "stash")} again` : ""}` : `Not restored: ${res.error}`);
   loadBackups();
