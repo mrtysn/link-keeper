@@ -319,14 +319,14 @@ function buildSide() {
     const ul = el("ul");
     for (const r of rows) {
       const title = r.title || shortUrl(r.url);
-      const b = el("button", {}, srcIcon(r.url),
-        el("span", { className: `t${r.title ? "" : " plain"}`, textContent: title }), readMark(byKey.get(r.key) || { url: r.url }), el("span", { className: "m" }));
+      const b = el("button", {}, srcIcon(r.url), readMark(byKey.get(r.key) || { url: r.url }),
+        el("span", { className: `t${r.title ? "" : " plain"}`, textContent: title }));
       b.onclick = () => dealNext(r.key);
       Peek.mark(b, "link", r.key);
       sideRows.push({ group: id, key: r.key, b });
       ul.append(el("li", {}, b));
     }
-    const h2 = el("h2", { title: sub }, el("span", { className: "t", textContent: name }), el("span", { className: "n", textContent: rows.length }));
+    const h2 = el("h2", { title: sub }, el("span", { className: "t", textContent: name }), el("span", { className: "n", textContent: id === "list" ? rows.length : plural(rows.length, "tab") }));
     if (id !== "list") Peek.mark(h2, "stash", id);
     side.append(el("section", { className: "grp" }, h2, ul));
   };

@@ -27,7 +27,7 @@
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 0 1.25rem 4rem; --gutter: 1.25rem; --nav-gap: 2rem; background: var(--bg); color: var(--ink);
+    margin: 0; padding: 0 1.25rem 4rem; --gutter: 1.25rem; --nav-gap: 12px; background: var(--bg); color: var(--ink);
     font: 15px/1.5 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
@@ -106,28 +106,30 @@
 
   /* Every stash and the links in no stash, as Links lists them grouped by stash. */
   .layout { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); gap: 2rem; align-items: start; }
+  /* The same sidebar as Links' list: a stash's date (or name) and tab count over a rule, then each
+   * link as icon, captured mark and title on one line; the card on show filled with the accent. */
   #side {
-    position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto;
-    background: var(--panel); border: 1px solid var(--line); border-radius: .8rem; font-size: .8125rem;
+    position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; padding-right: 8px;
+    border-right: 1px solid var(--line); font-size: .875rem;
   }
   #side:empty { display: none; }
-  #side .grp + .grp { border-top: 1px solid var(--line); }
+  #side .grp { margin-top: 18px; }
+  #side .grp:first-child { margin-top: 0; }
   #side h2 {
-    position: sticky; top: 0; z-index: 1; display: flex; gap: .5rem; align-items: baseline; margin: 0; padding: .7rem .8rem .2rem;
-    background: var(--panel); font-size: .75rem; letter-spacing: .04em; text-transform: uppercase;
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin: 0 0 4px; padding: 0 0 6px;
+    border-bottom: 1px solid var(--line); font-size: .8125rem; font-weight: 600;
   }
-  #side h2 .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #side h2 .n { margin-left: auto; flex: none; color: var(--dim); font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
-  #side ul { list-style: none; margin: 0; padding: .2rem .35rem .5rem; }
+  #side h2 .t { min-width: 2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #side h2 .n { flex: none; color: var(--dim); font-weight: 400; font-variant-numeric: tabular-nums; }
+  #side ul { list-style: none; margin: 0; padding: 0; }
   #side li button {
-    display: grid; grid-template-columns: 16px minmax(0, 1fr) 12px 1rem; align-items: center; gap: .5rem; width: 100%;
-    padding: .3rem .45rem; font: inherit; text-align: left; color: var(--ink); background: none; border: 0; border-radius: .4rem; cursor: pointer;
+    display: grid; grid-template-columns: 16px 12px minmax(0, 1fr); align-items: center; column-gap: 12px; width: 100%;
+    padding: 4px 8px; font: inherit; text-align: left; color: var(--ink); background: none; border: 0; border-radius: 6px; cursor: pointer;
   }
   @media (hover: hover) { #side li button:hover { background: var(--chip); } }
-  #side li button[aria-current] { background: var(--accent); color: var(--bg); font-weight: 600; }
-  #side li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #side li .t.plain { font-family: ui-monospace, Menlo, monospace; font-size: .75rem; }
-  #side li .m { font-weight: 700; text-align: center; }
+  #side li button[aria-current] { background: var(--accent); color: var(--on-accent, var(--bg)); }
+  #side li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  #side li .t.plain { font: .8125rem ui-monospace, Menlo, monospace; }
   .src { display: inline-block; width: 16px; height: 16px; background: center/contain no-repeat; border-radius: 4px; }
   @media (max-width: 52rem) {
     .layout { display: block; }
