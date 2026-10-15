@@ -1,7 +1,7 @@
 /* Links: every link from the sources chosen in the top bar — stashed tabs, imports, the reading
  * list — one row per URL, grouped by stash, domain, tag, day or month, or in date order.
  *
- * Three view toggles, each remembered: Detail (V) narrows the rows to a sidebar and shows the
+ * Three view toggles, each remembered: Side by side (V) narrows the rows to a sidebar and shows the
  * selected link in full beside them — its capture, where else it is held, other links from its
  * site, and the live preview (P); Compact shows a row as its icon and title only, the default with
  * the pane; Stash tools shows or hides the buttons on stash headings. ?pane=1 opens with the pane,
@@ -603,10 +603,9 @@ function stashHeading(stash, shown) {
     if (renamed(stash)) h2.append(el("span", { className: "when", textContent: whenOf(stash.created_at) }));
   }
   const n = stash.tabs.length;
-  h2.append(el("span", { className: "n", textContent: shown === n ? plural(n, "tab") : `${shown} of ${n}` }));
-  if (stash.source === "import") {
-    h2.append(el("span", { className: "badge", textContent: `Imported${stash.format ? ` · ${FORMAT_SHORT[stash.format] || stash.format}` : ""}` }));
-  }
+  // Where it came from is the source chips' to say; the count's hover names an import's format.
+  h2.append(el("span", { className: "n", textContent: shown === n ? plural(n, "tab") : `${shown} of ${n}`,
+    title: stash.source === "import" ? `Imported${stash.format ? ` from ${FORMAT_SHORT[stash.format] || stash.format}` : ""}` : "" }));
 
   const button = (text, cls, title, fn, disabled = false) => {
     const b = el("button", { className: `small ${cls}`, textContent: text, title, disabled });
@@ -621,7 +620,7 @@ function stashHeading(stash, shown) {
   const locked = stash.locked;
   const imported = stash.source === "import";
   h2.append(el("div", { className: "gacts" },
-    button("Open all", "primary", "Reopen every tab, unloaded until you switch to it; the stash stays",
+    button("Open all", "", "Reopen every tab, unloaded until you switch to it; the stash stays",
     () => act({ type: "restore-stash", id: stash.id }, restoredText)),
     button("Move to list", "", "Add these to the reading list and take them out of the stash",
       () => act({ type: "move-stash", id: stash.id },

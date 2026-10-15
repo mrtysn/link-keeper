@@ -100,7 +100,9 @@
   .viewtoggles .chip[aria-pressed="true"] { color: var(--ink); font-weight: 400; background: none; }
   .viewtoggles .chip[aria-pressed="true"]::before { content: "✓"; color: var(--accent); font-weight: 700; }
   .domains { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .domains.collapsed { flex-wrap: nowrap; overflow: hidden; }
+  /* Collapsed, a row scrolls sideways (Shift+wheel, a trackpad) with no bar; its toggle stays put. */
+  .domains.collapsed { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .domains.collapsed > .rowtoggle { position: sticky; left: 0; z-index: 1; background: var(--bg); }
   .domains.collapsed > * { flex: none; }
   .domains .chip { min-height: 26px; padding: 2px 10px; }
   .domains .rowtoggle { min-height: 26px; padding: 2px 8px; border-color: transparent; background: none; color: var(--dim); font-size: .8125rem; }
@@ -444,7 +446,7 @@
       </select>
     </label>
     <div class="seg viewtoggles" role="group" aria-label="View">
-      <button class="chip" id="t-pane" aria-pressed="false" title="The selected link in full beside the list (V)">Detail</button>
+      <button class="chip" id="t-pane" aria-pressed="false" title="The list moves into a column on the left and the selected link shows in full on the right (V)">Side by side</button>
       <button class="chip" id="t-compact" aria-pressed="false" title="Rows as icon and title only">Compact</button>
       <button class="chip" id="t-select" aria-pressed="false" title="Tick links to tag them together">Select</button>
       <button class="chip" id="t-tools" aria-pressed="true" title="Open all, Move to list, Star, Lock and ⋯ on each stash heading">Stash tools</button>
@@ -559,7 +561,7 @@
   <p id="msg" role="status"></p>
   <div class="domains" id="domains" role="group" aria-label="Domains; with none selected, all are shown"></div>
   <div class="domains" id="tagchips" role="group" aria-label="Tags; with none selected, all are shown"></div>
-  <!-- The rows, and beside them, with the Detail toggle on, the selected link in full. -->
+  <!-- The rows, and beside them, with Side by side on, the selected link in full. -->
   <div class="panes" id="panes">
     <div id="out"></div>
     <aside id="detail" hidden aria-label="The selected link"></aside>
