@@ -21,6 +21,15 @@ INSTAGRAM_EXPORT_DIR="$HOME/Downloads"
 #IG_ACCOUNTS[main]="alice_123 bob_456"
 #IG_ACCOUNTS[side]=""                                            # self-thread only
 
+# Where the X (Twitter) archive lands (Settings -> Your account -> Download an archive of your data).
+# The newest twitter-* zip or folder under it that holds direct messages is read: the conversation with
+# yourself always, and the conversations listed here. Find their ids with
+# `importers/x-archive.py <archive> --list-threads`; ID=label names one the archive cannot (it knows
+# people by id only, and only the ones your tweets mention by handle). X_ACCOUNT stamps the records.
+#X_ARCHIVE_DIR="$HOME/Downloads"
+#X_THREADS="123-456 789-1011=book-club"
+#X_ACCOUNT=main
+
 # Where watch-reel.zsh builds its packs (video, transcript, frames). Defaults to $DATA_DIR/reels.
 #REELS_DIR="$DATA_DIR/reels"
 

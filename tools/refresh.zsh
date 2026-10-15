@@ -1,7 +1,7 @@
 #!/bin/zsh
 # DESC: One command: find the newest exports, rebuild everything, hand it to the extension.
 #
-# After exporting from Telegram (and, optionally, Instagram), run this. Nothing else. It picks the
+# After exporting from Telegram (and, optionally, Instagram or X), run this. Nothing else. It picks the
 # newest Telegram export and the newest Instagram export that actually contains messages, resolves
 # every link it can without a browser, rebuilds the two HTML views, and then puts the result behind a
 # loopback URL — the extension's list page pulls it in by itself, so there is no file to choose and
@@ -17,8 +17,9 @@
 #
 # --offline skips every step that reaches out — the phone-inbox mirror, the Saved Messages puller, the
 # x.com and web lookups, the reel downloads, the tag suggestions — and keeps the files the last full
-# run left. Links in the Instagram dump are parsed and merged; links to other sites in it, and Telegram
-# links, wait for the next full run. The extension skips a link it already holds, so it is safe to repeat.
+# run left. Links in the Instagram dump and the X archive's DMs are parsed and merged (X's as bare
+# records: where and when they were sent, no text yet); links to other sites in the Instagram dump, and
+# Telegram links, wait for the next full run. The extension skips a link it already holds, so it is safe to repeat.
 #
 # Paths come from config.local.sh at this repo's root — copy config.local.sh.example and fill it in.
 # Nothing machine-specific is committed.
@@ -57,7 +58,7 @@ done
 # value is captured before sourcing the config, which would otherwise clobber it.
 
 env_tg=${TELEGRAM_EXPORT_DIR:-} env_ig=${INSTAGRAM_EXPORT_DIR:-} env_data=${DATA_DIR:-} env_port=${SERVE_PORT:-}
-env_igacc=${INSTAGRAM_ACCOUNTS_DIR:-}
+env_igacc=${INSTAGRAM_ACCOUNTS_DIR:-} env_x=${X_ARCHIVE_DIR:-}
 typeset -A IG_ACCOUNTS    # account folder -> the thread slugs to read besides the self-thread
 [[ -r $repo/config.local.sh ]] && source "$repo/config.local.sh"
 INSTAGRAM_ACCOUNTS_DIR=${env_igacc:-${INSTAGRAM_ACCOUNTS_DIR:-}}
@@ -65,6 +66,7 @@ TELEGRAM_EXPORT_DIR=${env_tg:-${TELEGRAM_EXPORT_DIR:-$HOME/Downloads/Telegram De
 INSTAGRAM_EXPORT_DIR=${env_ig:-${INSTAGRAM_EXPORT_DIR:-$HOME/Downloads}}
 DATA_DIR=${env_data:-${DATA_DIR:-$repo/data}}
 SERVE_PORT=${env_port:-${SERVE_PORT:-8790}}
+X_ARCHIVE_DIR=${env_x:-${X_ARCHIVE_DIR:-$HOME/Downloads}}
 
 # --- what to read, what to write ------------------------------------------------
 
@@ -137,7 +139,19 @@ ig_account_args() {
   for s in ${=threads}; do reply+=(--thread "$s"); done
 }
 
+# X is optional too: the newest twitter-* archive (zip or folder) that holds direct messages. It reads
+# the conversation with yourself, and the conversations named in X_THREADS.
+x_archive=""
+for c in ${~X_ARCHIVE_DIR}/twitter-*(Nom); do
+  [[ -d $c || $c == *.zip ]] || continue
+  "$repo/importers/x-archive.py" "$c" --check 2>/dev/null && { x_archive=$c; break }
+done
+x_args=()
+[[ -n ${X_ACCOUNT:-} ]] && x_args+=(--account "$X_ACCOUNT")
+for s in ${=X_THREADS:-}; do x_args+=(--thread "$s"); done
+
 x_jsonl=$outdir/link-captures-x.jsonl
+xdm_jsonl=$outdir/link-captures-xdm.jsonl
 web_jsonl=$outdir/link-captures-web.jsonl
 ig_jsonl=$outdir/link-captures-ig.jsonl
 all_jsonl=$outdir/link-captures-all.jsonl
@@ -152,6 +166,7 @@ triage_json=$outdir/telegram-links-triage.json
 for (( i = 1; i <= ${#ig_paths}; i++ )); do
   print "instagram : ${ig_paths[$i]/#$HOME/~}${ig_accts[$i]:+  (account ${ig_accts[$i]})}"
 done
+[[ -n $x_archive ]] && print "x archive : ${x_archive/#$HOME/~}${X_ACCOUNT:+  (account $X_ACCOUNT)}"
 print "output : ${outdir/#$HOME/~}\n"
 
 # --- mirror the phone-share inbox from its server, when configured ----------------
@@ -202,8 +217,14 @@ for (( i = 1; i <= ${#ig_paths}; i++ )); do
   worklist+=$'\n'$("$repo/importers/instagram.py" "${ig_paths[$i]}" --other "${reply[@]}" --origins-out "$origins")
   origins_files+=("$origins")
 done
-if [[ -z ${worklist//$'\n'/} ]] && (( ! ${#ig_paths} )) && (( ! offline )); then
-  print -u2 "nothing to work with: no Telegram export under $TELEGRAM_EXPORT_DIR, no $inbox, no Instagram export"
+# The X archive's DM links go to the enrichers too (x.com ones to FxTwitter), their origin likewise.
+if [[ -n $x_archive ]]; then
+  origins=$outdir/link-dm-origins-x.jsonl
+  worklist+=$'\n'$("$repo/importers/x-archive.py" "$x_archive" --other "${x_args[@]}" --origins-out "$origins")
+  origins_files+=("$origins")
+fi
+if [[ -z ${worklist//$'\n'/} ]] && (( ! ${#ig_paths} )) && [[ -z $x_archive ]] && (( ! offline )); then
+  print -u2 "nothing to work with: no Telegram export under $TELEGRAM_EXPORT_DIR, no $inbox, no Instagram export, no X archive"
   print -u2 "either export a chat, or set up the puller (importers/telegram-pull.py --login)"
   exit 1
 fi
@@ -247,6 +268,15 @@ else
   print "  no instagram-* export under ${INSTAGRAM_EXPORT_DIR/#$HOME/~} — skipped"
 fi
 
+# The X archive holds no tweet or page content, only where and when a link was sent: bare records,
+# which the enriched ones fill in on import, and which alone bring the links in under --offline.
+if [[ -n $x_archive ]]; then
+  "$repo/importers/x-archive.py" "$x_archive" --json "${x_args[@]}" > "$xdm_jsonl"
+  print "  $(grep -c . "$xdm_jsonl") links from X direct messages → ${xdm_jsonl:t} (where they were sent; text comes from step 1)"
+else
+  : > "$xdm_jsonl"
+fi
+
 print "\n4/8  reels — packs for new instagram links, records from all of them"
 reels_dir=${REELS_DIR:-$outdir/reels}
 reels_jsonl=$outdir/link-captures-reels.jsonl
@@ -270,12 +300,13 @@ if [[ -n $reel_urls ]] && (( ! offline )); then
 fi
 
 print "\n5/8  merging"
-# reels last, so a pack-backed record wins over a caption-only one for the same url on import.
+# reels last, so a pack-backed record wins over a caption-only one for the same url on import; the
+# bare X DM records first, so any record with text fills them in.
 if [[ -s $extra_jsonl ]]; then
-  cat "$x_jsonl" "$web_jsonl" "$ig_jsonl" "$extra_jsonl" "$reels_jsonl" > "$all_jsonl"
+  cat "$xdm_jsonl" "$x_jsonl" "$web_jsonl" "$ig_jsonl" "$extra_jsonl" "$reels_jsonl" > "$all_jsonl"
   print "  including $(grep -c . "$extra_jsonl") hand-recovered from ${extra_jsonl:t}"
 else
-  cat "$x_jsonl" "$web_jsonl" "$ig_jsonl" "$reels_jsonl" > "$all_jsonl"
+  cat "$xdm_jsonl" "$x_jsonl" "$web_jsonl" "$ig_jsonl" "$reels_jsonl" > "$all_jsonl"
 fi
 if (( ${#origins_files} )); then
   "$repo/importers/attach-dm-origin.py" "${origins_files[@]}" --captures "$all_jsonl" > "$all_jsonl.tmp"

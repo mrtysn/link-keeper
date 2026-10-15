@@ -1,8 +1,9 @@
 #!/bin/zsh
-# DESC: Run refresh.zsh on made-up Instagram exports for two accounts and check what it reads, per account.
+# DESC: Run refresh.zsh on made-up Instagram exports for two accounts, and a made-up X archive, and check what it reads.
 #
 # Copies this repo's tools/ and importers/ into a temporary repo, with its own config.local.sh, so the
-# real config (phone inbox, Telegram session) is never read and nothing leaves the machine. The fake
+# real config (phone inbox, Telegram session) is never read and nothing leaves the machine. Every config
+# names an X archive folder of its own, so the default (~/Downloads) and a real archive there are never read. The fake
 # exports hold no links to other sites, so no fetching happens.
 #
 #   tools/test-refresh-instagram-accounts.zsh
@@ -25,6 +26,7 @@ find "$fake" -name __pycache__ -prune -exec rm -rf {} +
 cat > "$fake/config.local.sh" <<EOF
 DATA_DIR="$work/data"
 TELEGRAM_EXPORT_DIR="$work/no-telegram"
+X_ARCHIVE_DIR="$work/no-x"
 INSTAGRAM_ACCOUNTS_DIR="$work/accounts"
 IG_ACCOUNTS[main]="alice_2 bob_3"
 IG_ACCOUNTS[side]=""
@@ -67,6 +69,7 @@ check "...and says what to set" grep -q "INSTAGRAM_ACCOUNTS_DIR is not" <<< "$ou
 cat > "$fake/config.local.sh" <<EOF
 DATA_DIR="$work/data"
 TELEGRAM_EXPORT_DIR="$work/no-telegram"
+X_ARCHIVE_DIR="$work/no-x"
 INSTAGRAM_EXPORT_DIR="$work/accounts/main"
 EOF
 "$fake/tools/refresh.zsh" --no-serve --no-open > /dev/null 2>&1
@@ -98,12 +101,18 @@ chmod +x "$bin/ssh"
 cat > "$fake/config.local.sh" <<EOF
 DATA_DIR="$work/data"
 TELEGRAM_EXPORT_DIR="$work/no-telegram"
+X_ARCHIVE_DIR="$work/no-x"
 INSTAGRAM_EXPORT_DIR="$work/accounts/main"
 IG_THREADS="bob_3"
+X_THREADS="100-200"
+X_ACCOUNT=main
 LINK_INBOX_REMOTE=ghost:/nowhere
 TELEGRAM_API_ID=1
 SERVE_PORT=18791
 EOF
+mkdir -p "$work/x"
+"$repo/tools/test-x-archive.py" --write-fixture "$work/x/twitter-2026-10-15-fake.zip"
+print -r -- "X_ARCHIVE_DIR=${(q)work}/x" >> "$fake/config.local.sh"
 print -r -- '{"kind":"tweet","url":"https://x.com/someone/status/1","text":"kept from the last run"}' > "$work/data/link-captures-x.jsonl"
 print -r -- '{"kind":"page","url":"https://kept.example/","title":"kept from the last run"}' > "$work/data/link-captures-web.jsonl"
 
@@ -114,6 +123,11 @@ check "--offline keeps the last run's x.com record" test "$(count '.url == "http
 check "--offline keeps the last run's web record" test "$(count '.url == "https://kept.example/"')" = 1
 check "--offline still parses the Instagram dump" test "$(count '(.url | test("CCC333")) and .thread == ["bob_3"]')" = 1
 check "--offline says it skipped the lookups" grep -q "skipped (--offline)" "$work/offline.out"
+check "--offline brings in the X archive's DM links, the one with yourself and the named thread" \
+  test "$(count '.via == "x-archive"')" = 3
+check "...with where they came from" \
+  test "$(count '.url == "https://x.com/other/status/22" and .account == "main" and .thread == ["yourself","@alice"]')" = 1
+check "...and leaves an unnamed thread out" test "$(count '.url | test("spam.example")')" = 0
 
 # The tag suggestions and the handover come after the serve step, so these runs offer the file on
 # loopback and the test collects it, as the extension's list page would.
