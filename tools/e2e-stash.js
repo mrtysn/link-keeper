@@ -262,9 +262,9 @@ await kase("Duplicates: every copy of a link gets a checkbox, nothing is ticked,
   yes(res.ok, res.error);
   await addItems([{ url: "https://dup.example/x" }], "", null);   // an old list copy, as before 5.64
   await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
-  const { tab, view, doc: d } = await openPage("list.html?group=stash", d => hasRows(d) && d.getElementById("dups") && !d.getElementById("dups").hidden, "the Duplicates button");
-  yes(!d.getElementById("dups").hidden, "the Duplicates button shows");
-  d.getElementById("dups").click();
+  const { tab, view, doc: d } = await openPage("list.html?group=stash", d => hasRows(d) && +(d.querySelector("#f-dups .n")?.textContent || 0) > 0, "the Duplicates switch to count");
+  yes(+d.querySelector("#f-dups .n").textContent > 0, "the Duplicates switch counts them");
+  d.getElementById("f-dups").click();
   const card = await until(() => [...d.querySelectorAll(".dup-card")].find(c => c.textContent.includes("dup.example/x")), "a card for the duplicated link");
   yes(card, "a card for the duplicated link");
   const rows = [...card.querySelectorAll(".dup-row")];
@@ -297,8 +297,8 @@ await kase("Duplicates: pages that differ only by their #fragment (Gmail message
     { name: "Mail two", tabs: [{ url: "https://mail.example/u/0/#inbox/AAA", title: "Mail A" }, { url: "https://mail.example/u/0/#inbox/CCC", title: "Mail C" }] },
   ], "text");
   yes(res.ok, res.error);
-  const { tab, doc: d } = await openPage("list.html?group=stash", d => hasRows(d) && d.getElementById("dups") && !d.getElementById("dups").hidden, "the Duplicates button");
-  d.getElementById("dups").click();
+  const { tab, doc: d } = await openPage("list.html?group=stash", d => hasRows(d) && +(d.querySelector("#f-dups .n")?.textContent || 0) > 0, "the Duplicates switch to count");
+  d.getElementById("f-dups").click();
   const cards = await until(() => [...d.querySelectorAll(".dup-card")].filter(c => c.textContent.includes("mail.example")), "the cards for mail.example");
   eq(cards.length, 1, "one card, for the one address held twice");
   yes(cards[0].textContent.includes("#inbox/AAA") || cards[0].textContent.includes("Mail A"), "and it is the one held twice");
