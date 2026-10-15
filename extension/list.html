@@ -362,12 +362,13 @@
   }
   body.pane #out { padding-right: 8px; }
   /* The grip between the list and the link: drag it, or arrow keys while it has focus; a double-click resets. */
-  #pane-grip { display: none; }
-  body.pane #pane-grip {
+  #pane-grip, #pv-grip { display: none; }
+  body.pane #pane-grip, body.pane.previewing #pv-grip {
     display: block; position: sticky; top: 64px; height: var(--pane-h, calc(100vh - 72px)); cursor: col-resize; touch-action: none;
     background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; border-radius: 6px;
   }
-  body.pane #pane-grip:hover, body.pane #pane-grip:focus-visible, body.pane #pane-grip.dragging {
+  body.pane #pane-grip:hover, body.pane #pane-grip:focus-visible, body.pane #pane-grip.dragging,
+  body.pane #pv-grip:hover, body.pane #pv-grip:focus-visible, body.pane #pv-grip.dragging {
     background: linear-gradient(var(--accent), var(--accent)) center / 3px 100% no-repeat; outline: 0;
   }
   body.resizing { cursor: col-resize; user-select: none; }
@@ -411,14 +412,24 @@
   #detail .pvbar { display: flex; align-items: center; gap: 8px; }
   .pvseg { display: flex; gap: 4px; }
   .pvseg .chip { min-height: 26px; padding: 2px 10px; font-size: .8125rem; }
-  #pv-frame { display: block; width: 100%; height: 70vh; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  /* The third pane: the live page, beside the link, as tall as the window allows. */
+  body.pane.previewing .panes { grid-template-columns: var(--side-w, 22rem) 12px minmax(0, 1fr) 12px var(--pv-w, 40%); }
+  body.pane #preview {
+    position: sticky; top: 64px; height: var(--pane-h, calc(100vh - 72px)); display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  }
+  #preview[hidden], #pv-grip[hidden] { display: none !important; }
+  #preview .pvhead { display: flex; align-items: center; gap: 8px; font-size: .8125rem; color: var(--dim); }
+  #preview .pvhead button { margin-left: auto; }
+  #preview .pvnote { margin: 0; color: var(--dim); font-size: .75rem; }
+  #pv-frame { display: block; flex: 1; width: 100%; min-height: 0; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
   #detail .pvnote { margin: 8px 0 0; color: var(--dim); font-size: .8125rem; }
   #detail .dempty { margin: 15vh auto; max-width: 24rem; text-align: center; color: var(--dim); }
   #detail .dempty b { display: block; color: var(--ink); font-size: 1.05rem; margin-bottom: 4px; }
 
   @media (max-width: 48rem) {
     body.pane .panes { display: block; }
-    body.pane #pane-grip { display: none; }
+    body.pane #pane-grip, body.pane.previewing #pv-grip { display: none; }
+    body.pane #preview { position: static; height: 70vh; margin-top: 12px; }
     body.pane #out { position: static; max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--line); padding-right: 0; }
     body.pane #detail { position: static; max-height: none; overflow: visible; padding: 12px 0 0; }
     .viewtoggles { margin-left: 0; }
@@ -586,6 +597,8 @@
     <div id="out"></div>
     <div id="pane-grip" role="separator" aria-orientation="vertical" aria-label="Width of the list" tabindex="0" title="Drag to resize the list; double-click to reset"></div>
     <aside id="detail" hidden aria-label="The selected link"></aside>
+    <div id="pv-grip" role="separator" aria-orientation="vertical" aria-label="Width of the live preview" tabindex="0" title="Drag to resize the preview; double-click to reset" hidden></div>
+    <aside id="preview" hidden aria-label="Live preview of the selected link"></aside>
   </div>
 </div>
 <script src="icons.js"></script>

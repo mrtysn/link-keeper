@@ -450,7 +450,7 @@ banner to show everything again; a stash's hover preview links there.
 counts what is ticked: **Tag…** adds one tag, picked or typed, to all of them and keeps the tags they had;
 **Select all shown** ticks everything the filters leave; **Done** clears the ticks and hides the bar.
 
-The **live preview**, inside the detail pane, shows the page itself, half a second after you land on a
+The **live preview** is a third pane on the right of the detail (drag its edge to resize it; × closes it), showing the page itself, half a second after you land on a
 link: **Off** as each link opens, **This link** (`P`) for the link you are on only, or **Keep on** for
 every link until turned off — the one setting remembered. Most sites
 forbid being framed, so for frames opened from Link Keeper's own pages only, a `declarativeNetRequest`

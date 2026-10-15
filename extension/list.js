@@ -41,45 +41,50 @@ const pref = (key, fallback) => {
 };
 const setPref = (key, on) => { try { localStorage.setItem(key, on ? "1" : "0"); } catch (e) { /* not remembered */ } };
 
-/* The list's width beside the link, in px, remembered; between 14rem and 70% of the two panes. */
-const SIDE_KEY = "listSideWidth";
-function setSideWidth(px, save = false) {
+/* The panes' widths, in px, remembered: the list on the left (--side-w) and the live preview on the
+ * right (--pv-w). A grip between two panes drags its boundary; arrow keys move it while it has focus,
+ * and a double-click puts it back. */
+const GRIPS = [
+  { grip: "pane-grip", pane: "out", prop: "--side-w", key: "listSideWidth", from: "left", min: 14, max: 0.6 },
+  { grip: "pv-grip", pane: "preview", prop: "--pv-w", key: "listPreviewWidth", from: "right", min: 16, max: 0.6 },
+];
+function setPaneWidth(g, px, save = false) {
   const panes = $("panes"), rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  if (px == null) { panes.style.removeProperty("--side-w"); try { localStorage.removeItem(SIDE_KEY); } catch (e) { /* fine */ } return; }
-  const w = Math.round(Math.max(14 * rem, Math.min(px, panes.clientWidth * 0.7)));
-  panes.style.setProperty("--side-w", `${w}px`);
-  $("pane-grip").setAttribute("aria-valuenow", String(w));
-  if (save) try { localStorage.setItem(SIDE_KEY, String(w)); } catch (e) { /* not remembered */ }
+  if (px == null) { panes.style.removeProperty(g.prop); try { localStorage.removeItem(g.key); } catch (e) { /* fine */ } return; }
+  const w = Math.round(Math.max(g.min * rem, Math.min(px, panes.clientWidth * g.max)));
+  panes.style.setProperty(g.prop, `${w}px`);
+  $(g.grip).setAttribute("aria-valuenow", String(w));
+  if (save) try { localStorage.setItem(g.key, String(w)); } catch (e) { /* not remembered */ }
 }
-{
-  const grip = $("pane-grip"), panes = $("panes");
-  try { const w = Number(localStorage.getItem(SIDE_KEY)); if (w) panes.style.setProperty("--side-w", `${w}px`); } catch (e) { /* default */ }
-  const width = () => $("out").getBoundingClientRect().width;
+for (const g of GRIPS) {
+  const grip = $(g.grip), panes = $("panes");
+  try { const w = Number(localStorage.getItem(g.key)); if (w) panes.style.setProperty(g.prop, `${w}px`); } catch (e) { /* default */ }
+  const width = () => $(g.pane).getBoundingClientRect().width;
   grip.addEventListener("pointerdown", e => {
     if (e.button) return;
     e.preventDefault();
     grip.setPointerCapture(e.pointerId);
     grip.classList.add("dragging");
     document.body.classList.add("resizing");
-    const left = panes.getBoundingClientRect().left;
-    const move = ev => setSideWidth(ev.clientX - left - 6);
+    const box = panes.getBoundingClientRect();
+    const move = ev => setPaneWidth(g, g.from === "left" ? ev.clientX - box.left - 6 : box.right - ev.clientX - 6);
     const up = () => {
       grip.removeEventListener("pointermove", move);
       grip.classList.remove("dragging");
       document.body.classList.remove("resizing");
-      setSideWidth(width(), true);
+      setPaneWidth(g, width(), true);
     };
     grip.addEventListener("pointermove", move);
     grip.addEventListener("pointerup", up, { once: true });
     grip.addEventListener("pointercancel", up, { once: true });
   });
-  grip.addEventListener("dblclick", () => setSideWidth(null));
+  grip.addEventListener("dblclick", () => setPaneWidth(g, null));
   grip.addEventListener("keydown", e => {
     const by = { ArrowLeft: -16, ArrowRight: 16 }[e.key];
     if (!by) return;
     e.preventDefault();
     e.stopPropagation();
-    setSideWidth(width() + by * (e.shiftKey ? 4 : 1), true);
+    setPaneWidth(g, width() + by * (e.shiftKey ? 4 : 1) * (g.from === "left" ? 1 : -1), true);
   });
 }
 // The list and the selected link side by side, always.
@@ -906,12 +911,10 @@ function renderDetail() {
   const row = rowsOnPage[i];
   // A tag being typed in the pane survives the reload its own save sets off.
   if (row && row.id === detailFor && box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
-  // The live page stays loaded while the same link is shown.
-  const frame = $("pv-frame");
-  const keep = frame && row && frame.dataset.url === row.target.link.url ? frame : null;
   box.textContent = "";
   clearTimeout(previewTimer);
   detailFor = row?.id || null;
+  renderPreview(row?.target.link || null);
   if (!row) {
     box.append(el("div", { className: "dempty" }, el("b", { textContent: "Nothing selected" }), "Pick a link on the left, or walk to one with W S."));
     return;
@@ -938,7 +941,7 @@ function renderDetail() {
   const tagrow = el("div", { className: "tagrow" }, el("span", { className: "tagrow-label", textContent: "Tags" }), tagEditor(link, () => {}));
   tagrow.addEventListener("tagdone", e => { if (e.detail?.escape) document.activeElement?.blur(); });
   box.append(tagrow);
-  box.append(knownBox(row), previewBox(link, keep));
+  box.append(knownBox(row), previewControls(link));
 }
 
 function knownBox(row) {
@@ -999,39 +1002,51 @@ function knownBox(row) {
   return box;
 }
 
-function previewBox(link, keep) {
-  const url = link.url;
+/* The live preview's switch, at the foot of the link: off, this link only, or every link (P). */
+function previewControls(link) {
   const box = el("section", { className: "box" }, el("h3", { textContent: "Live preview" }));
-  const showing = previewShowing(link);
-  const now = previewMode === "keep" ? "keep" : showing ? "this" : "off";
+  const now = previewMode === "keep" ? "keep" : previewShowing(link) ? "this" : "off";
   const seg = el("div", { className: "pvseg", role: "group" });
   seg.setAttribute("aria-label", "Live preview");
-  for (const [mode, text, title] of [["off", "Off", "No preview"], ["this", "This link", "Show this link's page; the next link opens without it (P)"],
-    ["keep", "Keep on", "Show every link's page as you select it, until you turn it off"]]) {
+  for (const [mode, text, title] of [["off", "Off", "No preview"], ["this", "This link", "Show this link's page beside it; the next link opens without it (P)"],
+    ["keep", "Keep on", "Show every link's page beside it as you select it, until you turn it off"]]) {
     const b = el("button", { type: "button", className: "chip small", textContent: text, title });
     b.setAttribute("aria-pressed", String(mode === now));
     b.onclick = () => setPreview(mode);
     seg.append(b);
   }
-  box.append(el("div", { className: "pvbar" }, seg, el("kbd", { textContent: "P" })));
-  if (!showing) {
-    box.append(el("p", { className: "pvnote", textContent: "Each preview loads the real page. This link shows it for this link only; Keep on shows it for every link until you turn it off." }));
-    return box;
-  }
-  if (!isWeb(url)) {
-    box.append(el("p", { className: "pvnote", textContent: kindOf(url) === "file"
+  box.append(el("div", { className: "pvbar" }, seg, el("kbd", { textContent: "P" })),
+    el("p", { className: "pvnote", textContent: "The page loads in a third pane on the right, which you can widen or narrow by its edge." }));
+  return box;
+}
+
+/* The third pane: the selected link's real page, when the preview is on for it. Its frame stays
+ * loaded while the same link is shown. */
+function renderPreview(link) {
+  const pane = $("preview");
+  const on = !!link && previewShowing(link);
+  document.body.classList.toggle("previewing", on);
+  pane.hidden = $("pv-grip").hidden = !on;
+  const frame = $("pv-frame");
+  if (on && frame && frame.dataset.url === link.url) return;
+  pane.textContent = "";
+  clearTimeout(previewTimer);
+  if (!on) return;
+  const close = el("button", { type: "button", className: "small ghost", textContent: "×", title: "Turn the preview off" });
+  close.onclick = () => setPreview("off");
+  pane.append(el("div", { className: "pvhead" }, el("span", { className: "pvsite", textContent: isWeb(link.url) ? hostOf(link.url) : shortUrl(link.url) }), close));
+  if (!isWeb(link.url)) {
+    pane.append(el("p", { className: "pvnote", textContent: kindOf(link.url) === "file"
       ? "Local files cannot be shown inside an extension page. Open reopens it through the helper."
       : "Browser and extension pages cannot be shown here. Open brings it back as a stand-in." }));
-    return box;
+    return;
   }
-  if (keep) { box.append(keep); return box; }
-  const frame = el("iframe", { id: "pv-frame", title: `Preview of ${labelOf(link) || url}`, referrerPolicy: "no-referrer" });
-  frame.dataset.url = url;
+  const f = el("iframe", { id: "pv-frame", title: `Preview of ${labelOf(link) || link.url}`, referrerPolicy: "no-referrer" });
+  f.dataset.url = link.url;
   // No allow-top-navigation: a framed page cannot navigate this one away.
-  frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
-  box.append(frame, el("p", { className: "pvnote", textContent: "If the preview is blank, the site refused to be shown; use Open instead." }));
-  previewTimer = setTimeout(() => { frame.src = url; }, DWELL_MS);
-  return box;
+  f.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
+  pane.append(f, el("p", { className: "pvnote", textContent: "Blank? The site refused to be shown; use Open instead." }));
+  previewTimer = setTimeout(() => { f.src = link.url; }, DWELL_MS);
 }
 
 async function setPreview(mode) {

@@ -724,6 +724,17 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.$eval("#q", e => e.value) === "" && (await p.$$eval('#domains .chip[aria-pressed="true"]', l => l.length)) === 1, "pane: as a Sites chip, not text in the filter field");
   await p.locator("#detail .facts button.link", { hasText: /Show every site/ }).click(); await p.waitForTimeout(300);
   ok((await p.$$eval("#out ul.rows > li", l => l.length)) === all, "pane: Show every site brings them all back");
+  // The live preview is a third pane on the right, its edge draggable, × turning it off.
+  ok(await p.$eval("#preview", e => e.hidden), "preview: no third pane until it is turned on");
+  await p.locator(".pvseg .chip", { hasText: "This link" }).click(); await p.waitForTimeout(300);
+  ok(await p.$eval("#preview", e => !e.hidden && !!e.querySelector("#pv-frame")), "preview: This link opens the third pane with the page");
+  const w0 = await p.$eval("#preview", e => e.getBoundingClientRect().width);
+  const g = await p.$eval("#pv-grip", e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + 100]; });
+  await p.mouse.move(g[0], g[1]); await p.mouse.down(); await p.mouse.move(g[0] - 120, g[1], { steps: 4 }); await p.mouse.up();
+  const w1 = await p.$eval("#preview", e => e.getBoundingClientRect().width);
+  ok(w1 > w0 + 60, `preview: dragging its edge widens it (${Math.round(w0)} → ${Math.round(w1)})`);
+  await p.click("#preview .pvhead button"); await p.waitForTimeout(200);
+  ok(await p.$eval("#preview", e => e.hidden), "preview: × turns it off");
   ok(p.errs.length === 0, `pane redraw: no errors ${p.errs.join()}`);
   await p.close();
 }
