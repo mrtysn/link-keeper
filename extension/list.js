@@ -40,6 +40,48 @@ const pref = (key, fallback) => {
   try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch (e) { return fallback; }
 };
 const setPref = (key, on) => { try { localStorage.setItem(key, on ? "1" : "0"); } catch (e) { /* not remembered */ } };
+
+/* The list's width beside the link, in px, remembered; between 14rem and 70% of the two panes. */
+const SIDE_KEY = "listSideWidth";
+function setSideWidth(px, save = false) {
+  const panes = $("panes"), rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  if (px == null) { panes.style.removeProperty("--side-w"); try { localStorage.removeItem(SIDE_KEY); } catch (e) { /* fine */ } return; }
+  const w = Math.round(Math.max(14 * rem, Math.min(px, panes.clientWidth * 0.7)));
+  panes.style.setProperty("--side-w", `${w}px`);
+  $("pane-grip").setAttribute("aria-valuenow", String(w));
+  if (save) try { localStorage.setItem(SIDE_KEY, String(w)); } catch (e) { /* not remembered */ }
+}
+{
+  const grip = $("pane-grip"), panes = $("panes");
+  try { const w = Number(localStorage.getItem(SIDE_KEY)); if (w) panes.style.setProperty("--side-w", `${w}px`); } catch (e) { /* default */ }
+  const width = () => $("out").getBoundingClientRect().width;
+  grip.addEventListener("pointerdown", e => {
+    if (e.button) return;
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    grip.classList.add("dragging");
+    document.body.classList.add("resizing");
+    const left = panes.getBoundingClientRect().left;
+    const move = ev => setSideWidth(ev.clientX - left - 6);
+    const up = () => {
+      grip.removeEventListener("pointermove", move);
+      grip.classList.remove("dragging");
+      document.body.classList.remove("resizing");
+      setSideWidth(width(), true);
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up, { once: true });
+    grip.addEventListener("pointercancel", up, { once: true });
+  });
+  grip.addEventListener("dblclick", () => setSideWidth(null));
+  grip.addEventListener("keydown", e => {
+    const by = { ArrowLeft: -16, ArrowRight: 16 }[e.key];
+    if (!by) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setSideWidth(width() + by * (e.shiftKey ? 4 : 1), true);
+  });
+}
 let pane = pref(PANE_KEY, false);
 let stashOnly = null;   // ?stash=<id> (or "list"): only that stash, until its banner is closed
 

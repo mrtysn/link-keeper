@@ -349,11 +349,21 @@
 
   /* --- the detail pane: rows on the left, the selected link on the right --- */
   body.pane .wrap { max-width: none; }
-  body.pane .panes { display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr); gap: 0 24px; align-items: start; margin-top: 8px; }
+  body.pane .panes { display: grid; grid-template-columns: var(--side-w, 22rem) 12px minmax(0, 1fr); gap: 0 8px; align-items: start; margin-top: 8px; }
   body.pane #out, body.pane #detail {
     position: sticky; top: 64px; max-height: var(--pane-h, calc(100vh - 72px)); overflow-y: auto; overscroll-behavior: contain;
   }
-  body.pane #out { padding-right: 8px; border-right: 1px solid var(--line); }
+  body.pane #out { padding-right: 8px; }
+  /* The grip between the list and the link: drag it, or arrow keys while it has focus; a double-click resets. */
+  #pane-grip { display: none; }
+  body.pane #pane-grip {
+    display: block; position: sticky; top: 64px; height: var(--pane-h, calc(100vh - 72px)); cursor: col-resize; touch-action: none;
+    background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; border-radius: 6px;
+  }
+  body.pane #pane-grip:hover, body.pane #pane-grip:focus-visible, body.pane #pane-grip.dragging {
+    background: linear-gradient(var(--accent), var(--accent)) center / 3px 100% no-repeat; outline: 0;
+  }
+  body.resizing { cursor: col-resize; user-select: none; }
   body.pane #out .group:first-child { margin-top: 8px; }
   /* Beside the pane a row is narrow: its buttons, link chips and pictures are the pane's to show. */
   body.pane ul.rows > li { grid-template-columns: 16px 12px minmax(0, 1fr); }
@@ -400,6 +410,7 @@
 
   @media (max-width: 48rem) {
     body.pane .panes { display: block; }
+    body.pane #pane-grip { display: none; }
     body.pane #out { position: static; max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--line); padding-right: 0; }
     body.pane #detail { position: static; max-height: none; overflow: visible; padding: 12px 0 0; }
     .viewtoggles { margin-left: 0; }
@@ -564,6 +575,7 @@
   <!-- The rows, and beside them, with Side by side on, the selected link in full. -->
   <div class="panes" id="panes">
     <div id="out"></div>
+    <div id="pane-grip" role="separator" aria-orientation="vertical" aria-label="Width of the list" tabindex="0" title="Drag to resize the list; double-click to reset"></div>
     <aside id="detail" hidden aria-label="The selected link"></aside>
   </div>
 </div>
