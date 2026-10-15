@@ -172,7 +172,9 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(/Already has its own tags/.test(await msg(p)) && (await href()) === url, "suggest: F on a link with tags of its own does nothing (" + await msg(p) + ")");
   await p.evaluate(async u => { await browser.runtime.sendMessage({ type: "set-tags", url: u, tags: [] }); }, url);
   await p.reload(); await p.waitForTimeout(600);
-  for (let i = 0; i < 40 && (await href().catch(() => "")) !== url; i++) await key(p, "s");
+  // The deck is reshuffled on reload: walk all of it, not a fixed 40 that misses the last few.
+  const deckSize = +(await p.$eval("#t-left", e => e.textContent));
+  for (let i = 0; i <= deckSize && (await href().catch(() => "")) !== url; i++) await key(p, "s");
   const before = await top(), s0 = +(await skipped());
   await key(p, "f"); await p.waitForTimeout(400);
   ok((await top()) !== before && (await tagsOf(url)).join() === "dev,ai", `suggest: F tags the card with all suggestions and deals the next (${await tagsOf(url)})`);
