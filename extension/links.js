@@ -179,7 +179,7 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
       addSource(link, source);
       return { id: t.id, key: link.key, url: t.url, title: t.title || null, container: t.container || null };
     });
-    return { id: s.id, name: s.name, created_at: s.created_at, locked: !!s.locked, starred: !!s.starred, source, format: s.format || null, tabs };
+    return { id: s.id, name: s.name, created_at: s.created_at, source, format: s.format || null, tabs };
   });
   const stashAt = new Map(stashes.map(s => [s.id, s.created_at]));
 

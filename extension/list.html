@@ -243,8 +243,6 @@
   }
 
   /* stars, locks, duplicates */
-  .star-mark { color: var(--seen); }
-  .lock-mark { padding: 0 8px; border-radius: 999px; background: var(--chip); color: var(--dim); font-size: .75rem; font-weight: 400; line-height: 1.6; }
   .group > h2 .toggle[aria-pressed="true"] { color: var(--ink); background: var(--chip); }
   .group > h2 > .badge { font-weight: 400; }
   .group > h2 .gacts .more { margin-left: 0; }
@@ -325,7 +323,6 @@
   .dup-row .dup-when { font-variant-numeric: tabular-nums; }
   .dup-row .dup-where { font-weight: 600; }
   .dup-row .dup-detail { color: var(--dim); font-variant-numeric: tabular-nums; }
-  .dup-row.locked { cursor: default; opacity: .7; }
   .dup-row:has(input:checked) { background: color-mix(in srgb, var(--bad) 8%, transparent); }
   .dup-row:has(input:checked) .dup-where { color: var(--bad); text-decoration: line-through; text-decoration-thickness: from-font; }
   #trash-list .dup-row input { accent-color: var(--accent); }
@@ -493,7 +490,7 @@
   <section class="panel" id="dups-panel" hidden aria-labelledby="dups-h">
     <h2 id="dups-h" tabindex="-1">Duplicates</h2>
     <p>Links that appear more than once in the sources shown, such as in two stashes, or in a stash and the reading list.
-      Tick the copies to move to the Trash. Nothing is ticked for you, and copies in a locked stash stay where they are.</p>
+      Tick the copies to move to the Trash. Nothing is ticked for you.</p>
     <div class="dups-bulk">
       <button class="small" id="dups-newest" title="In every group, tick all but the newest copy">Keep the newest of each</button>
       <button class="small" id="dups-oldest" title="In every group, tick all but the oldest copy">Keep the oldest of each</button>

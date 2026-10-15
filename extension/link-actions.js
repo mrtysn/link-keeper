@@ -54,14 +54,14 @@ const LinkActions = (() => {
     }).filter(Boolean) : [];
   }
 
-  const stashRecord = s => ({ id: s.id, name: s.name, created_at: s.created_at, source: s.source, format: s.format, locked: s.locked, starred: s.starred });
+  const stashRecord = s => ({ id: s.id, name: s.name, created_at: s.created_at, source: s.source, format: s.format });
   const tabRecord = c => ({ url: c.tab.url, title: c.tab.title, index: c.index, container: c.tab.container });
   const putBack = c => send({ type: "put-back", stash: stashRecord(c.stash), tabs: [tabRecord(c)] });
   const fail = (res, fallback) => ({ ok: false, say: res?.error ? res.error[0].toUpperCase() + res.error.slice(1) : fallback });
 
-  const canList = t => { const c = copyOf(t); return !!(c && isWeb(t.link.url) && !c.stash.locked); };
-  const canMove = t => { const c = copyOf(t); return !!(c && !c.stash.locked); };
-  const canRemove = t => { const c = copyOf(t); return !!((c && !c.stash.locked) || (t.link.list && !t.link.list.loose)); };
+  const canList = t => !!(copyOf(t) && isWeb(t.link.url));
+  const canMove = t => !!copyOf(t);
+  const canRemove = t => !!(copyOf(t) || (t.link.list && !t.link.list.loose));
 
   const ACTIONS = {
     async open(t) {
@@ -90,7 +90,6 @@ const LinkActions = (() => {
     async list(t) {
       const copy = copyOf(t);
       if (!copy) return { ok: false, say: t.link.list ? "Already on the reading list" : "Only a stashed link moves to the reading list" };
-      if (copy.stash.locked) return { ok: false, say: "That stash is locked" };
       if (!isWeb(t.link.url)) return { ok: false, say: "Only web pages can go to the reading list" };
       const res = await send({ type: "move-stash", id: copy.stash.id, ids: [copy.tab.id] });
       if (!res?.ok) return fail(res, "Unable to move it");
@@ -106,7 +105,6 @@ const LinkActions = (() => {
     async move(t, { to } = {}) {
       const copy = copyOf(t);
       if (!copy) return { ok: false, say: "Only a stashed link moves between stashes" };
-      if (copy.stash.locked) return { ok: false, say: "That stash is locked" };
       if (!to || to === copy.stash.id) return { ok: false, say: "" };
       const res = await send({ type: "move-stashed", ids: [copy.tab.id], to });
       if (!res?.ok) return fail(res, "Unable to move it");
@@ -140,7 +138,6 @@ const LinkActions = (() => {
     async remove(t, { fromList = false } = {}) {
       const copy = fromList ? null : copyOf(t);
       if (copy) {
-        if (copy.stash.locked) return { ok: false, say: "That stash is locked" };
         const res = await send({ type: "delete-stash", id: copy.stash.id, ids: [copy.tab.id] });
         if (!res?.ok) return fail(res, "Unable to remove it");
         return { ok: true, say: `Removed from ${stashName(copy.stash)}; in the Trash for 30 days`, undo: { label: "Remove", run: async () => {
@@ -200,7 +197,6 @@ const LinkActions = (() => {
   function moveMenu(t, anchor) {
     const copy = copyOf(t);
     if (!copy) return page.say("Only a stashed link moves between stashes");
-    if (copy.stash.locked) return page.say("That stash is locked");
     const input = el("input", { type: "text", placeholder: "move to stash…" });
     input.setAttribute("aria-label", "Stash to move it to");
     const list = el("div", { className: "stashpick" });
@@ -276,8 +272,7 @@ const LinkActions = (() => {
     const removals = [];
     for (const c of copiesOf(t.link)) {
       if (othersOnly && shown && c.tab.id === shown.tab.id) continue;
-      removals.push({ text: `Remove from ${stashName(c.stash)}`, className: "danger", disabled: c.stash.locked,
-        title: c.stash.locked ? "The stash is locked" : "", run: () => run("remove", { link: t.link, stash: c.stash, tab: c.tab }) });
+      removals.push({ text: `Remove from ${stashName(c.stash)}`, className: "danger", run: () => run("remove", { link: t.link, stash: c.stash, tab: c.tab }) });
     }
     if (t.link.list && !t.link.list.loose && !(othersOnly && !shown)) {
       removals.push({ text: "Remove from the reading list", className: "danger", run: () => run("remove", t, { fromList: true }) });

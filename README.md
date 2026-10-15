@@ -425,19 +425,17 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
   URL one click from the clipboard, as OneTab and Sidebery do.
 - **Move to list** hands a group's web pages, or one, to the reading list with its title and the
   stash date, and takes them out of the stash; local files and browser pages stay. **Delete…** asks first.
-- **Star** keeps a stash at the top. **Lock** makes it unable to lose a tab: no delete, no remove,
-  no move to the list or dragging out, and opening always keeps it.
+- There is no Lock or Star (both went in 5.58): every removal waits 30 days in the Trash, and stashes sort newest first.
 - Drag a row to reorder it or drop it into another stash (ahead of or after the row it lands on, or
   last on a stash's heading); the row's **⋯** menu moves it up, down or to another stash. A stash emptied
   this way goes.
 - **Export → Stashes** downloads every stash as JSON. **Import** reads it back, and also OneTab's
   *Export URLs* text, a TidyTab export, CSV with a `url` column (optionally `title`, `group`,
   `date`), a JSON list of URLs, or any text with links in it — pasted or from a file — each group a
-  stash under **Imports**, its heading marked *Imported · OneTab* and so on. Capture JSONL goes to the
+  stash under **Imports**. Capture JSONL goes to the
   reading list instead. It says which format it took the input for before anything is written.
-- A stash's **⋯** menu holds Rename, Delete…, and **Mark as imported** / **Mark as stashed from open
-  tabs**, which moves it between the two sources. Stashes imported before 5.14 were not marked;
-  the one known import of that time is marked by a data patch (below), any other by hand.
+- A stash's **⋯** menu holds Open all, Move to list, Rename, Tag all tabs… and Delete…. Stashes imported
+  before 5.14 were not marked; the one known import of that time is marked by a data patch (below).
 
 **The detail pane** is always on: the rows sit in a column on the left and the selected one shows in
 full beside it — Explore, before 5.43, was this as a page of its own, and its old address now opens Links. Click any row or walk with `W` `S`, the pane following; `A` `D`
@@ -445,7 +443,7 @@ jump a section, and Space / ⇧Space scroll a long pane. It shows the link's cap
 the reading list or in other stashes, and how many links share its site, with the usual actions.
 Two more toggles in the bar, each remembered: **Compact** shows a row as its icon and title only (on
 by default with the pane, and then hovering a title previews the link). A stash heading is its name and count;
-its actions (Open all, Move to list, Star, Lock, Rename, Tag all tabs…, Delete…) are under its **⋯**. `?stash=<id>` opens one stash alone, with an **Only … ×**
+its actions (Open all, Move to list, Rename, Tag all tabs…, Delete…) are under its **⋯**. `?stash=<id>` opens one stash alone, with an **Only … ×**
 banner to show everything again; a stash's hover preview links there.
 
 **Select** puts a checkbox on every row (shift-click ticks the run since the last tick). A bar at the foot
@@ -497,7 +495,7 @@ a 22rem popup.
 so Gmail's messages, which differ only by it, are not duplicates of one another), lists each such link
 with a checkbox per copy:
 when, which stash or the reading list, newest first; a card with more than five copies shows
-three and "+N more". Nothing starts ticked, and a locked stash's copy cannot be. A card's **Keep newest**
+three and "+N more". Nothing starts ticked. A card's **Keep newest**
 and **Keep oldest** tick every other copy, **Tick all** every one; the same two for every card sit above
 the list. **Move N copies to Trash** needs no confirm, since the Trash undoes it, except when some link would
 be left with no copy outside the Trash; the footer counts what is ticked and says so.

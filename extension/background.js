@@ -596,11 +596,11 @@ async function queueActiveTab() {
  * uninstall) loses containers, never a tab:
  *
  *   stashRoot     — the root folder's id
- *   stashMeta     — { stashes: { [folderId]: { created_at, locked?, starred? } },
+ *   stashMeta     — { stashes: { [folderId]: { created_at, source?, format? } },
  *                     tabs:    { [bookmarkId]: { container? } } }
  *   stashSettings — { afterStash: "show" | "stay", exclude: [host] }  (an afterRestore stored before is ignored)
  *
- * A locked stash cannot lose tabs: no delete, no remove, no move out. Opening never takes anything out.
+ * Opening never takes anything out. Lock and Star went in 5.58; flags stored before then are unread.
  * (Keep and Drop verdicts and opened marks are gone; ones stored before then stay in their records, unread.)
  *
  * Only the tab's URL, title and container are recorded. Nothing is injected into the tabs being
@@ -665,7 +665,7 @@ const editMeta = fn => metaQueue(async () => {
 
 const getStashSettings = async () => ({ ...STASH_SETTINGS, ...await read("stashSettings", {}) });
 
-/* Newest first, starred ones on top: { id, name, created_at, locked, starred, source, format,
+/* Newest first: { id, name, created_at, source, format,
  * tabs: [{ id, url, title?, container? }] }. Bookmarks moved or
  * edited in Firefox's own library show up here as they are. */
 async function getSessions() {
@@ -678,8 +678,6 @@ async function getSessions() {
       id: folder.id,
       name: folder.title,
       created_at: m.created_at || new Date(folder.dateAdded).toISOString(),
-      locked: !!m.locked,
-      starred: !!m.starred,
       // "import" when an import wrote it, "tabs" when it was stashed from open tabs.
       source: m.source === "import" ? "import" : "tabs",
       ...(m.format && { format: m.format }),
@@ -691,7 +689,7 @@ async function getSessions() {
       })),
     };
   });
-  return [...sessions.filter(s => s.starred), ...sessions.filter(s => !s.starred)];
+  return sessions;
 }
 
 async function findStash(id) {
@@ -1280,8 +1278,8 @@ async function restoreItems(wanted) {
 }
 
 /* Undo of taking tabs out: each goes back into its stash at the place it had, with its marks. A
- * stash that went with its last tab is written again, with its name, date and flags, at the top.
- * stash: { id, name, created_at, source?, format?, locked?, starred? }; tabs: [{ url, title?, index,
+ * stash that went with its last tab is written again, with its name and date, at the top.
+ * stash: { id, name, created_at, source?, format? }; tabs: [{ url, title?, index,
  * container? }]. Returns the stash's id and the new bookmark ids. */
 async function putBack(stash, tabs) {
   if (!stash?.id || !tabs.length) return { ok: false, error: "nothing to put back" };
@@ -1289,9 +1287,6 @@ async function putBack(stash, tabs) {
   const [node] = await browser.bookmarks.get(id).catch(() => []);
   if (!node || node.url) {
     id = (await writeStash([], { name: stash.name, created_at: stash.created_at, source: stash.source, format: stash.format })).id;
-    if (stash.locked || stash.starred) {
-      await editMeta(m => { Object.assign(m.stashes[id], stash.locked && { locked: true }, stash.starred && { starred: true }); });
-    }
   }
   const ids = [];
   for (const t of [...tabs].sort((a, b) => a.index - b.index)) {
@@ -1305,16 +1300,16 @@ async function putBack(stash, tabs) {
 }
 
 /* Take tabs out of a stash — all of them, or the bookmark ids given, which must be in it. A stash
- * left empty goes with them. Returns what was taken; a locked stash gives up nothing. */
+ * left empty goes with them. Returns what was taken. */
 async function dropFromStash(id, ids, { trash = true } = {}) {
   const session = await findStash(id);
-  if (!session || session.locked) return [];
+  if (!session) return [];
   const taken = ids ? session.tabs.filter(t => ids.includes(t.id)) : session.tabs;
   // Moves pass trash: false: the tab is not gone, it is somewhere else. The entry ids ride on
   // the returned array, for a caller whose undo must take them out of the trash again.
   const trashed = trash ? await addToTrash(taken.map(t => ({
     kind: "tab", url: t.url, title: t.title,
-    stash: { id, name: session.name, created_at: session.created_at, source: session.source, format: session.format, starred: session.starred },
+    stash: { id, name: session.name, created_at: session.created_at, source: session.source, format: session.format },
     tab: { index: session.tabs.indexOf(t), ...Object.fromEntries(TAB_META.filter(k => t[k] != null).map(k => [k, t[k]])) },
   }))) : [];
   for (const t of taken) await browser.bookmarks.remove(t.id);
@@ -1333,7 +1328,6 @@ async function dropFromStash(id, ids, { trash = true } = {}) {
 async function moveStashToList(id, ids) {
   const session = await findStash(id);
   if (!session) return { ok: false, error: "that stash is gone" };
-  if (session.locked) return { ok: false, error: "that stash is locked" };
   const asked = ids ? session.tabs.filter(t => ids.includes(t.id)) : session.tabs;
   // The reading list walks links by navigating a tab, which works for web pages only; local files
   // and browser pages stay in the stash.
@@ -1345,14 +1339,13 @@ async function moveStashToList(id, ids) {
 }
 
 /* Drag and drop: move bookmarks, in order, into stash `to` ahead of bookmark `before` (the end if
- * none). Only bookmarks in stashes move, never out of a locked one; a stash left empty goes. */
+ * none). Only bookmarks in stashes move; a stash left empty goes. */
 async function moveStashed(ids, to, before) {
   const sessions = await getSessions();
   const target = sessions.find(s => s.id === to);
   if (!target) return { ok: false, error: "that stash is gone" };
   const from = new Map(sessions.flatMap(s => s.tabs.map(t => [t.id, s])));
   const moving = ids.filter(id => from.has(id));
-  if (moving.some(id => from.get(id).locked && from.get(id).id !== to)) return { ok: false, error: "that stash is locked" };
   for (const id of moving) {
     // Firefox reads index as the final position, so it is counted without the moving bookmark.
     const rest = (await browser.bookmarks.getChildren(to)).filter(b => b.id !== id);
@@ -1901,8 +1894,6 @@ async function handleMessage(msg) {
     }
 
     case "delete-stash": {
-      const session = await findStash(msg.id);
-      if (session?.locked) return { ok: false, error: "that stash is locked; unlock it first" };
       const taken = await dropFromStash(msg.id, msg.ids, { trash: msg.trash !== false });
       return { ok: true, removed: taken.length, trashed: taken.trashed || [] };
     }
@@ -1912,17 +1903,6 @@ async function handleMessage(msg) {
 
     case "move-stashed":
       return moveStashed(msg.ids || [], msg.to, msg.before || null);
-
-    case "flag-stash": {
-      if (!await findStash(msg.id)) return { ok: false, error: "that stash is gone" };
-      await editMeta(m => {
-        const s = m.stashes[msg.id] || (m.stashes[msg.id] = {});
-        for (const k of ["locked", "starred"]) {
-          if (k in msg) msg[k] ? (s[k] = true) : delete s[k];
-        }
-      });
-      return { ok: true };
-    }
 
     case "stash-counts":
       return stashCounts(msg);
@@ -1943,16 +1923,6 @@ async function handleMessage(msg) {
 
     case "import-stashes":
       return importStashes(msg.stashes, msg.format);
-
-    case "set-stash-source": {
-      if (!await findStash(msg.id)) return { ok: false, error: "that stash is gone" };
-      await editMeta(m => {
-        const st = m.stashes[msg.id] || (m.stashes[msg.id] = {});
-        if (msg.source === "import") st.source = "import";
-        else { delete st.source; delete st.format; }
-      });
-      return { ok: true };
-    }
 
     case "links":
       return getLinks();

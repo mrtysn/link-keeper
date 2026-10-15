@@ -132,7 +132,7 @@ const Peek = (() => {
     const [sid, here] = id.split("|");
     const s = stashOf(d, sid);
     if (!s) return null;
-    const flags = [s.source === "import" ? "imported" : null, s.locked ? "locked" : null, s.starred ? "starred" : null].filter(Boolean);
+    const flags = [s.source === "import" ? "imported" : null].filter(Boolean);
     const links = s.tabs.map(t => d.byKey.get(t.key)).filter(Boolean);
     const pos = here ? s.tabs.findIndex(t => t.key === here) : -1;
     return el("div", {},

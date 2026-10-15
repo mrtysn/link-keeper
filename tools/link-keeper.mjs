@@ -53,8 +53,8 @@ Changing (needs Firefox running; each change is journaled)
                                   one copy unless told otherwise; --capture also takes the list entry and the capture;
                                   everything removed waits 30 days in the Trash (Links page);
                                   with no flag, works only when the link is held in one place
-  stash-rename ID NAME            stash-flag ID --lock|--unlock|--star|--unstar
-  stash-delete ID                 the whole stash (refused while locked)
+  stash-rename ID NAME
+  stash-delete ID                 the whole stash, into the Trash
   filter-rules --add RULE | --remove RULE
   undo [--force]                  put the last agent change back; history lists them
   call TYPE [JSON]                any message the pages send that agents may (see bridge.js)
@@ -271,7 +271,7 @@ const commands = {
     const d = await getData();
     note();
     if (opt.json) return json(d.stashes.map(({ tabs, ...s }) => ({ ...s, tabs: tabs.length })));
-    for (const s of d.stashes) out([s.id, day(s.created_at), `${s.tabs.length} tabs`, s.locked ? "locked" : "", s.starred ? "starred" : "", s.source === "import" ? `imported${s.format ? ` (${s.format})` : ""}` : "", s.name].filter(Boolean).join("  "));
+    for (const s of d.stashes) out([s.id, day(s.created_at), `${s.tabs.length} tabs`, s.source === "import" ? `imported${s.format ? ` (${s.format})` : ""}` : "", s.name].filter(Boolean).join("  "));
   },
 
   async stash({ pos, opt }) {
@@ -280,7 +280,7 @@ const commands = {
     if (!s) throw new Error(`no stash ${pos[0]}`);
     note();
     if (opt.json) return json(s);
-    out(`${s.name}  (${day(s.created_at)}, ${s.tabs.length} tabs${s.locked ? ", locked" : ""})`);
+    out(`${s.name}  (${day(s.created_at)}, ${s.tabs.length} tabs)`);
     const byKey = new Map(d.links.map(l => [l.key, l]));
     for (const t of s.tabs) out(`${t.id}  [${(byKey.get(t.key)?.tags || []).join(",")}]  ${t.title || ""}  ${t.url}`);
   },
@@ -401,7 +401,7 @@ const commands = {
       const ids = opt.everywhere ? all : all.slice(0, 1);
       if (!ids.length) throw new Error(`${l.url} is not in stash ${id}`);
       const r = await call("delete-stash", { id, ids });
-      if (!r.removed) throw new Error(`stash ${id} gave up nothing; it may be locked`);
+      if (!r.removed) throw new Error(`stash ${id} gave up nothing`);
       results.push(`${r.removed} from stash ${id}`);
     }
     if (fromList || capture) {
@@ -412,13 +412,6 @@ const commands = {
   },
 
   async "stash-rename"({ pos, opt }) { done(opt, await call("rename-stash", { id: need(pos[0], "stash ID"), name: pos.slice(1).join(" ") }), () => "renamed"); },
-  async "stash-flag"({ pos, opt }) {
-    const fields = {};
-    if (opt.lock || opt.unlock) fields.locked = !!opt.lock;
-    if (opt.star || opt.unstar) fields.starred = !!opt.star;
-    if (!Object.keys(fields).length) throw new Error("say --lock, --unlock, --star or --unstar");
-    done(opt, await call("flag-stash", { id: need(pos[0], "stash ID"), ...fields }), () => "done");
-  },
   async "stash-delete"({ pos, opt }) { done(opt, await call("delete-stash", { id: need(pos[0], "stash ID") }), r => `removed ${r.removed} tabs`); },
 
   async undo({ opt }) { done(opt, await live("undo", { force: !!opt.force }), r => `undid ${r.undone} from ${r.at}${r.summary ? ` (${r.summary})` : ""}`); },

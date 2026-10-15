@@ -69,8 +69,8 @@
     if (params.has(panel)) addEventListener("load", () => setTimeout(() => document.getElementById(panel)?.click(), 200));
   }
 
-  /* Three stashes cut from the mock rows: a named, starred one with a restored tab and a container
-   * tab; a locked one named after its time; and an older OneTab import that shares a URL with the
+  /* Three stashes cut from the mock rows: a named one with a container tab; one named after its
+   * time; and an older OneTab import that shares a URL with the
    * first, for the "also in" badge. */
   function mockSessions() {
     if (params.has("empty")) return [];
@@ -91,9 +91,9 @@
     const third = [{ ...tabs[0], id: `bm${++n}` }, ...tabs.slice(13),
       ...Array.from({ length: 5 }, (_, i) => ({ id: `bm${++n}`, url: `https://gamejams.example/jam-${i}`, title: `Jam page ${i}` }))];
     return [
-      { id: "a", name: "Research for the jam", created_at: "2026-09-28T08:40:00Z", starred: true, locked: false, source: "tabs", tabs: first },
-      { id: "b", name: whenOf("2026-09-21T19:05:00Z"), created_at: "2026-09-21T19:05:00Z", starred: false, locked: true, source: "tabs", tabs: second },
-      { id: "c", name: whenOf("2026-08-30T11:20:00Z"), created_at: "2026-08-30T11:20:00Z", starred: false, locked: false, source: "import", format: "onetab", tabs: third },
+      { id: "a", name: "Research for the jam", created_at: "2026-09-28T08:40:00Z", source: "tabs", tabs: first },
+      { id: "b", name: whenOf("2026-09-21T19:05:00Z"), created_at: "2026-09-21T19:05:00Z", source: "tabs", tabs: second },
+      { id: "c", name: whenOf("2026-08-30T11:20:00Z"), created_at: "2026-08-30T11:20:00Z", source: "import", format: "onetab", tabs: third },
     ];
   }
 
@@ -121,7 +121,7 @@
   const findStash = id => stored().sessions.find(s => s.id === id);
   function takeTabs(id, ids) {
     const s = findStash(id);
-    if (!s || s.locked) return [];
+    if (!s) return [];
     const taken = s.tabs.filter(t => ids.includes(t.id));
     s.tabs = s.tabs.filter(t => !ids.includes(t.id));
     if (!s.tabs.length) stored().sessions = stored().sessions.filter(x => x !== s);
@@ -264,7 +264,6 @@
           }
           case "delete-stash": {
             const s = findStash(msg.id);
-            if (s?.locked) return { ok: false, error: "that stash is locked; unlock it first" };
             const at = new Date().toISOString();
             const taken = takeTabs(msg.id, msg.ids);
             const trashed = msg.trash === false ? [] : taken.map(t => {
@@ -294,7 +293,6 @@
           }
           case "move-stash": {
             const s = findStash(msg.id);
-            if (s?.locked) return { ok: false, error: "that stash is locked" };
             const taken = takeTabs(msg.id, msg.ids).filter(t => /^https?:/.test(t.url));
             const have = new Set(stored().items.map(i => keyOf(i.url)));
             const fresh = taken.filter(t => !have.has(keyOf(t.url)));
@@ -307,7 +305,6 @@
             for (const id of msg.ids) {
               const from = stored().sessions.find(s => s.tabs.some(t => t.id === id));
               if (!from) continue;
-              if (from.locked && from !== to) return { ok: false, error: "that stash is locked" };
               const tab = from.tabs.find(t => t.id === id);
               from.tabs = from.tabs.filter(t => t !== tab);
               const at = msg.before ? to.tabs.findIndex(t => t.id === msg.before) : -1;

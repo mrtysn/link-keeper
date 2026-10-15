@@ -518,34 +518,11 @@ await check("move to list carries title and stash date, and empties the stash", 
   assert.ok((await stashes(bg))[0].tabs.every(t => !/^https?:/.test(t.url)), "local and browser pages stay in the stash");
 });
 
-await check("a locked stash gives up nothing: no delete, remove, move to list or drag out", async () => {
-  const { browser, store } = makeBrowser([]);
-  store.sessions = [
-    { id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/" }, { url: "https://2.example/" }] },
-    { id: "b", created_at: "2026-09-27T00:00:00Z", tabs: [{ url: "https://3.example/" }] },
-  ];
-  const bg = await load(browser);
-  const [a, b] = await stashes(bg);
-  await browser.handle({ type: "flag-stash", id: a.id, locked: true });
-  assert.equal((await browser.handle({ type: "delete-stash", id: a.id })).ok, false);
-  assert.equal((await browser.handle({ type: "delete-stash", id: a.id, ids: [a.tabs[1].id] })).ok, false);
-  assert.equal((await browser.handle({ type: "move-stash", id: a.id })).ok, false);
-  assert.equal((await browser.handle({ type: "move-stashed", ids: [a.tabs[0].id], to: b.id })).ok, false);
-  const [after] = await stashes(bg);
-  assert.equal(after.tabs.length, 2);
-  assert.equal(after.locked, true);
-  // Moving into a locked stash is fine.
-  assert.equal((await browser.handle({ type: "move-stashed", ids: [b.tabs[0].id], to: a.id })).ok, true);
-  assert.equal((await stashes(bg))[0].tabs.length, 3);
-});
-
-await check("starred stashes come first; rename to nothing brings back the date", async () => {
+await check("rename to nothing brings back the date", async () => {
   const { browser, store, bm } = makeBrowser([]);
   store.sessions = ["a", "b", "c"].map((id, i) => ({ id, created_at: `2026-09-2${8 - i}T00:00:00Z`, tabs: [{ url: `https://${id}.example/` }] }));
   const bg = await load(browser);
-  const [a, b, c] = await stashes(bg);
-  await browser.handle({ type: "flag-stash", id: c.id, starred: true });
-  assert.deepEqual((await stashes(bg)).map(s => s.id), [c.id, a.id, b.id]);
+  const [a] = await stashes(bg);
   await browser.handle({ type: "rename-stash", id: a.id, name: "  Research  " });
   assert.equal(bm.nodes.get(a.id).title, "Research", "the name is the folder's title");
   await browser.handle({ type: "rename-stash", id: a.id, name: "" });
@@ -739,15 +716,9 @@ await check("imports are marked as imports with their format; a stash's source c
   const b2 = makeBrowser(tabs);
   let [imp] = await stashes(bg);
   assert.deepEqual([imp.source, imp.format], ["import", "onetab"]);
-  assert.equal((await browser.handle({ type: "set-stash-source", id: imp.id, source: "tabs" })).ok, true);
-  [imp] = await stashes(bg);
-  assert.deepEqual([imp.source, imp.format], ["tabs", undefined]);
-  await browser.handle({ type: "set-stash-source", id: imp.id, source: "import" });
-  assert.equal((await stashes(bg))[0].source, "import");
   const bg2 = await load(b2.browser);
   await bg2.stashTabs();
   assert.equal((await stashes(bg2))[0].source, "tabs", "a stash of open tabs is from tabs");
-  assert.equal((await browser.handle({ type: "set-stash-source", id: "gone", source: "import" })).ok, false);
 });
 
 await check("tags: set by hand per URL, guesses from the site until then, one tag on a whole stash", async () => {
@@ -1001,7 +972,8 @@ await check("data patch: the 29 Sep OneTab import is marked once on launch, and 
   assert.equal(store.dataPatches["2026-09-29-mark-onetab-import"].marked, 8);
 
   // Once recorded it never runs again: a stash marked back by hand stays as you set it, across launches.
-  await browser.handle({ type: "set-stash-source", id: ids[0], source: "tabs" });
+  delete store.stashMeta.stashes[ids[0]].source;
+  delete store.stashMeta.stashes[ids[0]].format;
   const again = await load(browser);
   await again.applyDataPatches();
   assert.equal((await stashes(again)).find(x => x.id === ids[0]).source, "tabs");

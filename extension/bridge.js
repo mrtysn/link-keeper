@@ -174,7 +174,6 @@ async function restoreBackup(data, why) {
     // Oldest first, each written at the top, so the order comes back as it was.
     for (const s of [...data.sessions].reverse()) {
       const res = await writeStash(s.tabs, { name: s.name, created_at: s.created_at, source: s.source, format: s.format });
-      if (s.locked || s.starred) await editMeta(m => { Object.assign(m.stashes[res.id], s.locked && { locked: true }, s.starred && { starred: true }); });
       stashes++;
     }
   }
@@ -193,8 +192,8 @@ async function bridgeStatus() {
 const AGENT_READS = new Set(["status", "page-info", "filter-rules", "link-counts", "sessions", "links", "export",
   "export-list", "stash-settings", "get-folder"]);
 const AGENT_WRITES = new Set(["set-tags", "set-tag-suggestions", "set-agent-tags", "tag-stash", "rename-tag", "delete-tag", "create-tag", "recolor-tag",
-  "add", "remove", "restore-items", "rename-stash", "delete-stash", "move-stash", "move-stashed", "flag-stash",
-  "put-back", "set-filter-rules", "filter-out-page", "import-captures", "import-stashes", "set-stash-source",
+  "add", "remove", "restore-items", "rename-stash", "delete-stash", "move-stash", "move-stashed",
+  "put-back", "set-filter-rules", "filter-out-page", "import-captures", "import-stashes",
   "set-stash-settings", "toggle-excluded", "set-folder"]);
 // What an agent's change can touch in storage; the journal keeps the ones it did.
 const JOURNAL_KEYS = ["items", "captures", "linkTags", "tagSuggestions", "agentTags", "tagDefs", "filterRules", "filteredAuto", "stashMeta",
@@ -283,7 +282,7 @@ async function journaled(msg) {
       const s = byId.get(t.stash);
       const full = s.tabs.find(x => x.id === id);
       if (!removed.has(s.id)) removed.set(s.id, {
-        stash: { id: s.id, name: s.name, created_at: s.created_at, source: s.source, format: s.format, locked: s.locked, starred: s.starred },
+        stash: { id: s.id, name: s.name, created_at: s.created_at, source: s.source, format: s.format },
         tabs: [],
       });
       removed.get(s.id).tabs.push({ ...full, index: t.index });

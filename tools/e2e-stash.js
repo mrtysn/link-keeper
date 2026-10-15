@@ -153,7 +153,7 @@ await kase("restore opens every tab unloaded and keeps the stash marked", async 
   await browser.tabs.remove(back.map(t => t.id));
 });
 
-await kase("drag and drop reorders real bookmarks; a locked stash refuses to give any up", async () => {
+await kase("drag and drop reorders real bookmarks", async () => {
   const res = await importStashes([
     { name: "A", tabs: ["1", "2", "3"].map(n => ({ url: `https://${n}.example/` })) },
     { name: "B", tabs: [{ url: "https://9.example/" }] },
@@ -167,10 +167,7 @@ await kase("drag and drop reorders real bookmarks; a locked stash refuses to giv
   await moveStashed([a.tabs[2].id], b.id, b.tabs[0].id);
   [a, b] = await getSessions();
   eq(b.tabs.map(t => t.url[8]), ["3", "9"], "into another stash");
-  await editMeta(m => { m.stashes[a.id] = { ...m.stashes[a.id], locked: true }; });
-  eq((await dropFromStash(a.id)).length, 0, "locked: nothing dropped");
-  eq((await moveStashed([a.tabs[0].id], b.id)).ok, false, "locked: nothing dragged out");
-  eq((await getSessions())[0].tabs.length, 2, "still two");
+  eq((await getSessions())[0].tabs.length, 2, "two left in the first");
 });
 
 await kase("every folder is in Firefox's own bookmarks, where the library and Sync see it", async () => {
@@ -232,7 +229,7 @@ await kase("Links, its detail pane and Cards load in Firefox with the bar, the s
   eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "Links", "Links is marked");
   eq([...d.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["true", "true", "true"], "every source on at first");
   yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
-  yes([...d.querySelectorAll(".group > h2 .n")].some(n => n.title.startsWith("Imported")), "an import's tab count names where it came from on hover");
+  yes([...d.querySelectorAll(".group > h2 .n")].some(n => /\d+ tabs?/.test(n.textContent)), "each stash heading counts its tabs");
   eq(d.getElementById("groupby").value, "stash", "grouped by stash");
 
   // Turning Stashed tabs and Imports off leaves the reading list, on every page.
@@ -416,7 +413,7 @@ await kase("List: dragging a row onto a row of another stash moves the bookmark 
   const { tab, view, doc: d } = await openPage("list.html?group=stash", d => row(d, "row a2") && row(d, "row b1"), "the rows to drag");
   const from = row(d, "row a2"), onto = row(d, "row b1");
   yes(from && onto, "both rows listed");
-  eq(from.draggable, true, "an unlocked stash's row drags");
+  eq(from.draggable, true, "a stash's row drags");
   const dt = new view.DataTransfer();
   const drag = (type, node, y) => node.dispatchEvent(new view.DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientY: y }));
   const top = onto.getBoundingClientRect().top + 2;
@@ -478,6 +475,7 @@ await kase("Settings: renaming a tag onto another merges them on every link", as
   chip.click();
   const input = await until(() => d.querySelector("#tag-list input.rename-tag"), "the rename field to open");
   input.value = "target";
+  view.confirm = () => true;   // a merge asks first
   input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   await until(() => /Merged mergeme → target on 2 links/.test(d.getElementById("msg").textContent), "the merge to say so");
   const tags = (await browser.storage.local.get("linkTags")).linkTags;

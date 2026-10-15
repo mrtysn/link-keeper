@@ -438,8 +438,8 @@ function rowExtras(link, ctx) {
   if (ctx) {
     const { stash, index } = ctx;
     items.push(
-      { text: "Move up", disabled: stash.locked || index === 0, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index - 1]?.id) },
-      { text: "Move down", disabled: stash.locked || index === stash.tabs.length - 1, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index + 2]?.id || null) });
+      { text: "Move up", disabled: index === 0, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index - 1]?.id) },
+      { text: "Move down", disabled: index === stash.tabs.length - 1, run: () => moveTab(ctx.tab.id, stash.id, stash.tabs[index + 2]?.id || null) });
   }
   return items;
 }
@@ -559,8 +559,7 @@ function safeRow(link, ctx) {
 
 /* --- drag and drop -----------------------------------------------------------------
  * Grouped by stash, a row dropped on the top half of another goes ahead of it, on the bottom half
- * after it; dropped on a stash's heading or the empty end of its list, it goes last. Out of a
- * locked stash, nothing drags. */
+ * after it; dropped on a stash's heading or the empty end of its list, it goes last. */
 
 function moveTab(id, to, before) {
   return act({ type: "move-stashed", ids: [id], to, before });
@@ -595,17 +594,15 @@ function dropTarget(node, stash, spotOf) {
 }
 
 function dragRow(li, link, { stash, tab, index }) {
-  if (!stash.locked) {
-    li.draggable = true;
-    li.addEventListener("dragstart", e => {
-      dragging = { id: tab.id };
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/uri-list", link.url);
-      e.dataTransfer.setData("text/plain", link.url);
-      li.classList.add("dragging");
-    });
-    li.addEventListener("dragend", () => { dragging = null; li.classList.remove("dragging"); clearDropMarks(); });
-  }
+  li.draggable = true;
+  li.addEventListener("dragstart", e => {
+    dragging = { id: tab.id };
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/uri-list", link.url);
+    e.dataTransfer.setData("text/plain", link.url);
+    li.classList.add("dragging");
+  });
+  li.addEventListener("dragend", () => { dragging = null; li.classList.remove("dragging"); clearDropMarks(); });
   dropTarget(li, stash, e => {
     const r = li.getBoundingClientRect();
     return e.clientY > r.top + r.height / 2
@@ -618,8 +615,6 @@ function dragRow(li, link, { stash, tab, index }) {
 
 function stashHeading(stash, shown) {
   const h2 = el("h2");
-  if (stash.starred) h2.append(el("span", { className: "star-mark", textContent: "★", title: "Starred" }));
-  if (stash.locked) h2.append(el("span", { className: "lock-mark", textContent: "Locked" }));
   if (renaming === stash.id) {
     const input = el("input", { className: "rename", value: renamed(stash) ? stash.name : "", placeholder: whenOf(stash.created_at) });
     input.setAttribute("aria-label", "Stash name");
@@ -645,32 +640,22 @@ function stashHeading(stash, shown) {
   const n = stash.tabs.length;
   h2.append(el("span", { className: "n", textContent: shown === n ? plural(n, "tab") : `${shown} of ${n}` }));
 
-  const locked = stash.locked;
-  const imported = stash.source === "import";
   // Every action is under ⋯, so a heading is its name and count.
   h2.append(el("div", { className: "gacts" },
     ...popoverMenu("⋯", `Actions for the stash ${stashName(stash)}`, [
       { text: "Open all", title: "Reopen every tab, unloaded until you switch to it; the stash stays",
         run: () => act({ type: "restore-stash", id: stash.id }, restoredText) },
-      { text: "Move to list", disabled: locked, title: locked ? "Unlock it first" : "Add these to the reading list and take them out of the stash",
+      { text: "Move to list", title: "Add these to the reading list and take them out of the stash",
         run: () => act({ type: "move-stash", id: stash.id },
           r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}` +
             (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : "")) },
-      { text: stash.starred ? "Unstar" : "Star", title: "Starred stashes stay at the top",
-        run: () => act({ type: "flag-stash", id: stash.id, starred: !stash.starred }) },
-      { text: locked ? "Unlock" : "Lock", title: "A locked stash cannot lose a tab: no delete, remove or move out",
-        run: () => act({ type: "flag-stash", id: stash.id, locked: !locked }) },
       "-",
       { text: "Rename", run: () => { renaming = stash.id; render(); } },
       { text: "Tag all tabs…", title: "Add one tag to every tab in this stash",
         run: () => tagAdder(h2, `Tag all ${plural(n, "tab")} of ${stashName(stash)}`,
           t => act({ type: "tag-stash", id: stash.id, tags: [t] }, r => `Tagged ${plural(r.tagged, "tab")} ${t}`)) },
-      { text: imported ? "Mark as stashed from open tabs" : "Mark as imported",
-        title: "Which source this stash belongs to in the top bar",
-        run: () => act({ type: "set-stash-source", id: stash.id, source: imported ? "tabs" : "import" },
-          () => (imported ? "Now under Stashed tabs" : "Now under Imports")) },
       "-",
-      { text: "Delete…", className: "danger", disabled: locked, title: locked ? "Unlock it first" : "Remove this stash; its tabs are closed, so this is their only record",
+      { text: "Delete…", className: "danger", title: "Remove this stash; its tabs are closed, so this is their only record",
         run: () => {
           if (!confirm(`Delete this stash of ${plural(n, "tab")}? They are closed, so this removes the only record of them.`)) return;
           return act({ type: "delete-stash", id: stash.id }, () => `Deleted a stash of ${plural(n, "tab")}`);
@@ -701,7 +686,7 @@ function renderByStash(out, visible, term) {
     any = true;
     const ul = el("ul", { className: "rows stash" }, ...rows.map(r => safeRow(r.link, { stash, tab: r.tab, index: r.index })));
     dropTarget(ul, stash, e => (e.target === ul ? { before: null, mark: "drop-end" } : undefined));
-    out.append(el("section", { className: `group${stash.locked ? " locked" : ""}` }, stashHeading(stash, rows.length), ul));
+    out.append(el("section", { className: "group" }, stashHeading(stash, rows.length), ul));
   }
   // Reading-list links not already shown under a stash.
   const listOnly = stashOnly && stashOnly !== "list" ? [] : visible.filter(l => l.list && !l.copies.some(c => visibleStash(c.stash))).sort(byNewest);
@@ -1223,8 +1208,8 @@ $("trash").onclick = () => openPanel("trash-panel");
 
 /* --- duplicates -----------------------------------------------------------------------------
  * Every link held in more than one place among the sources on show — two stashes, or a stash and
- * the reading list — as a card with a checkbox per copy, newest first. Nothing starts ticked, a
- * locked stash's copy cannot be, and only what is ticked moves to the Trash. Each card can tick all
+ * the reading list — as a card with a checkbox per copy, newest first. Nothing starts ticked, and
+ * only what is ticked moves to the Trash. Each card can tick all
  * but its newest or oldest copy, and so can the panel for every card at once. */
 
 const picked = new Set();   // copy ids: "tab:<bookmark id>" or "list:<link key>"
@@ -1246,14 +1231,14 @@ function duplicateSets() {
       const at = stash.tabs.findIndex(t => t.id === c.tab);
       const label = stashName(stash);
       const kind = stash.source === "import" ? "imported" : "stashed";
-      add(stash.tabs[at].url, { id: `tab:${c.tab}`, stash, tab: c.tab, locked: stash.locked, at: Date.parse(stash.created_at) || 0,
+      add(stash.tabs[at].url, { id: `tab:${c.tab}`, stash, tab: c.tab, at: Date.parse(stash.created_at) || 0,
         title: stash.tabs[at].title || null, when: whenOf(stash.created_at), label, hint: `tab ${at + 1} of ${stash.tabs.length}`,
         detail: label === whenOf(stash.created_at) ? kind : `${kind} ${whenOf(stash.created_at)}` });
     }
     if (link.list && !link.list.loose && data.sources.has("list")) {
       const added = Date.parse(link.list.added_at);
       // A list entry with no date is the one you still act on: it counts as the newest.
-      add(link.url, { id: `list:${link.key}`, list: true, locked: false, at: Number.isNaN(added) ? Number.MAX_SAFE_INTEGER : added,
+      add(link.url, { id: `list:${link.key}`, list: true, at: Number.isNaN(added) ? Number.MAX_SAFE_INTEGER : added,
         title: link.title, when: link.list.added_at ? whenOf(link.list.added_at) : "", label: "Reading list", hint: "",
         detail: "on the list" });
     }
@@ -1288,7 +1273,7 @@ function collapseRows(card, rows, ticked) {
 }
 
 function tickCopies(copies, keep) {
-  for (const c of copies) if (!c.locked) (c === keep ? picked.delete(c.id) : picked.add(c.id));
+  for (const c of copies) (c === keep ? picked.delete(c.id) : picked.add(c.id));
 }
 function tickEvery(keepOf) {
   for (const { copies } of dupSets) tickCopies(copies, keepOf(copies));
@@ -1312,7 +1297,7 @@ function renderDuplicates() {
   sets.forEach(({ link, copies }, n) => {
     const title = labelOf(link);
     const name = title || link.url;
-    const free = copies.filter(c => !c.locked);
+    const free = copies;
     const toggle = el("button", { className: "ghost small", type: "button" });
     const sync = () => {
       for (const b of boxes) b.checked = picked.has(b.dataset.id);
@@ -1342,15 +1327,15 @@ function renderDuplicates() {
     card.setAttribute("aria-labelledby", hid);
     const boxes = [], rows = [];
     for (const c of copies) {
-      const box2 = el("input", { type: "checkbox", checked: picked.has(c.id), disabled: c.locked });
+      const box2 = el("input", { type: "checkbox", checked: picked.has(c.id) });
       box2.dataset.id = c.id;
       boxes.push(box2);
       box2.onchange = () => { box2.checked ? picked.add(c.id) : picked.delete(c.id); sync(); paintDupCount(); };
-      const row = el("label", { className: `dup-row${c.locked ? " locked" : ""}`, title: c.hint },
+      const row = el("label", { className: "dup-row", title: c.hint },
         box2,
         ...(c.when ? [el("span", { className: "dup-when", textContent: c.when })] : []),
         el("span", { className: "dup-where", textContent: c.label }),
-        el("span", { className: "dup-detail", textContent: c.locked ? `${c.detail} · locked, kept` : c.detail }));
+        el("span", { className: "dup-detail", textContent: c.detail }));
       card.append(row);
       rows.push({ el: row, id: c.id });
     }
@@ -1381,7 +1366,7 @@ $("dups-none").onclick = () => { picked.clear(); for (const sync of dupSync) syn
 
 $("dups-remove").onclick = async () => {
   const sets = duplicateSets();
-  const chosen = sets.flatMap(s => s.copies.filter(c => picked.has(c.id) && !c.locked).map(c => ({ ...c, link: s.link })));
+  const chosen = sets.flatMap(s => s.copies.filter(c => picked.has(c.id)).map(c => ({ ...c, link: s.link })));
   if (!chosen.length) return;
   // The Trash undoes a removal, so only the one that leaves a link with no live copy asks first.
   const gone = sets.filter(s => s.copies.every(c => picked.has(c.id))).length;

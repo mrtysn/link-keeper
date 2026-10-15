@@ -75,7 +75,7 @@ function copies() {
     return i === -1 ? null : {
       label: stashLabel(stash), title: `${stashName(stash)}: tab ${i + 1} of ${stash.tabs.length}`,
       menu: `${stashLabel(stash)}, tab ${i + 1}`, name: stashName(stash),
-      locked: stash.locked, target: { link, stash, tab: stash.tabs[i] },
+      target: { link, stash, tab: stash.tabs[i] },
     };
   }).filter(Boolean);
   if (link.list && !link.list.loose) out.push({ label: "Reading list", title: "On the reading list", menu: "Reading list", name: "the reading list", list: true, target: { link } });
@@ -151,11 +151,8 @@ function render() {
   $("stash-tab").hidden = !web || link?.copies.length > 0;
   const remove = $("remove");
   remove.hidden = !held.length;
-  const removable = held.filter(c => !c.locked);
-  remove.disabled = !removable.length;
   remove.textContent = held.length > 1 ? "Remove ▾" : "Remove";
-  remove.title = !removable.length ? "Its stash is locked"
-    : held.length > 1 ? "Take it out of one place; pick which" : `Take it out of ${held[0]?.name}`;
+  remove.title = held.length > 1 ? "Take it out of one place; pick which" : `Take it out of ${held[0]?.name}`;
   $("undo").hidden = !LinkActions.canUndo();
 }
 
@@ -174,8 +171,7 @@ $("remove").onclick = () => {
   for (const group of places.values()) {
     const c = group[0];
     const label = group.length > 1 ? `From ${c.label} (1 of ${group.length} copies)` : `From ${c.menu}`;
-    const b = el("button", { type: "button", className: "danger", textContent: label, disabled: !!c.locked,
-      title: c.locked ? "That stash is locked" : c.title });
+    const b = el("button", { type: "button", className: "danger", textContent: label, title: c.title });
     b.onclick = () => { menu.hidePopover(); removeCopy(c); };
     menu.append(b);
   }
