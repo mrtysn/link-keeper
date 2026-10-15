@@ -19,15 +19,21 @@
 
 const GROUPS = ["stash", "domain", "tag", "chat", "day", "month", "newest", "oldest"];
 const GROUP_KEY = "listGroup";
-// All is the pile; captured, uncaptured and local split it with nothing left over. Filtered out is
-// apart from the pile.
-const FILTERS = ["all", "captured", "uncaptured", "local", "filtered"];
+/* Three switches that combine, each cycling through three states on a click (the first is off):
+ * Captured: any web page, only captured ones, only ones not captured yet. Local & browser: included,
+ * only them, left out. Filtered out: left out of the pile (as the rules in Settings say), included,
+ * only them. */
+const BAR = { captured: ["any", "only", "out"], local: ["in", "only", "out"], filtered: ["out", "in", "only"] };
 
 let data = { links: [], stashes: [], all: { links: [], stashes: [] }, sources: new Set(), byKey: new Map() };
 let settings = { afterStash: "show", exclude: [] };
-let filter = "all";
+const bar = { captured: "any", local: "in", filtered: "out" };
+const barOn = () => Object.keys(BAR).some(k => bar[k] !== BAR[k][0]);
 const domainSel = new Set();   // empty = every domain
 const tagSel = new Set();      // empty = every tag; UNTAGGED = links with no tag set by hand
+// A chip's second click leaves its site or tag out instead: everything except it.
+const domainOut = new Set();
+const tagOut = new Set();
 const UNTAGGED = "\u0000untagged";
 // Untagged links the tag model has suggestions for: the Cards page's Suggested deck, as a tag chip.
 const SUGGESTED = "\u0000suggested";
@@ -178,11 +184,15 @@ const siteOf = url => ({ web: () => hostOf(url), file: () => "Local files", othe
 
 function matches(link, term) {
   if (stashOnly === "list" ? !link.list : stashOnly && !link.copies.some(c => c.stash === stashOnly)) return false;
-  if (filter === "captured" && !(isWeb(link.url) && link.cap)) return false;
-  if (filter === "uncaptured" && !(isWeb(link.url) && !link.cap)) return false;
-  if (filter === "local" && isWeb(link.url)) return false;
+  if (bar.captured === "only" && !(isWeb(link.url) && link.cap)) return false;
+  if (bar.captured === "out" && !(isWeb(link.url) && !link.cap)) return false;
+  if (bar.local === "only" && isWeb(link.url)) return false;
+  if (bar.local === "out" && !isWeb(link.url)) return false;
   if (domainSel.size && !domainSel.has(siteOf(link.url))) return false;
-  if (tagSel.size && ![...tagSel].some(t => (t === UNTAGGED ? !link.tags.length : t === SUGGESTED ? hasSuggestions(link) : shownTags(link).tags.includes(t)))) return false;
+  if (domainOut.has(siteOf(link.url))) return false;
+  const hasTag = t => (t === UNTAGGED ? !link.tags.length : t === SUGGESTED ? hasSuggestions(link) : shownTags(link).tags.includes(t));
+  if (tagSel.size && ![...tagSel].some(hasTag)) return false;
+  if ([...tagOut].some(hasTag)) return false;
   if (!term) return true;
   const cap = link.cap;
   const hay = [link.url, link.title, labelOf(link), cap?.text, link.list?.note, cap?.screenshot, link.date, ...shownTags(link).tags,
@@ -417,7 +427,7 @@ LinkActions.setup({
     // In card mode, accepting a card's suggested tags deals the next card, as removing does.
     const leaves = ["move", "remove", ...(cardMode ? ["accept"] : [])].includes(cmd);
     const i = cursorAt();
-    if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (leaves || (cmd === "read" && filter === "uncaptured"))) {
+    if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (leaves || (cmd === "read" && bar.captured === "out"))) {
       const next = cardMode ? cardAfter(rowsOnPage[i]) : rowsOnPage[i + 1] || rowsOnPage[i - 1];
       if (next) cursorId = next.id;
       if (cardMode && cmd === "remove") cardTally.removed++;
@@ -701,7 +711,7 @@ function section(title, count, rows, extraClass = "", sub = "") {
 }
 
 function renderByStash(out, visible, term) {
-  const filtering = !!(term || filter !== "all" || domainSel.size || tagSel.size);
+  const filtering = !!(term || barOn() || domainSel.size || tagSel.size || domainOut.size || tagOut.size);
   const show = new Set(visible.map(l => l.key));
   let any = false;
   for (const stash of data.stashes) {
@@ -779,6 +789,18 @@ function bucketsOf(visible) {
  * toolbar. */
 /* A row of chips under a toggle that shows it whole or as one line. Selected chips come first, so
  * they stay in sight on the collapsed line; Clear sits beside the toggle for the same reason. */
+/* A Sites or Tags chip cycles: off → only it → everything except it → off. */
+function cycleChip(id, only, except) {
+  if (only.has(id)) { only.delete(id); except.add(id); }
+  else if (except.has(id)) except.delete(id);
+  else only.add(id);
+}
+function markChip(b, id, only, except) {
+  b.setAttribute("aria-pressed", String(only.has(id)));
+  b.classList.toggle("excluded", except.has(id));
+  b.title = only.has(id) ? "Showing only these; click to show everything except them" : except.has(id) ? "Left out; click to clear" : "Click to show only these";
+}
+
 function chipRow(box, label, expanded, flip, chips, selected, clear) {
   const toggle = el("button", { className: "rowtoggle", textContent: `${label} ${expanded ? "▴" : "▾"}`,
     title: expanded ? "Show one line" : "Show them all" });
@@ -802,18 +824,19 @@ function renderDomainChips() {
     const h = siteOf(l.url);
     counts.set(h, (counts.get(h) || 0) + 1);
   }
-  const hosts = [...counts.entries()].sort((a, b) => (domainSel.has(b[0]) - domainSel.has(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
+  const rank = h => (domainSel.has(h) ? 2 : domainOut.has(h) ? 1 : 0);
+  const hosts = [...counts.entries()].sort((a, b) => (rank(b[0]) - rank(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
   const chip = (host, n) => {
     const icon = host === "Local files" ? srcIcon("file:///") : host === "Browser pages" ? srcIcon("about:blank") : srcIcon(`https://${host}/`);
-    const b = el("button", { className: "chip" }, icon, host, el("span", { className: "n", textContent: n }));
-    b.setAttribute("aria-pressed", String(domainSel.has(host)));
+    const b = el("button", { className: "chip" }, icon, el("span", { className: "lbl", textContent: host }), el("span", { className: "n", textContent: n }));
+    markChip(b, host, domainSel, domainOut);
     Peek.mark(b, "site", host);
-    b.onclick = () => { domainSel.has(host) ? domainSel.delete(host) : domainSel.add(host); render(); };
+    b.onclick = () => { cycleChip(host, domainSel, domainOut); render(); };
     return b;
   };
   // Opening or closing a row redraws that row only: a full render rebuilds every link row.
   chipRow(box, "Sites", domainsExpanded, () => { domainsExpanded = !domainsExpanded; renderDomainChips(); },
-    hosts.map(([host, n]) => chip(host, n)), domainSel, () => { domainSel.clear(); render(); });
+    hosts.map(([host, n]) => chip(host, n)), new Set([...domainSel, ...domainOut]), () => { domainSel.clear(); domainOut.clear(); render(); });
 }
 
 /* Tag toggles, as the domain ones: nothing selected means no narrowing, several mean any of them.
@@ -829,9 +852,9 @@ function renderTagChips() {
   }
   if (!counts.size && !untagged) return;
   const chip = (id, label, n, node) => {
-    const b = el("button", { className: "chip tagchip" }, node || label, el("span", { className: "n", textContent: n }));
-    b.setAttribute("aria-pressed", String(tagSel.has(id)));
-    b.onclick = () => { tagSel.has(id) ? tagSel.delete(id) : tagSel.add(id); render(); };
+    const b = el("button", { className: "chip tagchip" }, node ? el("span", { className: "lbl" }, node) : el("span", { className: "lbl", textContent: label }), el("span", { className: "n", textContent: n }));
+    markChip(b, id, tagSel, tagOut);
+    b.onclick = () => { cycleChip(id, tagSel, tagOut); render(); };
     return b;
   };
   for (const t of tagSel) if (t !== UNTAGGED && t !== SUGGESTED && !counts.has(t)) counts.set(t, 0);   // a picked tag stays in the row
@@ -844,7 +867,7 @@ function renderTagChips() {
   for (const [t, n] of ordered) chips.push(chip(t, t, n, tagChip(t, !hand.has(t), "Suggested, not on any link as a tag yet")));
   if (tagSel.has(UNTAGGED)) chips.sort((a, b) => (b.getAttribute("aria-pressed") === "true") - (a.getAttribute("aria-pressed") === "true"));
   chips.unshift(newTagChip());
-  chipRow(box, "Tags", tagsExpanded, () => { tagsExpanded = !tagsExpanded; renderTagChips(); }, chips, tagSel, () => { tagSel.clear(); render(); });
+  chipRow(box, "Tags", tagsExpanded, () => { tagsExpanded = !tagsExpanded; renderTagChips(); }, chips, new Set([...tagSel, ...tagOut]), () => { tagSel.clear(); tagOut.clear(); render(); });
 }
 
 /* The tag bar, under the tag chips: a new tag, and with one tag picked, that tag's tools — its count
@@ -975,16 +998,39 @@ function newTagChip() {
   return b;
 }
 
-function setFilter(which) {
-  filter = which;
-  for (const f of FILTERS) $(`f-${f}`).setAttribute("aria-pressed", String(f === which));
+/* Each switch shows its state: its name and count, ticked when narrowing to it, struck through when
+ * leaving it out; the title says what the next click does. */
+function drawBar(counts) {
+  const look = {
+    captured: { any: ["", "Captured", counts.captured, "Show only captured pages"], only: ["only", "Captured", counts.captured, "Show only pages not captured yet"],
+      out: ["only", "Not captured", counts.uncaptured, "Show every page again"] },
+    local: { in: ["", "Local & browser", counts.local, "Show only local files and browser pages"], only: ["only", "Local & browser", counts.local, "Leave local files and browser pages out"],
+      out: ["out", "Local & browser", counts.local, "Bring local files and browser pages back"] },
+    filtered: { out: ["", "Filtered out", counts.filtered, "Include the filtered-out pages too"], in: ["in", "Filtered out", counts.filtered, "Show only the filtered-out pages"],
+      only: ["only", "Filtered out", counts.filtered, "Leave the filtered-out pages out again"] },
+  };
+  for (const k of Object.keys(BAR)) {
+    const [state, label, n, next] = look[k][bar[k]];
+    const b = $(`f-${k}`);
+    b.dataset.state = state || "0";
+    b.setAttribute("aria-pressed", String(!!state));
+    b.title = next;
+    b.replaceChildren(el("span", { className: "lbl", textContent: label }), " ", el("span", { className: "n", textContent: n }));
+  }
+}
+
+function cycleBar(k) {
+  const states = BAR[k];
+  bar[k] = states[(states.indexOf(bar[k]) + 1) % states.length];
 }
 
 function clearFilters() {
   $("q").value = "";
   domainSel.clear();
   tagSel.clear();
-  setFilter("all");
+  domainOut.clear();
+  tagOut.clear();
+  for (const k of Object.keys(BAR)) bar[k] = BAR[k][0];
   render();
 }
 
@@ -1034,13 +1080,13 @@ function renderRows() {
   $("sub").textContent = total
     ? `${plural(total, "link")} · ${counts.captured} captured · ${counts.untagged} untagged${stashBit}`
     : "Nothing to show";
-  const names = { all: "All", captured: "Captured", uncaptured: "Not captured", local: "Local & browser", filtered: "Filtered out" };
-  for (const f of FILTERS) $(`f-${f}`).replaceChildren(`${names[f]} `, el("span", { className: "n", textContent: counts[f] }));
+  drawBar(counts);
   $("groupby").value = group;
 
   const out = $("out");
   out.textContent = "";
-  const visible = (filter === "filtered" ? data.filteredLinks : data.links).filter(l => matches(l, term));
+  const pool = bar.filtered === "only" ? data.filteredLinks : bar.filtered === "in" ? data.links.concat(data.filteredLinks) : data.links;
+  const visible = pool.filter(l => matches(l, term));
 
   if (!total) {
     out.append(el("div", { className: "empty" },
@@ -1367,6 +1413,7 @@ function knownBox(row) {
       const b = el("button", { className: "link", textContent: only ? "Show every site" : `Show only these ${same + 1}` });
       b.onclick = () => {
         domainSel.clear();
+        domainOut.clear();
         if (!only) domainSel.add(host);
         render();
         setCursor(cursorId);
@@ -2109,7 +2156,7 @@ $("groupby").onchange = () => {
   try { localStorage.setItem(GROUP_KEY, group); } catch (e) { /* not remembered */ }
   render();
 };
-for (const f of FILTERS) $(`f-${f}`).onclick = () => { setFilter(f); render(); };
+for (const k of Object.keys(BAR)) $(`f-${k}`).onclick = () => { cycleBar(k); render(); };
 
 const stashed = r => `Stashed ${plural(r.stashed, "tab")}${r.why ? ` · left open: ${r.why}` : ""}`;
 $("stash").onclick = () => act({ type: "stash" }, stashed);

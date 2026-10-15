@@ -78,7 +78,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.evaluate(() => document.body.classList.contains("compact")), "pane: rows are compact with the pane on");
   ok(await p.$$eval(".group > h2 .gacts", l => l.length > 0 && l.every(g => { const b = g.querySelectorAll(":scope > button"); return b.length === 1 && b[0].textContent.trim() === "⋯"; })), "pane: a stash heading holds only its ⋯");
   // The Not captured chip shows only links whose text is not saved.
-  await p.click('#f-uncaptured'); await p.waitForTimeout(200);
+  await p.click('#f-captured'); await p.click('#f-captured'); await p.waitForTimeout(200);   // any → only captured → only not captured
   ok(await p.$$eval("#out ul.rows > li", l => l.length > 0 && l.every(li => !li.querySelector(".rd.on"))), "pane: Not captured shows uncaptured links only");
   ok(!p.errs.length, "pane: no errors " + p.errs.join("; "));
   await p.close();
@@ -368,13 +368,33 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.waitForTimeout(800);   // the page reloads itself on the tag change
   ok(await rows() === n0 - 1, `filtered: the matching link leaves the pile (${n0} → ${await rows()})`);
   ok(/Filtered out\s*1/.test(await p.$eval("#f-filtered", e => e.textContent)), "filtered: the filter counts it");
-  await p.click("#f-filtered"); await p.waitForTimeout(400);
+  await p.click("#f-filtered"); await p.click("#f-filtered"); await p.waitForTimeout(400);   // out → included → only
   ok(await rows() === 1, "filtered: the filter shows only the filtered-out links");
-  await p.click("#f-all"); await p.waitForTimeout(300);
+  await p.click("#f-filtered"); await p.waitForTimeout(300);   // only → out again
   ok(await rows() === n0 - 1, "filtered: All is the pile without them");
+  // The Captured switch counts captured pages, then (twice clicked) the ones not captured.
   const n = id => p.$eval(`#f-${id} .n`, e => +e.textContent);
-  ok(await n("captured") + await n("uncaptured") + await n("local") === await n("all"),
-    `filters: Captured + Not captured + Local & browser make All (${await n("captured")} + ${await n("uncaptured")} + ${await n("local")} = ${await n("all")})`);
+  const captured = await n("captured");
+  await p.click("#f-captured"); await p.click("#f-captured"); await p.waitForTimeout(200);
+  const uncaptured = await n("captured");
+  ok(await p.$eval("#f-captured .lbl", e => e.textContent) === "Not captured", "filters: Captured's third state is Not captured");
+  await p.click("#f-captured"); await p.waitForTimeout(200);
+  const all = +(await p.$eval("#sub", e => e.textContent)).match(/^(\d+) link/)[1];
+  ok(captured + uncaptured + await n("local") === all,
+    `filters: Captured + Not captured + Local & browser make the pile (${captured} + ${uncaptured} + ${await n("local")} = ${all})`);
+  // They combine: only not captured, and local left out, is the not-captured web pages.
+  await p.click("#f-captured"); await p.click("#f-captured"); await p.click("#f-local"); await p.click("#f-local"); await p.waitForTimeout(250);
+  ok(await rows() === uncaptured && await p.$eval("#f-local", e => e.dataset.state) === "out", `filters: switches combine (${await rows()} rows)`);
+  await p.click("#f-captured"); await p.click("#f-local"); await p.waitForTimeout(250);
+  // A site chip: once only it, twice everything except it, three times off.
+  const site = p.locator("#domains .chip", { hasText: "x.com" }).first();
+  const xs = +(await site.locator(".n").textContent());
+  await site.click(); await p.waitForTimeout(250);
+  ok(await rows() === xs, `chips: one click shows only that site (${xs})`);
+  await site.click(); await p.waitForTimeout(250);
+  ok(await rows() === all - xs && await site.evaluate(e => e.classList.contains("excluded")), `chips: a second click leaves it out (${await rows()} of ${all})`);
+  await site.click(); await p.waitForTimeout(250);
+  ok(await rows() === all, "chips: a third click clears it");
   ok(!p.errs.length, "filtered: no errors " + p.errs.join("; "));
   await p.close();
 }
