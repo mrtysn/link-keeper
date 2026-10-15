@@ -150,13 +150,69 @@ await check("each message: exact time, sender, mine, and its links", async () =>
   assert.deepEqual([unloaded.url, unloaded.text], ["https://x.com/eve/status/500", undefined], "a post the page did not load keeps its address");
 });
 
-await check("Instagram threads are recognised but say they cannot be read yet", async () => {
-  const ctx = vm.createContext({ window: {}, document: { querySelector: () => null }, location: { hostname: "www.instagram.com", pathname: "/direct/t/123/" }, setTimeout, JSON, Math, Number, Array, Object, Promise, String, RegExp, Function, Date });
+/* An Instagram thread as its Relay store holds it: message records, the thread record, a connection
+ * of edges newest first, and the list component with elements and onLoadMoreAboveExternal. */
+function makeInstagram({ pages }) {
+  const records = new Map();
+  const put = (id, rec) => { records.set(id, rec); return { __ref: id }; };
+  put("XDTUserDict:me", { username: "me", full_name: "Me", interop_messaging_user_fbid: "900" });
+  put("XDTUserDict:fr", { username: "friend", full_name: "Friend Name", interop_messaging_user_fbid: "901" });
+  put("XFBIGDirectViewerThread:555", { thread_fbid: "555", thread_key: "777", thread_title: "Friend Name",
+    users: { __refs: ["XDTUserDict:fr"] }, viewer: { __ref: "XDTUserDict:me" } });
+  const msg = (i, mine, content, text = "") => {
+    const id = `SlideMessage:mid.$${i}`;
+    const sender = put(`SlideUser:${mine ? "me" : "fr"}`, { name: mine ? "Me" : "Friend Name", user_dict: { __ref: mine ? "XDTUserDict:me" : "XDTUserDict:fr" } });
+    put(id, { id: `mid.$${i}`, timestamp_ms: String(T0 + i * DAY), sender_fbid: mine ? "900" : "901", thread_fbid: "555", text_body: text,
+      sender, content: content ? put(`${id}:content`, { xma: put(`${id}:xma`, content) }) : null });
+    return id;
+  };
+  const all = pages.map(pg => pg.map(([i, mine, content, text]) => msg(i, mine, content, text)));
+  let loaded = all.length - 1;
+  let ids = all[loaded].slice();
+  const conn = () => ({ edges: { __refs: ids.slice().reverse().map((id, n) => (records.set(`edge${n}${id}`, { node: { __ref: id } }), `edge${n}${id}`)) } });
+  let calls = 0;
+  const triggers = { memoizedProps: null, dependencies: null, return: null };
+  const env = { getStore: () => ({ getSource: () => ({ get: id => (id.endsWith("_connection") ? conn() : records.get(id)) }) }) };
+  const props = () => ({ elements: ids.map(id => ({ currentMessage: { __id: id } })), hasMoreAbove: loaded > 0, isLoadingAbove: false,
+    onLoadMoreAboveExternal: () => { calls++; setTimeout(() => { if (loaded > 0) { loaded--; ids = all[loaded].concat(ids); triggers.memoizedProps = props(); } }, 30); } });
+  triggers.memoizedProps = props();
+  triggers.return = { dependencies: { firstContext: { memoizedValue: { environment: env }, next: null } }, return: null };
+  const article = { "__reactFiber$y": { return: { return: triggers } } };
+  const document = { querySelector: sel => (sel.includes("article") ? article : null), querySelectorAll: () => [] };
+  const window = {};
+  const ctx = vm.createContext({ window, document, location: { hostname: "www.instagram.com", pathname: "/direct/t/777/" }, setTimeout, Date, JSON, Math, Number, Array, Object, Promise, String, RegExp, Function, decodeURIComponent });
   vm.runInContext(SOURCE, ctx);
-  const i = ctx.window.LKChat.info();
-  assert.equal(i.platform, "instagram");
-  assert.match(i.notYet, /cannot be read yet/);
-  assert.equal((await ctx.window.LKChat.grab({ mode: "all" })).ok, false);
+  return { LK: window.LKChat, calls: () => calls };
+}
+
+const reel = code => ({ target_url: `https://www.instagram.com/reel/${code}/?id=1&is_sponsored=0`, header_title_text: "author" });
+const igPages = [
+  [[0, false, reel("AAA")], [1, true, { target_url: "https://www.instagram.com/p/BBB/?carousel_share_child_media_id=1_2", header_title_text: "poster", title_text: "poster a caption" }]],
+  [[2, false, null, "look https://l.instagram.com/?u=https%3A%2F%2Fexample.com%2Fpage&e=x"], [3, true, reel("AAA")]],
+];
+
+await check("Instagram: the thread, its other person, and the label the export import uses", () => {
+  const { LK } = makeInstagram({ pages: igPages });
+  const i = LK.info();
+  assert.deepEqual([i.platform, i.ready, i.thread.id, i.thread.handle, i.thread.name, i.thread.label], ["instagram", true, "777", "@friend", "Friend Name", "friendname_555"]);
+});
+
+await check("Instagram: every message from the store, older pages loaded, with time, sender and links", async () => {
+  const { LK, calls } = makeInstagram({ pages: igPages });
+  const res = await LK.grab({ mode: "all" });
+  assert.deepEqual(res.messages.map(m => m.key), ["mid.$0", "mid.$1", "mid.$2", "mid.$3"]);
+  assert.deepEqual([res.reachedStart, calls()], [true, 1]);
+  const by = k => res.messages.find(m => m.key === k);
+  assert.deepEqual([by("mid.$0").at, by("mid.$0").sender, by("mid.$0").mine, by("mid.$1").mine], [T0, "Friend Name", false, true]);
+  assert.deepEqual(by("mid.$0").links.map(l => [l.url, l.kind, l.author.handle]), [["https://www.instagram.com/reel/AAA/", "reel", "author"]], "a reel: its canonical address");
+  assert.deepEqual(by("mid.$1").links.map(l => [l.url, l.kind, l.text]), [["https://www.instagram.com/p/BBB/", "ig-post", "poster a caption"]], "a post: its caption");
+  assert.deepEqual(by("mid.$2").links.map(l => l.url), ["https://example.com/page"], "a typed link, unwrapped from l.instagram.com");
+});
+
+await check("Instagram: the last N take only what is loaded", async () => {
+  const { LK, calls } = makeInstagram({ pages: igPages });
+  const res = await LK.grab({ mode: "last", n: 2 });
+  assert.deepEqual([res.messages.map(m => m.key), calls()], [["mid.$2", "mid.$3"], 0]);
 });
 
 if (failed) { console.log("\nsome checks failed"); process.exit(1); }

@@ -1783,7 +1783,8 @@ async function chatInfo(tabId) {
 /* The links in one grab's messages as capture records: one per link, every distinct sender, the
  * earliest sending, and a shared post's author and text when the chat showed them. */
 function chatRecords(messages, thread, platform) {
-  const label = thread?.handle || thread?.name || `${platform} chat`;
+  // A site's own label first: Instagram's matches what its export import calls the thread.
+  const label = thread?.label || thread?.handle || thread?.name || `${platform} chat`;
   const byKey = new Map();
   for (const m of messages) {
     for (const l of m.links || []) {

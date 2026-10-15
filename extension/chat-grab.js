@@ -129,14 +129,103 @@ window.LKChat = window.LKChat || (() => {
 
   /* --- Instagram direct ------------------------------------------------------------------------- */
 
-  // Waits on the second page survey (docs/chat-pages/instagram-survey-2026-10-15.md has the first):
-  // where the thread's loaded messages sit as one list.
+  // Instagram keeps every loaded message in its Relay store (docs/chat-pages/instagram-relay-data-
+  // 2026-10-15.md). The list component above the scroller holds the handler that loads older ones.
   const INSTAGRAM = {
     label: "Instagram",
     match: loc => /^(www\.)?instagram\.com$/.test(loc.hostname) && /^\/direct\/t\/[^/]+/.test(loc.pathname),
-    thread: () => ({ id: location.pathname.split("/")[3] || null, name: null, handle: null }),
-    ready: () => false,
-    notYet: "Instagram chats cannot be read yet",
+    // The list component: handed elements and hasMoreAbove. Reached from a message on screen, or from
+    // the scroller's first child when none is drawn.
+    triggers() {
+      const isIt = f => Array.isArray(f?.memoizedProps?.elements) && "hasMoreAbove" in f.memoizedProps;
+      const art = document.querySelector('[role="article"][aria-roledescription="message"]');
+      for (let f = fiberOf(art), i = 0; f && i < 120; f = f.return, i++) if (isIt(f)) return INSTAGRAM.newer(f);
+      for (const el of document.querySelectorAll("main div")) {
+        const f = fiberOf(el.firstElementChild)?.child;
+        if (isIt(f)) return INSTAGRAM.newer(f);
+      }
+      return null;
+    },
+    newer: f => (f.alternate && list(f.alternate.memoizedProps?.elements).length > list(f.memoizedProps.elements).length ? f.alternate : f),
+    source() {
+      for (let g = INSTAGRAM.triggers(), i = 0; g && i < 200; g = g.return, i++) {
+        for (let c = g.dependencies?.firstContext; c; c = c.next) {
+          const env = tryGet(() => c.memoizedValue?.environment);
+          if (env && typeof env.getStore === "function") return env.getStore().getSource();
+        }
+      }
+      return null;
+    },
+    ref(src, v) { const id = tryGet(() => v?.__ref); return id ? src.get(id) : v; },
+    threadRecord(src, msgs) {
+      const fbid = str(tryGet(() => msgs[0]?.thread_fbid));
+      return fbid ? src.get(`XFBIGDirectViewerThread:${fbid}`) : null;
+    },
+    // Every loaded message, oldest first: the store's connection when it can be found, else the
+    // list component's elements.
+    items() {
+      const src = INSTAGRAM.source();
+      if (!src) return [];
+      const fromElements = list(INSTAGRAM.triggers()?.memoizedProps?.elements)
+        .map(e => src.get(str(tryGet(() => e.currentMessage.__id)))).filter(Boolean);
+      const fbid = str(tryGet(() => fromElements[0]?.thread_fbid));
+      const conn = fbid && src.get(`client:XFBIGDirectViewerThread:${fbid}:__IGDMessagesList_slide_messages_connection`);
+      const fromStore = list(tryGet(() => conn?.edges?.__refs)).map(id => INSTAGRAM.ref(src, tryGet(() => src.get(id)?.node))).filter(Boolean).reverse();
+      INSTAGRAM.cache = { src, thread: INSTAGRAM.threadRecord(src, fromElements.length ? fromElements : fromStore) };
+      return fromStore.length > fromElements.length ? fromStore : fromElements;
+    },
+    ready: () => !!INSTAGRAM.source(),
+    thread() {
+      INSTAGRAM.items();
+      const { src, thread } = INSTAGRAM.cache || {};
+      if (!thread) return { id: location.pathname.split("/")[3] || null, name: null, handle: null };
+      const other = INSTAGRAM.ref(src, list(tryGet(() => thread.users?.__refs)).map(id => ({ __ref: id }))[0]);
+      const name = str(tryGet(() => other?.full_name)) || str(tryGet(() => thread.thread_title));
+      const username = str(tryGet(() => other?.username));
+      // The export names a thread <name>_<thread_fbid> (instagram.py); the same label here lets
+      // Group by chat put grabbed and exported links together.
+      const fbid = str(tryGet(() => thread.thread_fbid)) || str(tryGet(() => thread.id));
+      const slug = name && fbid ? `${name.toLowerCase().replace(/[^a-z0-9]/g, "")}_${fbid}` : null;
+      return { id: str(tryGet(() => thread.thread_key)) || location.pathname.split("/")[3] || null, name, handle: username ? `@${username}` : null, label: slug };
+    },
+    hasOlder: () => !!tryGet(() => INSTAGRAM.triggers()?.memoizedProps?.hasMoreAbove),
+    loading: () => !!tryGet(() => INSTAGRAM.triggers()?.memoizedProps?.isLoadingAbove),
+    loadOlder() {
+      const fn = tryGet(() => INSTAGRAM.triggers()?.memoizedProps?.onLoadMoreAboveExternal);
+      if (typeof fn !== "function") return false;
+      fn();
+      return true;
+    },
+    canonical(url) {
+      const m = url.match(/^https:\/\/(?:www\.)?instagram\.com\/(reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
+      return m ? `https://www.instagram.com/${m[1] === "p" ? "p" : "reel"}/${m[2]}/` : url;
+    },
+    message(m) {
+      const { src, thread } = INSTAGRAM.cache || {};
+      const id = str(tryGet(() => m.id));
+      if (!id) return null;
+      const at = Number(tryGet(() => m.timestamp_ms));
+      const me = str(tryGet(() => INSTAGRAM.ref(src, thread?.viewer)?.interop_messaging_user_fbid));
+      const sender = INSTAGRAM.ref(src, tryGet(() => m.sender));
+      const links = [];
+      const content = INSTAGRAM.ref(src, tryGet(() => m.content));
+      const xma = INSTAGRAM.ref(src, tryGet(() => content?.xma));
+      const target = str(tryGet(() => xma?.target_url));
+      if (target) {
+        const url = INSTAGRAM.canonical(target);
+        const caption = str(tryGet(() => xma.title_text)) || str(tryGet(() => xma.caption_body_text));
+        links.push({ url, kind: /\/reel\//.test(url) ? "reel" : "ig-post",
+          author: { name: null, handle: str(tryGet(() => xma.header_title_text)) }, ...(caption ? { text: caption } : {}) });
+      }
+      const text = str(tryGet(() => m.text_body)) || str(tryGet(() => content?.text_body)) || "";
+      for (let url of text.match(/https?:\/\/[^\s<>"')\]]+/g) || []) {
+        const wrapped = url.match(/^https?:\/\/l\.instagram\.com\/\?u=([^&]+)/);
+        if (wrapped) url = decodeURIComponent(wrapped[1]);
+        links.push({ url: INSTAGRAM.canonical(url), kind: /instagram\.com\/(reel|p)\//.test(url) ? "ig-post" : "page" });
+      }
+      return { key: id, at: Number.isFinite(at) && at > 0 ? at : null, mine: !!me && str(tryGet(() => m.sender_fbid)) === me,
+        sender: str(tryGet(() => sender?.name)) || str(tryGet(() => INSTAGRAM.ref(src, sender?.user_dict)?.full_name)), links: dedupe(links) };
+    },
   };
 
   const READERS = { x: X, instagram: INSTAGRAM };
