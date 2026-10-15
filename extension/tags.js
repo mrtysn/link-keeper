@@ -76,11 +76,11 @@ function renderLib(by) {
   lib.textContent = "";
   lib.append(el("h2", { textContent: `${by.size} tags` }));
   const ul = el("ul");
-  for (const [t, g] of by) {
-    const more = g.suggested.length + g.site.length;
-    const b = el("button", { type: "button", className: g.own.length || more ? "" : "empty-tag", title: layerTitle(t, g) },
-      el("span", { className: "dot" }), el("span", { className: "t", textContent: t }),
-      el("span", { className: "n" }, String(g.own.length), more ? el("span", { className: "more", textContent: ` +${more}` }) : ""));
+  // Most links first, counting every layer; a tag on none of yours yet is dashed, as on Links.
+  const size = g => g.own.length + g.suggested.length + g.site.length;
+  for (const [t, g] of [...by].sort((a, b) => size(b[1]) - size(a[1]))) {
+    const b = el("button", { type: "button", className: `${size(g) ? "" : "empty-tag"}${!g.own.length && size(g) ? " only-suggested" : ""}`, title: layerTitle(t, g) },
+      el("span", { className: "dot" }), el("span", { className: "t", textContent: t }), el("span", { className: "n", textContent: size(g) }));
     b.style.setProperty("--h", tagHue(t));
     if (t === chosen) b.setAttribute("aria-current", "true");
     b.onclick = () => choose(t);
@@ -231,7 +231,7 @@ function render() {
   if (!chosen) chosen = [...by].find(([, g]) => g.own.length)?.[0] || [...by].find(([, g]) => size(g))?.[0] || [...by.keys()][0] || null;
   const used = [...by.values()].filter(g => g.own.length).length;
   const hinted = [...by.values()].filter(g => !g.own.length && size(g)).length;
-  $("sub").textContent = `${plural(by.size, "tag")}, ${used} on links of yours shown${hinted ? `, ${hinted} more only suggested (the +N)` : ""} · pick a tag to see its links`;
+  $("sub").textContent = `${plural(by.size, "tag")}, ${used} on links you tagged${hinted ? `, ${hinted} more only suggested or guessed (dashed)` : ""} · pick a tag to see its links`;
   renderLib(by);
   renderColl(by);
   if (!rowLis().some(li => li.dataset.key === cursor)) setCursor(rowLis()[0]?.dataset.key || null, false);

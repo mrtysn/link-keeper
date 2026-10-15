@@ -287,7 +287,9 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 {
   const p = await page("tags.html");
   const names = () => p.$$eval("#lib li .t", l => l.map(e => e.textContent));
-  ok((await names()).slice(0, 3).join() === "to-read,to-watch,to-try", "tags: presets listed first");
+  const ns = await p.$$eval("#lib li .n", l => l.map(e => +e.textContent));
+  const zero = (await names()).filter((n, i) => ns[i] === 0);
+  ok(ns.every((n, i) => !i || ns[i - 1] >= n) && zero.slice(0, 3).join() === "to-read,to-watch,to-try", "tags: most links first, ties in the library's order");
   const chosen = () => p.$eval("#lib [aria-current] .t", e => e.textContent);
   ok(await chosen() === "ai tools", "tags: opens on the first tag with links (" + await chosen() + ")");
   ok(await p.$$eval("#coll ul.rows > li", l => l.length) > 0, "tags: the chosen tag's links show");
@@ -698,7 +700,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const p = await page("tags.html?tag=post");
   const head = await p.$eval(".layer-head h3", e => e.textContent).catch(() => "");
   ok(/Guessed from the site · \d+|Suggested by the tag model · \d+/.test(head), `tags: the other layers show under their heading (${head})`);
-  ok(/\+\d+/.test(await p.$eval("#lib", e => e.textContent)), "tags: the list counts the suggested links as +N");
+  ok(await p.$eval('#lib li:first-child button .n', e => +e.textContent > 0), "tags: the list starts with the tags on most links, every layer counted");
   const n = +(head.match(/(\d+)$/)?.[1] || 0);
   await p.click(".layer-head button"); await p.waitForTimeout(500);
   ok(new RegExp(`Tagged ${n} links? post`).test(await msg(p)), `tags: Tag all tags them (${await msg(p)})`);

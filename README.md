@@ -161,8 +161,8 @@ dashed: `code` (GitHub, GitLab…), `video`, `post`, `discussion`, `game`, `pape
 `local file`. Guesses are never saved; the first change in the editor makes the shown tags yours,
 and removing every tag brings the guess back.
 
-The **Tags page** counts a tag's links in all three layers: yours, then (as `+N`) the untagged links the
-model suggests it for and those whose site suggests it. A tag's page lists yours first, then each other
+The **Tags page** counts a tag's links in all three layers: yours, the untagged links the model suggests
+it for, and those whose site suggests it; the tags on most links come first, and one on none of yours yet is dashed. A tag's page lists yours first, then each other
 layer under its own heading with **Tag all N**, which makes the tag yours on every one of them.
 
 **Suggestions** from a local model take the guesses' place, dimmed the same way, until the link has
