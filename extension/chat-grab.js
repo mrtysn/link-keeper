@@ -24,10 +24,18 @@ window.LKChat = window.LKChat || (() => {
     const k = Object.keys(w).find(k => k.startsWith("__reactFiber$"));
     return k ? w[k] : null;
   };
+  /* A page list (an array, or a Kotlin list with toArray) copied into an array of this script's own,
+   * item by item. A page array must never be handed a function of ours (map, filter, find…): the page
+   * would be calling into the extension, and Firefox refuses that with "Permission denied to access
+   * object". Reading its length and items is allowed. */
   const list = l => {
     if (!l) return [];
-    if (Array.isArray(l)) return l;
-    try { return typeof l.toArray === "function" ? Array.from(l.toArray()) : Array.from(l); } catch (e) { return []; }
+    try {
+      const arr = typeof l.toArray === "function" && !Array.isArray(l) ? l.toArray() : l;
+      const out = [];
+      for (let i = 0, n = Number(arr.length) || 0; i < n; i++) out.push(arr[i]);
+      return out;
+    } catch (e) { return []; }
   };
   const str = v => (typeof v === "string" ? v : v == null ? null : String(v));
   const tryGet = fn => { try { return fn(); } catch (e) { return undefined; } };

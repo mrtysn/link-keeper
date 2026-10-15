@@ -18,7 +18,13 @@ async function check(name, fn) {
   try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed = 1; console.log(`FAIL ${name}\n     ${e.message}`); }
 }
 
-const kotlin = arr => ({ toArray: () => arr.slice() });
+// Page arrays as a Firefox content script meets them: reading length and items works, but any method
+// that would call back into the extension (map, filter, find…) is refused.
+const pageArray = arr => new Proxy(arr, { get(t, k) {
+  if (["map", "filter", "find", "forEach", "some", "every", "reduce", "flatMap", "concat", "slice", "reverse"].includes(k)) throw new Error("Permission denied to access object");
+  return Reflect.get(t, k);
+} });
+const kotlin = arr => ({ toArray: () => pageArray(arr.slice()) });
 const FAST = { pauseMs: [0, 0] };
 const E_ = ms => ({ epochSeconds: Math.floor(ms / 1000), nanosecondsOfSecond: (ms % 1000) * 1e6 });
 const T0 = Date.parse("2026-09-01T10:00:00Z");
@@ -52,7 +58,7 @@ function makePage({ pages, locked = false, path: pathname = "/i/chat/111-222", r
   const state = { chatItems: { items: null, hasOlderItems: pages.length > 1, isLoading: false }, toolbarState: {
     title: "Friend", otherParticipant: { user: { screenName: "friend", name: "Friend" } } } };
   let loaded = pages.length - 1;
-  state.chatItems.items = pages[loaded].slice();
+  state.chatItems.items = pageArray(pages[loaded].slice());
   if (staleFail) Object.assign(state.chatItems, { didPullFail: true, pullFailureReason: { name: "Old" } });
   const component = { state: { state } };
   let calls = 0;
@@ -61,7 +67,7 @@ function makePage({ pages, locked = false, path: pathname = "/i/chat/111-222", r
     state.chatItems.didPullFail = false;
     if (loaded === 0) return;
     loaded--;
-    state.chatItems.items = pages[loaded].concat(state.chatItems.items);
+    state.chatItems.items = pageArray(pages[loaded].concat([...state.chatItems.items]));
     state.chatItems.hasOlderItems = loaded > 0;
     fiber.memoizedProps = { ...fiber.memoizedProps, chatItems: state.chatItems.items };
   }, 30); };
@@ -246,7 +252,7 @@ function makeInstagram({ pages }) {
   put("XDTUserDict:me", { username: "me", full_name: "Me", interop_messaging_user_fbid: "900" });
   put("XDTUserDict:fr", { username: "friend", full_name: "Friend Name", interop_messaging_user_fbid: "901" });
   put("XFBIGDirectViewerThread:555", { thread_fbid: "555", thread_key: "777", thread_title: "Friend Name",
-    users: { __refs: ["XDTUserDict:fr"] }, viewer: { __ref: "XDTUserDict:me" } });
+    users: { __refs: pageArray(["XDTUserDict:fr"]) }, viewer: { __ref: "XDTUserDict:me" } });
   const msg = (i, mine, content, text = "") => {
     const id = `SlideMessage:mid.$${i}`;
     const sender = put(`SlideUser:${mine ? "me" : "fr"}`, { name: mine ? "Me" : "Friend Name", user_dict: { __ref: mine ? "XDTUserDict:me" : "XDTUserDict:fr" } });
@@ -257,11 +263,11 @@ function makeInstagram({ pages }) {
   const all = pages.map(pg => pg.map(([i, mine, content, text]) => msg(i, mine, content, text)));
   let loaded = all.length - 1;
   let ids = all[loaded].slice();
-  const conn = () => ({ edges: { __refs: ids.slice().reverse().map((id, n) => (records.set(`edge${n}${id}`, { node: { __ref: id } }), `edge${n}${id}`)) } });
+  const conn = () => ({ edges: { __refs: pageArray(ids.slice().reverse().map((id, n) => (records.set(`edge${n}${id}`, { node: { __ref: id } }), `edge${n}${id}`)) ) } });
   let calls = 0;
   const triggers = { memoizedProps: null, dependencies: null, return: null };
   const env = { getStore: () => ({ getSource: () => ({ get: id => (id.endsWith("_connection") ? conn() : records.get(id)) }) }) };
-  const props = () => ({ elements: ids.map(id => ({ currentMessage: { __id: id } })), hasMoreAbove: loaded > 0, isLoadingAbove: false,
+  const props = () => ({ elements: pageArray(ids.map(id => ({ currentMessage: { __id: id } }))), hasMoreAbove: loaded > 0, isLoadingAbove: false,
     onLoadMoreAboveExternal: () => { calls++; setTimeout(() => { if (loaded > 0) { loaded--; ids = all[loaded].concat(ids); triggers.memoizedProps = props(); } }, 30); } });
   triggers.memoizedProps = props();
   triggers.return = { dependencies: { firstContext: { memoizedValue: { environment: env }, next: null } }, return: null };
