@@ -86,7 +86,9 @@ window.LKChat = window.LKChat || (() => {
       for (let h = X.fiber()?.memoizedState, i = 0; h && i < 80; h = h.next, i++) {
         for (const cand of [h.memoizedState, tryGet(() => h.memoizedState?.current)]) {
           if (typeof cand !== "function") continue;
-          if (!/ScrolledToTop/.test(tryGet(() => Function.prototype.toString.call(cand)) || "")) continue;
+          // Its source through the page's own toString (as the page sees it), else this script's.
+          const src = [tryGet(() => cand.toString()), tryGet(() => String(cand)), tryGet(() => Function.prototype.toString.call(cand))].find(s => s && /ScrolledToTop/.test(s));
+          if (!src) continue;
           cand();
           return true;
         }
