@@ -463,6 +463,18 @@
   }
   body.resizing { cursor: col-resize; user-select: none; }
   body.pane #out .group:first-child { margin-top: 8px; }
+  /* The heading of the section you are in stays at the top of the list; the next one's waits at the
+     bottom (list.js drawNextHead) until its own heading scrolls up into its place. */
+  body.pane #out .group > h2 { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-top: 6px; }
+  #next-head {
+    position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 8px; width: 100%; margin: 0;
+    padding: 8px 0 6px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: var(--bg);
+    font: inherit; font-size: .9375rem; font-weight: 600; color: var(--dim); text-align: left; cursor: pointer;
+  }
+  #next-head .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #next-head .n { color: var(--dim); font-size: .8125rem; font-weight: 400; }
+  #next-head[hidden] { display: none; }
+  @media (hover: hover) { #next-head:hover { color: var(--ink); } }
   /* Beside the pane a row is narrow: its buttons, link chips and pictures are the pane's to show. */
   body.pane ul.rows > li { grid-template-columns: 16px 12px minmax(0, 1fr); }
   body.pane ul.rows > li > .lk-bar, body.pane .main > .inner, body.pane .main > .shots { display: none; }

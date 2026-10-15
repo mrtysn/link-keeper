@@ -1048,10 +1048,42 @@ function renderOnly() {
   box.append(b);
 }
 
+/* In the list beside the pane, the section you are in keeps its heading at the top (CSS sticky), and
+ * the next section's heading waits at the bottom: a copy that stands in until the real one scrolls
+ * up to that spot and takes over, then rises to become the one at the top. A click on it goes there. */
+function drawNextHead() {
+  const out = $("out");
+  let next = $("next-head");
+  if (!next) {
+    next = el("button", { id: "next-head", type: "button" });
+    next.onclick = () => { const g = out.querySelector(`.group[data-next-target="1"]`); if (g) out.scrollTo({ top: g.offsetTop, behavior: "smooth" }); };
+  }
+  if (next.parentNode !== out) out.append(next);
+  const bottom = out.scrollTop + out.clientHeight;
+  let found = null;
+  for (const g of out.querySelectorAll(":scope > .group")) {
+    g.removeAttribute("data-next-target");
+    const h = g.querySelector(":scope > h2");
+    // #out is positioned (sticky), so a section's offsetTop is measured from it.
+    if (!found && h && g.offsetTop + h.offsetHeight > bottom) found = g;
+  }
+  next.hidden = !found || !pane;
+  if (!found) return;
+  found.dataset.nextTarget = "1";
+  const h = found.querySelector(":scope > h2");
+  const name = h.querySelector(".name")?.textContent || h.firstChild?.textContent || "";
+  next.replaceChildren(el("span", { className: "name", textContent: name.trim() }), el("span", { className: "n", textContent: h.querySelector(".n")?.textContent || "" }));
+  next.title = `Next: ${name.trim()}`;
+}
+let nextHeadFrame = 0;
+$("out").addEventListener("scroll", () => { cancelAnimationFrame(nextHeadFrame); nextHeadFrame = requestAnimationFrame(drawNextHead); }, { passive: true });
+
 function render() {
   renderRows();
   renderOnly();
   markHeads();
+  // The chip rows and the tag bar above the panes change height as they draw: measure again after.
+  requestAnimationFrame(() => { fitPanes(); drawNextHead(); });
   if (!pane) return;
   // The pane always shows a link: the cursor's, else the first row's.
   if (cursorAt() === -1 && rowsOnPage.length) setCursor(rowsOnPage[0].id, false);
