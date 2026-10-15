@@ -1047,6 +1047,22 @@ function scopeTabs(all, scope, at) {
   }
 }
 
+/* How many tabs each scope would stash right now, counted as stashTabsNow chooses them: pinned
+ * tabs, never-stash sites and pages that cannot be recorded stay, and one URL open twice counts once. */
+async function stashCounts({ windowId, tabId } = {}) {
+  const settings = await getStashSettings();
+  const take = t => recordable(t) && !t.pinned && !settings.exclude.includes(hostOfUrl(t.url));
+  const count = (all, scope) => {
+    const at = all.find(t => t.id === tabId) || all.find(t => t.active);
+    return new Set(scopeTabs(all, scope, at).filter(take).map(t => t.url)).size;
+  };
+  const all = await browser.tabs.query(windowId == null ? { currentWindow: true } : { windowId });
+  const windows = (await browser.windows.getAll({ populate: true, windowTypes: ["normal"] })).map(w => w.tabs);
+  const counts = Object.fromEntries(["auto", "window", "left", "right", "others"].map(s => [s, count(all, s)]));
+  counts["all-windows"] = windows.reduce((n, w) => n + count(w, "window"), 0);
+  return { ok: true, counts };
+}
+
 const SCOPE_WORDS = {
   tab: "this tab", left: "the tabs to the left", right: "the tabs to the right", others: "the other tabs",
   window: "this window", "all-windows": "any window",
@@ -1907,6 +1923,9 @@ async function handleMessage(msg) {
       });
       return { ok: true };
     }
+
+    case "stash-counts":
+      return stashCounts(msg);
 
     case "stash-settings":
       return { settings: await getStashSettings() };

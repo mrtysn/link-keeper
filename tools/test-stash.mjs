@@ -1072,6 +1072,19 @@ await check("a tag rename, merge or delete can be put back exactly", async () =>
   assert.equal(snapshot(), start, "the delete is undone");
 });
 
+await check("stash-counts says how many tabs each scope would stash, as stashing chooses them", async () => {
+  const tabs = makeTabs(10).map(t => ({ ...t, pinned: false, highlighted: false, active: false }));
+  tabs[4].active = true;
+  tabs[0].pinned = true;
+  const { browser } = makeBrowser(tabs);
+  await load(browser);
+  const { counts } = await browser.handle({ type: "stash-counts" });
+  const res = await browser.handle({ type: "stash", scope: "window" });
+  assert.equal(counts.window, res.stashed, "the count is what stashing takes");
+  assert.equal(counts.left + counts.right + 1, counts.window, "left and right of the active tab, a pinned one left out");
+  assert.equal(counts.others, counts.window - 1);
+});
+
 await check("removing keeps a copy in the trash for 30 days, and restoring puts it back where it was", async () => {
   const { browser, store } = makeBrowser([]);
   store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/", title: "One" }, { url: "https://2.example/", container: "firefox-container-5" }, { url: "https://3.example/" }] }];

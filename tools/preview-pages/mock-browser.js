@@ -349,6 +349,8 @@
             stored().items.push(...back);
             return { ok: true, restored: back.length };
           }
+          case "stash-counts":
+            return { ok: true, counts: { auto: 6, window: 6, left: 2, right: 3, others: 5, "all-windows": 9 } };
           case "stash-settings":
             return { settings: { afterStash: "show", exclude: ["mail.google.com", "calendar.google.com"] } };
           case "get-folder": return { folder: "link-keeper", fallback: "link-keeper" };

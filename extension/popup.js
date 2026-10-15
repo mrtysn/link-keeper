@@ -258,6 +258,17 @@ $("stash").onclick = () => stash("auto");
 for (const b of document.querySelectorAll("#stash-menu [data-scope]")) {
   b.onclick = () => { $("stash-menu").hidePopover(); stash(b.dataset.scope); };
 }
+/* The button and each scope say how many tabs they would stash; a scope with none is off. */
+(async () => {
+  const counts = (await send({ type: "stash-counts" }))?.counts || {};
+  $("stash").textContent = counts.auto ? `Stash ${plural(counts.auto, "tab")}` : "Stash this window";
+  $("stash").disabled = !counts.auto;
+  for (const b of document.querySelectorAll("#stash-menu [data-scope]")) {
+    const n = counts[b.dataset.scope] ?? 0;
+    b.textContent = `${b.textContent} · ${n}`;
+    b.disabled = !n;
+  }
+})();
 
 /* Menus open beside their arrow, flipped up if they would run off the popup. */
 for (const [menu, anchor] of [["stash-menu", "stash-more"], ["keep-menu", "keep-more"], ["remove-menu", "remove"]]) {

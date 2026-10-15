@@ -1720,11 +1720,30 @@ const stashed = r => `Stashed ${plural(r.stashed, "tab")}${r.why ? ` · left ope
 $("stash").onclick = () => act({ type: "stash" }, stashed);
 {
   // The popup's other scopes, here too; "this one" is this page's tab, which is never stashed.
-  const [trigger, menu] = popoverMenu("▾", "Stash only some tabs", [
+  const scopes = [
     ["window", "All tabs in this window"], ["left", "Tabs to the left"], ["right", "Tabs to the right"],
     ["others", "All except this one"], ["all-windows", "Every window, one stash each"],
-  ].map(([scope, text]) => ({ text, run: () => act({ type: "stash", scope }, stashed) })), "primary arrow");
+  ];
+  const [trigger, menu] = popoverMenu("▾", "Stash only some tabs",
+    scopes.map(([scope, text]) => ({ text, run: () => act({ type: "stash", scope }, stashed) })), "primary arrow");
+  // Each scope says how many tabs it would stash, counted when the menu opens; one with none is off.
+  menu.addEventListener("beforetoggle", async e => {
+    if (e.newState !== "open") return;
+    const { counts } = await send({ type: "stash-counts" });
+    [...menu.querySelectorAll("button")].forEach((b, i) => {
+      const n = counts?.[scopes[i][0]] ?? 0;
+      b.textContent = `${scopes[i][1]} · ${n}`;
+      b.disabled = !n;
+    });
+  });
   $("stash-split").append(trigger, menu);
+  const paintStash = async () => {
+    const n = (await send({ type: "stash-counts" }))?.counts?.auto ?? 0;
+    $("stash").textContent = n ? `Stash ${plural(n, "tab")}` : "Stash this window";
+    $("stash").disabled = !n;
+  };
+  paintStash();
+  for (const ev of ["onCreated", "onRemoved", "onUpdated", "onHighlighted"]) browser.tabs[ev]?.addListener(() => paintStash());
 }
 
 
