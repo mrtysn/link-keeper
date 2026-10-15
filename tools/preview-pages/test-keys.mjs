@@ -700,6 +700,20 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
+// Tags: a tag's suggested and guessed links show below yours, and Tag all makes them yours
+{
+  const p = await page("tags.html?tag=post");
+  const head = await p.$eval(".layer-head h3", e => e.textContent).catch(() => "");
+  ok(/Guessed from the site · \d+|Suggested by the tag model · \d+/.test(head), `tags: the other layers show under their heading (${head})`);
+  ok(/\+\d+/.test(await p.$eval("#lib", e => e.textContent)), "tags: the list counts the suggested links as +N");
+  const n = +(head.match(/(\d+)$/)?.[1] || 0);
+  await p.click(".layer-head button"); await p.waitForTimeout(500);
+  ok(new RegExp(`Tagged ${n} links? post`).test(await msg(p)), `tags: Tag all tags them (${await msg(p)})`);
+  ok(/^\d+ links?$/.test(await p.$eval(".coll-head .count", e => e.textContent)) && !/^0 /.test(await p.$eval(".coll-head .count", e => e.textContent)), "tags: they now count as yours");
+  ok(p.errs.length === 0, `tags layers: no errors ${p.errs.join()}`);
+  await p.close();
+}
+
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

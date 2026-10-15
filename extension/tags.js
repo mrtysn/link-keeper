@@ -15,12 +15,20 @@ let cursor = null;   // the key of the link the keys act on
 
 function say(text) { $("msg").textContent = text; }
 
-/* Every tag with its links on show: the library's order, then any in use it does not hold yet. */
+/* Every tag with its links on show, in three layers as the Links page's chips count them: the links
+ * you gave it, and, among links with no tags of yours, those the tag model suggests it for and those
+ * whose site suggests it. The library's order, then any in use it does not hold yet. */
+const LAYERS = { own: "yours", suggested: "suggested by the tag model", site: "guessed from the site" };
 function tagsOnShow() {
-  const by = new Map(tagPool().map(t => [t, []]));
-  for (const l of data.links) for (const t of l.tags || []) (by.get(t) || by.set(t, []).get(t)).push(l);
+  const empty = () => ({ own: [], suggested: [], site: [] });
+  const by = new Map(tagPool().map(t => [t, empty()]));
+  for (const l of data.links) {
+    const s = shownTags(l);
+    for (const t of s.tags) (by.get(t) || by.set(t, empty()).get(t))[s.from].push(l);
+  }
   return by;
 }
+const layerTitle = (t, g) => `${t}: ${g.own.length} yours · ${g.suggested.length} suggested · ${g.site.length} guessed from the site`;
 
 /* Colour swatches; null is "from its name". */
 function hueRow(current, onPick) {
@@ -68,9 +76,11 @@ function renderLib(by) {
   lib.textContent = "";
   lib.append(el("h2", { textContent: `${by.size} tags` }));
   const ul = el("ul");
-  for (const [t, links] of by) {
-    const b = el("button", { type: "button", className: links.length ? "" : "empty-tag", title: `${t}: ${plural(links.length, "link")} shown` },
-      el("span", { className: "dot" }), el("span", { className: "t", textContent: t }), el("span", { className: "n", textContent: links.length }));
+  for (const [t, g] of by) {
+    const more = g.suggested.length + g.site.length;
+    const b = el("button", { type: "button", className: g.own.length || more ? "" : "empty-tag", title: layerTitle(t, g) },
+      el("span", { className: "dot" }), el("span", { className: "t", textContent: t }),
+      el("span", { className: "n" }, String(g.own.length), more ? el("span", { className: "more", textContent: ` +${more}` }) : ""));
     b.style.setProperty("--h", tagHue(t));
     if (t === chosen) b.setAttribute("aria-current", "true");
     b.onclick = () => choose(t);
@@ -97,7 +107,9 @@ function renderColl(by) {
       el("p", { textContent: "Its links appear here. You can also make a new tag above." })));
     return;
   }
-  const links = by.get(chosen).slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const newest = list => list.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const layers = by.get(chosen);
+  const links = newest(layers.own);
   const hue = TAG_LIB.hue.has(chosen) ? TAG_LIB.hue.get(chosen) : null;
   const others = [...by.keys()].filter(t => t !== chosen);
 
@@ -163,16 +175,32 @@ function renderColl(by) {
   const chip = tagChip(chosen);
   coll.append(el("div", { className: "coll-head" },
     el("h2", {}, chip),
-    el("span", { className: "count", textContent: plural(links.length, "link") }),
+    el("span", { className: "count", textContent: plural(links.length, "link"), title: layerTitle(chosen, layers) }),
     el("div", { className: "tools" }, rename, merge, del),
     colours));
 
-  if (!links.length) {
-    coll.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: "No links yet" }),
-      el("p", { textContent: data.all.links.some(l => l.tags?.includes(chosen)) ? "Its links are in sources that are hidden." : "Press T on any link and pick this tag." })));
-    return;
+  if (links.length) coll.append(el("ul", { className: "rows" }, ...links.map(rowEl)));
+  else coll.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: "No links of yours yet" }),
+    el("p", { textContent: data.all.links.some(l => l.tags?.includes(chosen)) ? "Its links are in sources that are hidden."
+      : layers.suggested.length + layers.site.length ? "Below are the links it is suggested for; tag them all, or press T on one." : "Press T on any link and pick this tag." })));
+
+  // The other two layers: untagged links this tag is suggested for, each with a way to take it on.
+  const SHOW = 100;
+  for (const from of ["suggested", "site"]) {
+    const list = newest(layers[from]);
+    if (!list.length) continue;
+    const all = el("button", { type: "button", className: "small", textContent: `Tag all ${list.length} ${chosen}`,
+      title: `Give these links the tag ${chosen} as yours; their other suggestions no longer show once they have a tag of yours` });
+    all.onclick = async () => {
+      const res = await send({ type: "tag-links", urls: list.map(l => l.url), tags: [chosen] });
+      say(res?.ok ? `Tagged ${plural(res.tagged, "link")} ${chosen}` : res?.error || "Unable to tag them");
+      await load();
+    };
+    coll.append(el("div", { className: "layer-head" },
+      el("h3", { textContent: `${from === "suggested" ? "Suggested by the tag model" : "Guessed from the site"} · ${list.length}` }), all));
+    coll.append(el("ul", { className: "rows layer" }, ...list.slice(0, SHOW).map(rowEl)));
+    if (list.length > SHOW) coll.append(el("p", { className: "hint", textContent: `and ${list.length - SHOW} more; tag them all, or narrow the sources in the bar` }));
   }
-  coll.append(el("ul", { className: "rows" }, ...links.map(rowEl)));
 }
 
 function rowEl(link) {
@@ -196,9 +224,11 @@ function rowEl(link) {
 function render() {
   const by = tagsOnShow();
   if (chosen && !by.has(chosen)) chosen = null;
-  if (!chosen) chosen = [...by].find(([, l]) => l.length)?.[0] || [...by.keys()][0] || null;
-  const used = [...by.values()].filter(l => l.length).length;
-  $("sub").textContent = `${plural(by.size, "tag")}, ${used} used on links shown · pick a tag to see its links`;
+  const size = g => g.own.length + g.suggested.length + g.site.length;
+  if (!chosen) chosen = [...by].find(([, g]) => g.own.length)?.[0] || [...by].find(([, g]) => size(g))?.[0] || [...by.keys()][0] || null;
+  const used = [...by.values()].filter(g => g.own.length).length;
+  const hinted = [...by.values()].filter(g => !g.own.length && size(g)).length;
+  $("sub").textContent = `${plural(by.size, "tag")}, ${used} on links of yours shown${hinted ? `, ${hinted} more only suggested (the +N)` : ""} · pick a tag to see its links`;
   renderLib(by);
   renderColl(by);
   if (!rowLis().some(li => li.dataset.key === cursor)) setCursor(rowLis()[0]?.dataset.key || null, false);
