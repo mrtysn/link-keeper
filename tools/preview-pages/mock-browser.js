@@ -289,15 +289,7 @@
               s.tabs.push({ id: `bm${++nextId}`, url: e.url, title: e.title });
             }
             stored().trash = stored().trash.filter(e => !msg.ids.includes(e.id));
-            return { ok: true, restored: back.length, where: [...new Set(back.map(e => (e.kind === "item" ? "the reading list" : e.stash.name)))] };
-          }
-          case "move-stash": {
-            const s = findStash(msg.id);
-            const taken = takeTabs(msg.id, msg.ids).filter(t => /^https?:/.test(t.url));
-            const have = new Set(stored().items.map(i => keyOf(i.url)));
-            const fresh = taken.filter(t => !have.has(keyOf(t.url)));
-            stored().items.push(...fresh.map(t => ({ url: t.url, title: t.title, added_at: new Date().toISOString(), saved_at: s.created_at })));
-            return { ok: true, added: fresh.length, moved: taken.length };
+            return { ok: true, restored: back.length, where: [...new Set(back.map(e => (e.kind === "item" ? "no stash" : e.stash.name)))] };
           }
           case "move-stashed": {
             const to = findStash(msg.to);

@@ -112,7 +112,7 @@ Three keys, and you never leave the tab you are in.
 | Key | What it does |
 |---|---|
 | `Ctrl+Shift+K` | capture this page: save its text, images and links |
-| `Ctrl+Shift+U` | add the page you are on to the reading list |
+| `Ctrl+Shift+U` | add the page you are on, in no stash |
 | `Ctrl+Shift+S` | stash tabs — see [Stashing tabs](#stashing-tabs) (`Alt+Shift+S` off macOS, where Firefox's screenshot owns the other) |
 
 Every one of these is also a **popup button** and a **right-click menu** item, so the keyboard
@@ -127,7 +127,7 @@ in `about:addons` → gear → *Manage Extension Shortcuts*.
 Opening or capturing a link records nothing about the link: there is no opened, seen, kept or skipped state.
 
 The **popup** is about the page you are on. Two lines say whether you hold it already — **Held**:
-each stash as its day (or name) and tab count, and the reading list; **Captured**: the day, or not
+each stash as its day (or name) and tab count, and *Not in a stash* when it was added on its own; **Captured**: the day, or not
 yet — and, if you do, its tags with nine of the palette, your most used first, the field ready, so
 `1`–`9` or typing tags it then and there. The likely next step is the filled button: **+ List** for a
 page you do not hold, **Capture** for one held without its text. Then what to do with it: **Capture** (its ▾
@@ -141,15 +141,17 @@ bulk, exports and settings live on the Links page.
 
 ### Viewers and sources
 
-Links come from three **sources** — **Stashed tabs** (stashes made from your open tabs), **Imports**
-(stashes brought in from OneTab, TidyTab, a file or pasted text) and the **Reading list** (links you
-queued, and pages you captured) — and three **viewers** show them: **Links**, **Cards** and **Tags**.
-The bar across the top of every page links the viewers and holds a chip per source; turn any mix on,
-and the choice holds as you switch viewers and between visits. Each chip counts its links.
+Every link is one pile: a link you mean to get to, whatever context it came in. A link sits in a
+**stash** (made from your open tabs, or imported from OneTab, TidyTab, a file or pasted text), or it
+was added **on its own** — shared from the phone, pulled from a chat, added with `Ctrl+Shift+U` or
+the CLI, or a page you captured — and then it is *not in a stash*. Where it came from is shown on the
+link (its stash, its date, the chat thread it was sent in), never as a separate list. Three
+**viewers** show the pile: **Links**, **Cards** and **Tags**. (The source chips that narrowed it to
+stashed tabs, imports or a reading list went in 5.58, with Move to list and its `L` key.)
 
 A URL is one link wherever it is held (a trailing slash, `www.` and a plain `#anchor` do not make a different one; a
-`#fragment` holding a `/`, like Gmail's `#inbox/<message id>`, does). In a joint view it shows once, with badges saying where it
-is (*Reading list*, *Stashed*, *Imported ×2*). Its tags and its capture belong to the URL, so every
+`#fragment` holding a `/`, like Gmail's `#inbox/<message id>`, does). Outside the stash grouping it shows once, with
+a badge when it is in several stashes (*In 2 stashes*). Its tags and its capture belong to the URL, so every
 copy shows them; removing acts on one copy, the one in front of you. Nothing is merged or deleted underneath: a stash keeps its bookmarks and the list its
 entries.
 
@@ -298,9 +300,9 @@ number row works as reddit's keyboard navigation (RES) has it.
 | `T` | tags |
 | `F` | accept the suggested tags as the link's tags (Cards then deals the next card) |
 | `E` (`3`) | capture: load it in a background tab and save its text, images and links |
-| `Q` (`⌘⌫`) | remove this copy — from its stash, or from the reading list — then on to the next link |
+| `Q` (`⌘⌫`) | remove this copy — from its stash, or the one added on its own — then on to the next link |
 | `4` | open — a stashed tab reopens through its stash, keeping its container |
-| `L` `M` | to the reading list · move to another stash (a field filters the stashes) |
+| `M` | move to another stash (a field filters the stashes) |
 | `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
 | `/` `?` `Esc` | filter · the key guide · back out |
 
@@ -333,8 +335,7 @@ it tagged. Right-click a page → **Filter out this page** adds it.
 hover, in a card you can move into and click: a stash (its name, when it was stashed, its tabs, and
 where this link sits among them), the other stashes holding a link, a tag (its newest links), a
 link in a sidebar or on Tags (its text, picture, state, tags and where it is held), a site chip on
-List (its links and how many are captured), and a source badge (where the link sits in the reading list or a
-stash). Escape, a click elsewhere or leaving closes it. One module draws them all (`peek.js`): a page
+List (its links and how many are captured), and an *In N stashes* badge (the stashes holding it). Escape, a click elsewhere or leaving closes it. One module draws them all (`peek.js`): a page
 marks an element with `Peek.mark(node, kind, id)`, and a new kind is one `Peek.kind()` renderer.
 
 Whether a link was captured shows the same way everywhere: a **captured** badge (its date on hover)
@@ -355,7 +356,7 @@ while a field has the keyboard; `Esc` leaves it. Opening a link never changes th
 Open *Cards* and go through the links in the chosen sources as a shuffled deck, one card at a time —
 every link, one tag, the untagged ones or those not captured, as the selector says. `T` tags the
 card, `F` accepts its suggested tags and deals the next card, `E` captures it, `Q` (or a drag left) removes its copy, `S` (or a drag right or up) skips it —
-it comes back next session — and `W` steps back a card. The sidebar lists every stash on show and the reading list, the card's row marked as the
+it comes back next session — and `W` steps back a card. The sidebar lists every stash and then the links in no stash, the card's row marked as the
 deck moves; `A` `D` deal the first link of the previous or next stash, and a click deals any row.
 
 A card shows what is known. A captured page (`Ctrl+Shift+K`, or **Capture** on any page, key `3`)
@@ -374,7 +375,7 @@ this session are dimmed in the sidebar, so your place in the pile shows; the car
 
 ### Stashing tabs
 
-OneTab's move, kept apart from the reading list. **Stash** (`Ctrl+Shift+S`, the popup, the page's
+OneTab's move. **Stash** (`Ctrl+Shift+S`, the popup, the page's
 right-click menu, or right-click on the tab strip) folds tabs into a saved group and closes them:
 the selected tabs if you have selected several, otherwise the whole window. The Links page, grouped
 by stash, opens in their place.
@@ -423,8 +424,7 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
   `native/install.zsh` once to register it. Anything the helper cannot open — and every `about:`
   or other extension's page — comes back as a stand-in tab carrying the original title, with the
   URL one click from the clipboard, as OneTab and Sidebery do.
-- **Move to list** hands a group's web pages, or one, to the reading list with its title and the
-  stash date, and takes them out of the stash; local files and browser pages stay. **Delete…** asks first.
+- **Delete…** asks first, and the stash's tabs wait 30 days in the Trash.
 - There is no Lock or Star (both went in 5.58): every removal waits 30 days in the Trash, and stashes sort newest first.
 - Drag a row to reorder it or drop it into another stash (ahead of or after the row it lands on, or
   last on a stash's heading); the row's **⋯** menu moves it up, down or to another stash. A stash emptied
@@ -433,17 +433,17 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
   *Export URLs* text, a TidyTab export, CSV with a `url` column (optionally `title`, `group`,
   `date`), a JSON list of URLs, or any text with links in it — pasted or from a file — each group a
   stash under **Imports**. Capture JSONL goes to the
-  reading list instead. It says which format it took the input for before anything is written.
-- A stash's **⋯** menu holds Open all, Move to list, Rename, Tag all tabs… and Delete…. Stashes imported
+  pile on their own, in no stash, instead. It says which format it took the input for before anything is written.
+- A stash's **⋯** menu holds Open all, Rename, Tag all tabs… and Delete…. Stashes imported
   before 5.14 were not marked; the one known import of that time is marked by a data patch (below).
 
 **The detail pane** is always on: the rows sit in a column on the left and the selected one shows in
 full beside it — Explore, before 5.43, was this as a page of its own, and its old address now opens Links. Click any row or walk with `W` `S`, the pane following; `A` `D`
 jump a section, and Space / ⇧Space scroll a long pane. It shows the link's capture, whether it is on
-the reading list or in other stashes, and how many links share its site, with the usual actions.
+in other stashes, where it came from, and how many links share its site, with the usual actions.
 Two more toggles in the bar, each remembered: **Compact** shows a row as its icon and title only (on
 by default with the pane, and then hovering a title previews the link). A stash heading is its name and count;
-its actions (Open all, Move to list, Rename, Tag all tabs…, Delete…) are under its **⋯**. `?stash=<id>` opens one stash alone, with an **Only … ×**
+its actions (Open all, Rename, Tag all tabs…, Delete…) are under its **⋯**. `?stash=<id>` opens one stash alone, with an **Only … ×**
 banner to show everything again; a stash's hover preview links there.
 
 **Select** puts a checkbox on every row (shift-click ticks the run since the last tick). A bar at the foot
@@ -477,13 +477,13 @@ a 22rem popup.
   filter box, the five filters as one segmented control, the grouping and the view switches (a tick means
   on, **Keys** shows the key guide), then one line each of **Sites** and **Tags** chips whose label opens
   them whole. Selected chips come first so they stay in sight on the one line.
-- **Group by** Stash (each stash under its heading with its actions, then the reading list's links),
+- **Group by** Stash (each stash under its heading with its actions, then the links in no stash),
   Domain (local files and browser pages under their own names), Day, Month, or flat newest-
   or oldest-first. Grouped by stash, a URL in two stashes is a row in each; everywhere else it is
   one row.
 - Filter box searches URLs, titles, captured text, notes and embedded links; domain chips narrow to
   sites.
-- The reading list's current item carries a *Current* badge and a line down its left edge.
+- The current link added on its own carries a *Current* badge and a line down its left edge.
 - Rows show the captured title, the post's text and any links found inside it, so a tweet you
   already read is legible without opening it again.
 - Per row: **Tags**, **Capture** (or **Capture again**) and **Remove** (this copy), and **⋯** holds
@@ -491,17 +491,17 @@ a 22rem popup.
   **Remove from …** for each *other* place it is held.
 
 **Duplicates (N)**, shown when any address is held in more than one place among the sources on show
-(two stashes, or a stash and the reading list; addresses are compared as written, `#fragment` included,
+(two stashes, or a stash and a copy added on its own; addresses are compared as written, `#fragment` included,
 so Gmail's messages, which differ only by it, are not duplicates of one another), lists each such link
 with a checkbox per copy:
-when, which stash or the reading list, newest first; a card with more than five copies shows
+when, which stash or *Not in a stash*, newest first; a card with more than five copies shows
 three and "+N more". Nothing starts ticked. A card's **Keep newest**
 and **Keep oldest** tick every other copy, **Tick all** every one; the same two for every card sit above
 the list. **Move N copies to Trash** needs no confirm, since the Trash undoes it, except when some link would
 be left with no copy outside the Trash; the footer counts what is ticked and says so.
 
 **Trash (N)**, always beside Duplicates (N = 0 when empty), lists what was removed, one card per removal, each row saying how many days remain.
-Everything removed from a stash or the reading list — Q, a stash's Delete, Duplicates, the CLI's
+Everything removed — from a stash or a link added on its own — Q, a stash's Delete, Duplicates, the CLI's
 `remove` — waits there for 30 days (the add-on's storage, key `trash`, so backups
 carry it). **Restore** puts a tab back in its stash at its old place with its marks, writing a deleted
 stash again once, and a reading-list link back on the list; **Delete forever** and **Empty Trash** ask
@@ -515,8 +515,8 @@ reopens it through its stash, in its container.
 
 ### Filling the list
 
-- **`Ctrl+Shift+U`** or the popup's **+ List** — queue something for later while browsing.
-- **Paste URLs** into List's **Import** and choose *Links on the reading list*, one per line. Each
+- **`Ctrl+Shift+U`** or the popup's **+ Add** — add the page you are on, in no stash.
+- **Paste URLs** into List's **Import** and choose *Links on their own, in no stash*, one per line. Each
   line may carry the date the link was originally saved, tab or space separated — which is exactly
   what the scripts in `importers/` produce:
 

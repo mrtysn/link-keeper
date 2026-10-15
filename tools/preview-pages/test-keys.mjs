@@ -1,6 +1,6 @@
 /* Drive List, Cards, Explore and Tag in the preview with the keys every page shares (link-keys.js)
  * and check each action and its undo lands: walking, groups and sections, capture, remove,
- * move, to the reading list, the key list, and the tag field's Escape. Run by test-keys.zsh, which
+ * move, the key list, and the tag field's Escape. Run by test-keys.zsh, which
  * builds and serves the preview; node test-keys.mjs <base url> runs it against one already served.
  * Prints one line per check and exits non-zero if any failed. */
 const { chromium } = await import(process.env.PLAYWRIGHT || "playwright");
@@ -104,11 +104,9 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await key(p, "a"); await key(p, "a"); await key(p, "a");
   await key(p, "Meta+z");
   ok(await p.$$eval(".rows > li", l => l.length) === n, "list: undo restores row count");
-  // to the reading list from section c (unlocked, web)
-  await key(p, "d"); await key(p, "d"); await key(p, "2");
-  const t = await cur();
-  await key(p, "l"); ok(/reading list/.test(await msg(p)), `list: L on ${t} (${await msg(p)})`);
-  await key(p, "Meta+z"); ok(/Undone/.test(await msg(p)), "list: undo to-list (" + await msg(p) + ")");
+  // One pile: L moves nothing to a list any more.
+  const before = await cur();
+  await key(p, "l"); ok((await cur()) === before && !/list/.test(await msg(p)), "list: L does nothing");
   ok(!p.errs.length, "list: no errors " + p.errs.join("; "));
   await p.close();
 }
@@ -442,7 +440,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.$$eval("#tagbox .palette .tag.pick", l => l.length) === 9, "popup: the palette offers nine tags");
   ok(await p.$eval("#tagbox .palette .tag.pick", e => e.textContent) === "1ai tools", "popup: the most used first");
   ok(/^Captured/.test(await p.$eval("#captured", e => e.textContent)), "popup: whether it is captured, on its own line");
-  ok((await places()).every(t => /tabs?$|^Reading list$/.test(t)), `popup: each stash as day and tab count (${(await places()).join(", ")})`);
+  ok((await places()).every(t => /tabs?$|^Not in a stash$/.test(t)), `popup: each stash as day and tab count (${(await places()).join(", ")})`);
   const first = await p.$eval("#tagbox .palette .tag.pick", e => e.textContent.replace(/^\d/, ""));
   const had = (await p.$eval("#tagbox .chips", e => e.textContent)).includes(first);
   await key(p, "1");

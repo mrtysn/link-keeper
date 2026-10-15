@@ -277,7 +277,7 @@ LinkActions.setup({
   tagNext: () => { walk(1); onRow("tags")(); },
   async after(cmd, target, res) {
     if (res.ok === false) return;
-    const leaves = ["list", "move", "remove"].includes(cmd);
+    const leaves = ["move", "remove"].includes(cmd);
     if (leaves && target?.link.key === cursor) walk(1);
     if (res.local) render();
     else await load();
@@ -288,7 +288,7 @@ LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
   "group-prev": () => jumpTag(-1), "group-next": () => jumpTag(1),
   read: onRow("read"), open: onRow("open"),
-  tags: onRow("tags"), accept: onRow("accept"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
+  tags: onRow("tags"), accept: onRow("accept"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("new-name").focus(),
   escape: () => document.querySelector(".tagpop")?.remove(),
 }, { labels: { "group-prev": "◂ tag", "group-next": "tag ▸" } });

@@ -123,7 +123,6 @@ const Peek = (() => {
   }
   const go = (href, text) => el("a", { className: "pk-go", href, textContent: text });
   const stashOf = (d, id) => d.all.stashes.find(s => s.id === id);
-  const SOURCE = { tabs: "Stashed tabs", import: "Imported", list: "Reading list" };
   const byNewest = (a, b) => String(b.date || "").localeCompare(String(a.date || ""));
 
   /* --- the kinds --- */
@@ -172,7 +171,7 @@ const Peek = (() => {
     if (!link) return null;
     const cap = link.cap;
     const text = (cap?.text || "").replace(/\s+/g, " ").trim();
-    const where = [link.list ? "Reading list" : null,
+    const where = [link.list && !link.copies.length ? "Not in a stash" : null,
       ...link.copies.map(c => stashOf(d, c.stash)).filter(Boolean).map(stashName)].filter(Boolean);
     const state = el("div", { className: "pk-badges" }, ...[readBadge(link)].filter(Boolean),
       ...(link.tags || []).map(t => tagChip(t)));
@@ -195,29 +194,6 @@ const Peek = (() => {
     return el("div", {},
       head(host, `${plural(links.length, "link")} shown · ${captured} captured`),
       linkRows(links));
-  });
-
-  kind("source", (id, d) => {
-    const [src, key] = id.split("|");
-    const link = d.byKey.get(key);
-    if (!link) return null;
-    if (src === "list") {
-      const l = link.list;
-      if (!l) return null;
-      const rows = [["Added", l.added_at && whenOf(l.added_at)], ["Saved", l.saved_at && whenOf(l.saved_at)],
-        ["Note", l.note], ["Kept from", l.loose ? "a page you were on, not the list itself" : null]].filter(r => r[1]);
-      return el("div", {}, head(SOURCE.list, linkTitle(link)),
-        el("dl", { className: "pk-facts" }, ...rows.flatMap(([k, v]) => [el("dt", { textContent: k }), el("dd", { textContent: v })])),
-        go("list.html", "Open the List →"));
-    }
-    const held = link.copies.map(c => ({ c, s: stashOf(d, c.stash) })).filter(h => h.s?.source === src);
-    if (!held.length) return null;
-    return el("div", {}, head(SOURCE[src] || src, linkTitle(link)),
-      el("ul", { className: "pk-places" }, ...held.map(({ c, s }) => {
-        const i = s.tabs.findIndex(t => t.id === c.tab);
-        return el("li", {}, el("a", { href: `list.html?pane=1&stash=${encodeURIComponent(s.id)}`, textContent: stashName(s) }),
-          el("span", { textContent: `tab ${i + 1} of ${s.tabs.length}` }));
-      })));
   });
 
   return { mark, kind, close };

@@ -227,29 +227,18 @@ await kase("Links, its detail pane and Cards load in Firefox with the bar, the s
   const d = list.doc;
   eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["Links", "Cards", "Tags"], "viewers in the bar");
   eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "Links", "Links is marked");
-  eq([...d.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["true", "true", "true"], "every source on at first");
+  eq(d.querySelectorAll(".app-sources").length, 0, "one pile: no source chips");
   yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
   yes([...d.querySelectorAll(".group > h2 .n")].some(n => /\d+ tabs?/.test(n.textContent)), "each stash heading counts its tabs");
   eq(d.getElementById("groupby").value, "stash", "grouped by stash");
 
-  // Turning Stashed tabs and Imports off leaves the reading list, on every page.
-  d.querySelectorAll(".app-sources button")[0].click();
-  d.querySelectorAll(".app-sources button")[1].click();
-  await until(async () => JSON.stringify((await browser.storage.local.get("viewSources")).viewSources) === '["list"]' &&
-    d.querySelectorAll("ul.rows.stash > li").length === 0, "the choice to be stored and the stash rows to go");
-  eq((await browser.storage.local.get("viewSources")).viewSources, ["list"], "the choice is stored");
-  eq(d.querySelectorAll("ul.rows.stash > li").length, 0, "no stash rows with stashes off");
-  yes([...d.querySelectorAll(".group > h2")].some(h => h.textContent.startsWith("Reading list")), "the reading list shows");
+  yes([...d.querySelectorAll(".group > h2")].some(h => h.textContent.startsWith("Not in a stash")), "links in no stash follow the stashes");
 
   // Explore's old address forwards to Links with the detail pane.
   const explore = await open("stash-cards.html", (d, v) => v.location.pathname === "/list.html" && hasGroups(d) && d.querySelector("#detail .dtitle"));
   eq(explore.view.location.pathname, "/list.html", "Explore's address forwards to Links");
   yes(explore.doc.body.classList.contains("pane") && !explore.doc.getElementById("detail").hidden, "with the detail pane on");
-  eq([...explore.doc.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["false", "false", "true"], "the pane shares the choice");
-  yes([...explore.doc.querySelectorAll(".group > h2")].some(h => h.textContent.startsWith("Reading list")), "it lists the reading list");
-  await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
-  await until(() => explore.doc.querySelectorAll("ul.rows > li").length > 300, "the stashed tabs to come back on");
-  yes(explore.doc.querySelectorAll("ul.rows > li").length > 300, "and the stashed tabs once they are back on");
+  yes(explore.doc.querySelectorAll("ul.rows > li").length > 300, "every link is listed");
   yes(explore.doc.querySelector("#detail .dtitle"), "a link is shown in full");
 
   const cards = await open("cards.html", d => d.querySelector(".card.top"));
@@ -277,8 +266,8 @@ await kase("Duplicates: every copy of a link gets a checkbox, nothing is ticked,
   const card = await until(() => [...d.querySelectorAll(".dup-card")].find(c => c.textContent.includes("dup.example/x")), "a card for the duplicated link");
   yes(card, "a card for the duplicated link");
   const rows = [...card.querySelectorAll(".dup-row")];
-  eq(rows.map(r => r.querySelector(".dup-where").textContent).sort(), ["Dup one", "Dup two", "Reading list"], "one row per copy");
-  eq(rows[0].querySelector(".dup-where").textContent, "Reading list", "the newest copy comes first");
+  eq(rows.map(r => r.querySelector(".dup-where").textContent).sort(), ["Dup one", "Dup two", "Not in a stash"], "one row per copy");
+  eq(rows[0].querySelector(".dup-where").textContent, "Not in a stash", "the newest copy comes first");
   eq(rows.map(r => r.querySelector("input").checked), [false, false, false], "nothing ticked");
   yes(d.getElementById("dups-remove").disabled, "nothing to remove yet");
   rows.find(r => r.querySelector(".dup-where").textContent === "Dup two").querySelector("input").click();
@@ -366,14 +355,14 @@ await kase("the popup: this page, Stash ▾ for the window, and the viewers as l
   await browser.tabs.remove(tab.id);
 });
 
-await kase("List's Import adds pasted links to the reading list with their dates", async () => {
+await kase("List's Import adds pasted links on their own, with their dates", async () => {
   const { tab, view, doc: d } = await openPage("list.html#import", d => d.getElementById("import-text") && d.getElementById("import-go"), "the Import form");
   d.getElementById("import-text").value = "https://dated.example/a 2024-03-05\nhttps://dated.example/b";
   d.getElementById("import-text").dispatchEvent(new view.Event("input"));
   yes(!d.getElementById("import-dest").hidden, "the destination choice shows");
   d.querySelector('input[name="import-dest"][value="list"]').click();
   d.querySelector('input[name="import-dest"][value="list"]').dispatchEvent(new view.Event("change"));
-  yes(/2 web links for the reading list, 1 with a date/.test(d.getElementById("import-msg").textContent), `preview: ${d.getElementById("import-msg").textContent}`);
+  yes(/2 web links, each on its own, in no stash, 1 with a date/.test(d.getElementById("import-msg").textContent), `preview: ${d.getElementById("import-msg").textContent}`);
   d.getElementById("import-go").click();
   await until(async () => (await getItems()).length >= 2, "the pasted links to land on the list");
   const items = await getItems();

@@ -498,26 +498,6 @@ await check("a file that no longer exists comes back as a stand-in, the others t
   assert.equal(res.standins, 1);
 });
 
-await check("move to list carries title and stash date, and empties the stash", async () => {
-  const tabs = makeTabs(30);
-  const { browser, store } = makeBrowser(tabs);
-  const bg = await load(browser);
-  await bg.stashTabs();
-  const [session] = await stashes(bg);
-  const one = session.tabs.find(t => t.url.startsWith("https:"));
-  const res = await bg.moveStashToList(session.id, [one.id]);
-  assert.equal(res.moved, 1);
-  const item = store.items.find(i => i.url === one.url);
-  assert.equal(item.title, one.title);
-  assert.equal(item.saved_at, session.created_at);
-  assert.equal((await stashes(bg))[0].tabs.length, session.tabs.length - 1);
-  const rest = await bg.moveStashToList(session.id);
-  const web = session.tabs.filter(t => /^https?:/.test(t.url));
-  assert.equal(store.items.length, web.length, "only web pages go to the list");
-  assert.equal(rest.stayed, session.tabs.length - web.length);
-  assert.ok((await stashes(bg))[0].tabs.every(t => !/^https?:/.test(t.url)), "local and browser pages stay in the stash");
-});
-
 await check("rename to nothing brings back the date", async () => {
   const { browser, store, bm } = makeBrowser([]);
   store.sessions = ["a", "b", "c"].map((id, i) => ({ id, created_at: `2026-09-2${8 - i}T00:00:00Z`, tabs: [{ url: `https://${id}.example/` }] }));
@@ -1086,8 +1066,6 @@ await check("removing keeps a copy in the trash for 30 days, and restoring puts 
 
   // A move is not a removal.
   const [cur] = await stashes(bg);
-  await browser.handle({ type: "move-stash", id: cur.id, ids: [cur.tabs[2].id] });
-  assert.equal((await trash()).length, 0, "moving to the reading list leaves nothing in the trash");
   await browser.handle({ type: "delete-stash", id: cur.id, ids: [cur.tabs[0].id], trash: false });
   assert.equal((await trash()).length, 0, "trash: false skips it");
 

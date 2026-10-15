@@ -207,12 +207,10 @@ function linkChip(href, text, title, className = "") {
   return el("a", { href, target: "_blank", rel: "noopener noreferrer", textContent: text, title, className });
 }
 
-/* Where else a link is held, as badges — only worth showing when more than one source is on show. */
+/* Where else a link is held: the other stashes holding it. Where it came from is the detail pane's. */
 function whereBadges(link, ctx) {
   const out = [];
-  const mixed = data.sources.size > 1;
   if (ctx) {
-    if (link.list && mixed) out.push(Peek.mark(el("span", { className: "badge", textContent: "Reading list" }), "source", `list|${link.key}`));
     const also = link.copies.filter(c => c.stash !== ctx.stash.id).map(c => stashById(c.stash)).filter(Boolean);
     if (also.length) {
       out.push(el("span", { className: "badge dup", textContent: `Also in ${also.length === 1 ? "1 other stash" : `${also.length} other stashes`}`,
@@ -221,14 +219,10 @@ function whereBadges(link, ctx) {
     }
     return out;
   }
-  if (!mixed && link.copies.length < 2) return out;
-  if (link.list && mixed) out.push(Peek.mark(el("span", { className: "badge", textContent: "Reading list" }), "source", `list|${link.key}`));
-  for (const source of ["tabs", "import"]) {
-    const held = link.copies.map(c => stashById(c.stash)).filter(s => s?.source === source);
-    if (!held.length) continue;
-    out.push(el("span", { className: "badge", textContent: `${SOURCE_NAMES[source]}${held.length > 1 ? ` ×${held.length}` : ""}`,
-      title: held.map(stashName).join("\n") }));
-    Peek.mark(out.at(-1), "source", `${source}|${link.key}`);
+  const held = link.copies.map(c => stashById(c.stash)).filter(Boolean);
+  if (held.length > 1) {
+    out.push(el("span", { className: "badge dup", textContent: `In ${held.length} stashes`, title: held.map(stashName).join("\n") }));
+    Peek.mark(out.at(-1), "held", link.key);
   }
   return out;
 }
@@ -394,7 +388,7 @@ LinkActions.setup({
   tagNext: () => { walk(1); onRow("tags")(); },
   async after(cmd, target, res) {
     if (res.ok === false) return;
-    const leaves = ["list", "move", "remove"].includes(cmd);
+    const leaves = ["move", "remove"].includes(cmd);
     const i = cursorAt();
     if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (leaves || (cmd === "read" && filter === "uncaptured"))) {
       const next = rowsOnPage[i + 1] || rowsOnPage[i - 1];
@@ -410,7 +404,7 @@ LinkKeys.listen({
   prev: () => walk(-1), next: () => walk(1),
   "group-prev": () => jumpSection(-1), "group-next": () => jumpSection(1),
   read: onRow("read"), open: onRow("open"),
-  tags: onRow("tags"), accept: onRow("accept"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
+  tags: onRow("tags"), accept: onRow("accept"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
   preview: () => { setPreview(previewShowing(detailLink()) ? "off" : "this"); },
   escape: () => { document.querySelector(".tagpop")?.remove(); },
@@ -428,7 +422,7 @@ addEventListener("keydown", e => {
   $("detail").scrollBy({ top: (e.shiftKey ? -1 : 1) * $("detail").clientHeight * 0.8, behavior: "smooth" });
 });
 
-/* What only this page adds to a row's ⋯ menu: opening a reading-list link in this tab, and moving a
+/* What only this page adds to a row's ⋯ menu: opening a link that is in no stash in this tab, and moving a
  * stashed one up or down its stash. Everything else is the shared bar's. */
 function rowExtras(link, ctx) {
   const items = [];
@@ -481,7 +475,7 @@ function rowEl(link, ctx) {
   }
   if (!ctx && link.date) {
     const t = el("time", { dateTime: link.date, textContent: link.date.slice(0, 10) });
-    t.title = link.list?.saved_at ? "Saved on this date" : link.list ? "Added to the list on this date; the original date is unknown" : "Stashed on this date";
+    t.title = link.list?.saved_at ? "Saved on this date" : link.list ? "Added on this date; the original date is unknown" : "Stashed on this date";
     meta.append(t);
   }
   if (cap?.kind && cap.kind !== "page") meta.append(el("span", { textContent: cap.kind }));
@@ -645,10 +639,6 @@ function stashHeading(stash, shown) {
     ...popoverMenu("⋯", `Actions for the stash ${stashName(stash)}`, [
       { text: "Open all", title: "Reopen every tab, unloaded until you switch to it; the stash stays",
         run: () => act({ type: "restore-stash", id: stash.id }, restoredText) },
-      { text: "Move to list", title: "Add these to the reading list and take them out of the stash",
-        run: () => act({ type: "move-stash", id: stash.id },
-          r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}` +
-            (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : "")) },
       "-",
       { text: "Rename", run: () => { renaming = stash.id; render(); } },
       { text: "Tag all tabs…", title: "Add one tag to every tab in this stash",
@@ -688,11 +678,11 @@ function renderByStash(out, visible, term) {
     dropTarget(ul, stash, e => (e.target === ul ? { before: null, mark: "drop-end" } : undefined));
     out.append(el("section", { className: "group" }, stashHeading(stash, rows.length), ul));
   }
-  // Reading-list links not already shown under a stash.
+  // The links in no stash shown, after the stashes.
   const listOnly = stashOnly && stashOnly !== "list" ? [] : visible.filter(l => l.list && !l.copies.some(c => visibleStash(c.stash))).sort(byNewest);
   if (listOnly.length) {
     any = true;
-    out.append(section("Reading list", listOnly.length, listOnly.map(l => safeRow(l, null)), " list-group"));
+    out.append(section("Not in a stash", listOnly.length, listOnly.map(l => safeRow(l, null)), " list-group"));
   }
   return any;
 }
@@ -818,7 +808,7 @@ function clearFilters() {
 function renderOnly() {
   const box = $("only");
   box.textContent = "";
-  const name = stashOnly === "list" ? "the reading list" : stashOnly && stashById(stashOnly) ? stashName(stashById(stashOnly)) : null;
+  const name = stashOnly === "list" ? "the links in no stash" : stashOnly && stashById(stashOnly) ? stashName(stashById(stashOnly)) : null;
   box.hidden = !name;
   if (!name) return;
   const b = el("button", { type: "button", title: "Show every stash again" }, `Only ${name} ×`);
@@ -865,11 +855,6 @@ function renderRows() {
   out.textContent = "";
   const visible = (filter === "filtered" ? data.filteredLinks : data.links).filter(l => matches(l, term));
 
-  if (!data.sources.size) {
-    out.append(el("div", { className: "empty" }, el("p", { className: "title", textContent: "No source chosen" }),
-      el("p", { textContent: "Pick Stashed tabs, Imports or Reading list in the bar at the top." })));
-    return;
-  }
   if (!total) {
     out.append(el("div", { className: "empty" },
       el("p", { className: "title", textContent: "Nothing here yet" }),
@@ -930,7 +915,7 @@ function renderDetail() {
   const kind = kindOf(url);
   const when = stash
     ? `stashed ${whenOf(stash.created_at)}${renamed(stash) ? ` · ${stash.name}` : ""}`
-    : link.date ? `${link.list?.saved_at ? "saved" : "added"} ${whenOf(link.date)} · reading list` : "reading list";
+    : link.date ? `${link.list?.saved_at ? "saved" : "added"} ${whenOf(link.date)} · not in a stash` : "not in a stash";
   box.append(el("div", { className: "dhead" }, srcIcon(url),
     el("div", {},
       el("div", { className: "site", textContent: kind === "web" ? hostOf(url) : kind === "file" ? "Local file" : "Browser page" }),
@@ -978,7 +963,6 @@ function knownBox(row) {
   const dm = dmOriginText(c);
   if (dm) facts.append(el("li", { textContent: `Direct message: ${dm}` }));
   if (c?.reply_count) facts.append(el("li", { textContent: `${c.reply_count} ${c.reply_count === 1 ? "reply" : "replies"} captured` }));
-  if (link.list) facts.append(el("li", { textContent: "On the reading list" }));
   for (const copy of link.copies) {
     if (stash && copy.stash === stash.id) continue;
     const s = stashById(copy.stash);
@@ -1235,12 +1219,12 @@ function duplicateSets() {
         title: stash.tabs[at].title || null, when: whenOf(stash.created_at), label, hint: `tab ${at + 1} of ${stash.tabs.length}`,
         detail: label === whenOf(stash.created_at) ? kind : `${kind} ${whenOf(stash.created_at)}` });
     }
-    if (link.list && !link.list.loose && data.sources.has("list")) {
+    if (link.list && !link.list.loose) {
       const added = Date.parse(link.list.added_at);
       // A list entry with no date is the one you still act on: it counts as the newest.
       add(link.url, { id: `list:${link.key}`, list: true, at: Number.isNaN(added) ? Number.MAX_SAFE_INTEGER : added,
-        title: link.title, when: link.list.added_at ? whenOf(link.list.added_at) : "", label: "Reading list", hint: "",
-        detail: "on the list" });
+        title: link.title, when: link.list.added_at ? whenOf(link.list.added_at) : "", label: "Not in a stash", hint: "",
+        detail: "added on its own" });
     }
     for (const [, copies] of buckets) {
       if (copies.length < 2) continue;
@@ -1444,7 +1428,7 @@ function renderTrash() {
       const row = el("label", { className: "dup-row", title: e.url },
         box2,
         el("span", { className: "dup-where", textContent: e.title || e.url }),
-        el("span", { className: "dup-detail", textContent: `${e.kind === "item" ? "Reading list" : e.kind === "capture" ? "Capture" : e.stash.name} · deleted forever in ${plural(left, "day")}` }),
+        el("span", { className: "dup-detail", textContent: `${e.kind === "item" ? "Not in a stash" : e.kind === "capture" ? "Capture" : e.stash.name} · deleted forever in ${plural(left, "day")}` }),
         ...(e.title ? [el("span", { className: "dup-url dup-rowurl", textContent: e.url })] : []));
       card.append(row);
       rows.push({ el: row, id: e.id });
@@ -1556,7 +1540,7 @@ function previewImport() {
   const note = $("import-msg");
   note.className = "";
   if (parsed.format === "captures") {
-    note.textContent = `Read as capture JSONL: ${plural(parsed.records.length, "record")}; they merge into the reading list` +
+    note.textContent = `Read as capture JSONL: ${plural(parsed.records.length, "record")}; their links join the pile, in no stash` +
       (parsed.skipped ? ` · ${plural(parsed.skipped, "line")} unreadable` : "") + ".";
     $("import-go").disabled = !parsed.records.length;
     $("import-dest").hidden = true;
@@ -1569,7 +1553,7 @@ function previewImport() {
   else if (importDest() === "list") {
     const entries = listEntries();
     const dated = entries.filter(e => e.saved_at).length;
-    note.textContent = `Read as ${FORMAT_NAMES[parsed.format]}: ${plural(entries.length, "web link")} for the reading list` +
+    note.textContent = `Read as ${FORMAT_NAMES[parsed.format]}: ${plural(entries.length, "web link")}, each on its own, in no stash` +
       (dated ? `, ${dated} with a date` : "") + (n > entries.length ? ` · ${n - entries.length} local or repeated skipped` : "") + ".";
     $("import-go").disabled = !entries.length;
     return;
@@ -1618,8 +1602,8 @@ $("import-go").onclick = async () => {
   if (importDest() === "list") {
     // Re-adding a link with a date fills the date in; one already dated is left as it is.
     const res = await send({ type: "add", urls: listEntries() });
-    importDone(`Added ${plural(res.added, "link")} to the reading list` + (res.updated ? `, ${res.updated} dated` : "") +
-      (res.skipped ? `, ${res.skipped} already on it` : "") + `; ${res.total} on the list`);
+    importDone(`Added ${plural(res.added, "link")}` + (res.updated ? `, ${res.updated} dated` : "") +
+      (res.skipped ? `, ${res.skipped} already here` : ""));
     return load();
   }
   const total = parsed.stashes.reduce((sum, s) => sum + s.tabs.length, 0);
@@ -1748,9 +1732,9 @@ function download(name, type, body) {
         JSON.stringify({ exported_at: new Date().toISOString(), sessions }, null, 2));
       say(`Exported ${plural(sessions.length, "stash")} to Downloads`);
     } },
-    { text: "Reading list (JSONL)", title: "Every reading-list entry with its dates and note", run: async () => {
+    { text: "Links in no stash (JSONL)", title: "Every link added on its own, with its dates and note", run: async () => {
       const { items } = await send({ type: "export-list" });
-      if (!items.length) return say("The reading list is empty");
+      if (!items.length) return say("No link is outside a stash");
       download("link-worklist.jsonl", "application/x-ndjson",
         items.map(r => JSON.stringify(r).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")).join("\n") + "\n");
       say(`Exported ${items.length === 1 ? "1 entry" : `${items.length} entries`} to Downloads`);

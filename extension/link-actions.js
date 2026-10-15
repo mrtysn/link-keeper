@@ -1,5 +1,5 @@
 /* What can be done to a link, the same on every page: tag it, capture it, remove it —
- * and open it, move it to a stash or the reading list — with undo of any of them. Links, Cards and
+ * and open it, move it to another stash — with undo of any of them. Links, Cards and
  * Tags call these and draw them with bar(); the keys for them are in link-keys.js.
  *
  * A target is a link and, where the page shows it inside a stash, that copy: { link, stash, tab }.
@@ -7,8 +7,7 @@
  *
  * Accepting (F) makes the suggested tags the link's own.
  *
- * Every change pushes its inverse, so ⌘Z takes back a move, a removal, a move to the
- * reading list, and an open that took the tab out of its stash. A removed tab comes back where it
+ * Every change pushes its inverse, so ⌘Z takes back a move or a removal. A removed tab comes back where it
  * was, with its marks; a stash it emptied is written again.
  *
  * A page calls setup() once with:
@@ -59,7 +58,6 @@ const LinkActions = (() => {
   const putBack = c => send({ type: "put-back", stash: stashRecord(c.stash), tabs: [tabRecord(c)] });
   const fail = (res, fallback) => ({ ok: false, say: res?.error ? res.error[0].toUpperCase() + res.error.slice(1) : fallback });
 
-  const canList = t => !!(copyOf(t) && isWeb(t.link.url));
   const canMove = t => !!copyOf(t);
   const canRemove = t => !!(copyOf(t) || (t.link.list && !t.link.list.loose));
 
@@ -85,21 +83,6 @@ const LinkActions = (() => {
         r.replies?.length ? plural(r.replies.length, "reply") : null,
         r.reply_links?.length ? `${r.reply_links.length} from replies` : null].filter(Boolean).join(", ");
       return { ok: true, say: `Captured ${r.title || hostOf(t.link.url)}${extra ? ` (${extra})` : ""}` };
-    },
-
-    async list(t) {
-      const copy = copyOf(t);
-      if (!copy) return { ok: false, say: t.link.list ? "Already on the reading list" : "Only a stashed link moves to the reading list" };
-      if (!isWeb(t.link.url)) return { ok: false, say: "Only web pages can go to the reading list" };
-      const res = await send({ type: "move-stash", id: copy.stash.id, ids: [copy.tab.id] });
-      if (!res?.ok) return fail(res, "Unable to move it");
-      return {
-        ok: true, say: res.added ? "Moved to the reading list" : "Already on the reading list; taken out of the stash",
-        undo: { label: "To the reading list", run: async () => {
-          if (res.added) await send({ type: "remove", urls: [t.link.url], trash: false });
-          return putBack(copy);
-        } },
-      };
     },
 
     async move(t, { to } = {}) {
@@ -149,7 +132,7 @@ const LinkActions = (() => {
       if (!t.link.list || t.link.list.loose) return { ok: false, say: "Nothing to remove it from" };
       const res = await send({ type: "remove", urls: [t.link.url] });
       if (!res?.ok) return fail(res, "Unable to remove it");
-      return { ok: true, say: "Removed from the reading list; in the Trash for 30 days", undo: { label: "Remove", run: async () => {
+      return { ok: true, say: "Removed; in the Trash for 30 days", undo: { label: "Remove", run: async () => {
         const back = await send({ type: "restore-items", items: res.items || [] });
         if (back?.ok && res.trashed?.length) await send({ type: "trash-delete", ids: res.trashed });
         return back;
@@ -249,14 +232,12 @@ const LinkActions = (() => {
     const open = btn("open", "Open", "primary", copy ? "Reopen this tab; the stash keeps it" : "Open it in a new tab");
     const tagsB = btn("tags", "Tags", "", "Edit its tags", a => tags(t, a));
     const capture = web && btn("read", link.cap ? "Capture again" : "Capture", "", "Load it in a background tab and save its text, images and links");
-    const where = copy ? stashName(copy.stash) : "the reading list";
     const others = copiesOf(link).length + (link.list && !link.list.loose ? 1 : 0) - 1;
     const remove = canRemove(t) && btn("remove", "Remove", "danger",
-      `Take it out of ${where}${others === 1 ? "; its other copy stays" : others > 1 ? `; its ${others} other copies stay` : ""}`);
+      `${copy ? `Take it out of ${stashName(copy.stash)}` : "Remove it"}${others === 1 ? "; its other copy stays" : others > 1 ? `; its ${others} other copies stay` : ""}`);
     const more = [
       compact && { text: `Open  ${LinkKeys.showOf("open")}`, run: () => run("open", t) },
       canMove(t) && { text: `Move…  ${LinkKeys.showOf("move")}`, title: "Move it to another stash", run: () => moveMenu(t, out.querySelector(".more") || out) },
-      canList(t) && { text: `To list  ${LinkKeys.showOf("list")}`, title: "Move it out of its stash onto the reading list", run: () => run("list", t) },
     ].filter(Boolean);
     const removals = menuItems(t, extra, true);
     const items = [...more, ...(more.length && removals.length ? ["-"] : []), ...removals];
@@ -275,7 +256,7 @@ const LinkActions = (() => {
       removals.push({ text: `Remove from ${stashName(c.stash)}`, className: "danger", run: () => run("remove", { link: t.link, stash: c.stash, tab: c.tab }) });
     }
     if (t.link.list && !t.link.list.loose && !(othersOnly && !shown)) {
-      removals.push({ text: "Remove from the reading list", className: "danger", run: () => run("remove", t, { fromList: true }) });
+      removals.push({ text: "Remove the copy in no stash", className: "danger", run: () => run("remove", t, { fromList: true }) });
     }
     const out = [];
     if (extra.length) out.push(...extra);

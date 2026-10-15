@@ -62,7 +62,6 @@ function readMark(link) {
   if (link.cap) span.setAttribute("aria-label", "captured");
   return span;
 }
-const SOURCE_NAMES = { tabs: "Stashed", import: "Imported", list: "Reading list" };
 
 /* The dataset, cut down to the chosen sources: a link shows if any source holding it is chosen, a
  * stash if its own source is. byKey finds a link from a stash tab's key. */

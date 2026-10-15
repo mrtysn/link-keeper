@@ -1,6 +1,6 @@
-/* The toolbar popup: the page you are on. Whether it is held already — in which stashes, on the
- * reading list, captured or not — its tags with the palette, and the actions on it: capture it,
- * remove one copy of it, or save it (to the reading list, or by stashing the tab). Below, Stash for
+/* The toolbar popup: the page you are on. Whether it is held already — in which stashes, or on its
+ * own, captured or not — its tags with the palette, and the actions on it: capture it,
+ * remove one copy of it, or save it (on its own, or by stashing the tab). Below, Stash for
  * the window and links to the viewers. Everything in bulk lives on the pages.
  *
  * Remove acts on one copy only: with several, its menu names each and you pick one.
@@ -65,7 +65,7 @@ async function load() {
 const dayShort = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); };
 const stashLabel = s => `${renamed(s) ? s.name : dayShort(s.created_at)} · ${plural(s.tabs.length, "tab")}`;
 
-/* Where it is held: each stash, and the reading list. */
+/* Where it is held: each stash, and on its own when it was added outside one. */
 function copies() {
   const link = info.link;
   if (!link) return [];
@@ -78,7 +78,7 @@ function copies() {
       target: { link, stash, tab: stash.tabs[i] },
     };
   }).filter(Boolean);
-  if (link.list && !link.list.loose) out.push({ label: "Reading list", title: "On the reading list", menu: "Reading list", name: "the reading list", list: true, target: { link } });
+  if (link.list && !link.list.loose) out.push({ label: "Not in a stash", title: "Added on its own, in no stash", menu: "the copy in no stash", name: "no stash", list: true, target: { link } });
   return out;
 }
 
@@ -239,7 +239,7 @@ $("note").addEventListener("keydown", e => {
 
 $("queue").onclick = async () => {
   const res = await send({ type: "queue-active", note: $("note").value.trim() });
-  say(res.ok ? (res.added ? "added to the reading list" : "already on the reading list") : (res.error || "could not add"), res.added ? "ok" : "");
+  say(res.ok ? (res.added ? "added" : "already here") : (res.error || "could not add"), res.added ? "ok" : "");
   load();
 };
 

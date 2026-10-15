@@ -76,7 +76,7 @@ async function restoreFromTrash(ids) {
   if (items.length) {
     await restoreItems(items.map(e => e.item));
     done.push(...items.map(e => e.id));
-    where.add("the reading list");
+    where.add("no stash");
   }
   const caps = picked.filter(e => e.kind === "capture");
   if (caps.length) {
@@ -1324,20 +1324,6 @@ async function dropFromStash(id, ids, { trash = true } = {}) {
   return taken;
 }
 
-/* The stash date stands in as the saved date: it is when you set the tab aside. */
-async function moveStashToList(id, ids) {
-  const session = await findStash(id);
-  if (!session) return { ok: false, error: "that stash is gone" };
-  const asked = ids ? session.tabs.filter(t => ids.includes(t.id)) : session.tabs;
-  // The reading list walks links by navigating a tab, which works for web pages only; local files
-  // and browser pages stay in the stash.
-  const web = asked.filter(t => /^(https?|ftp):/.test(t.url));
-  if (!web.length) return { ok: false, error: "only web pages can go to the reading list" };
-  const taken = await dropFromStash(id, web.map(t => t.id), { trash: false });
-  const res = await addItems(taken.map(t => ({ url: t.url, title: t.title, saved_at: session.created_at })));
-  return { ...res, moved: taken.length, stayed: asked.length - taken.length };
-}
-
 /* Drag and drop: move bookmarks, in order, into stash `to` ahead of bookmark `before` (the end if
  * none). Only bookmarks in stashes move; a stash left empty goes. */
 async function moveStashed(ids, to, before) {
@@ -1639,7 +1625,7 @@ browser.commands.onCommand.addListener(async name => {
     await showSessions((await browser.windows.getLastFocused()).id);
   } else if (name === "queue-page") {
     const res = await queueActiveTab();
-    await notify(res.added ? "added to the list" : "already on the list");
+    await notify(res.added ? "added" : "already here");
   }
 });
 
@@ -1652,7 +1638,7 @@ browser.commands.onCommand.addListener(async name => {
 const MENU = [
   { id: "menu-keep", title: "Capture this page", contexts: ["page", "selection", "image"] },
   { id: "menu-shot", title: "Capture this page with a full-page screenshot", contexts: ["page", "selection", "image"] },
-  { id: "menu-queue", title: "Add this page to the reading list", contexts: ["page", "selection", "image"] },
+  { id: "menu-queue", title: "Add this page to Link Keeper", contexts: ["page", "selection", "image"] },
   { id: "menu-filter", title: "Filter out this page (a site's main page)", contexts: ["page"] },
   { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
   { id: "menu-list", title: "Links", contexts: ["page", "selection", "image"] },
@@ -1728,7 +1714,7 @@ async function onMenuClicked(info, tab) {
     }
     case "menu-queue": {
       const res = await queueActiveTab();
-      await notify(res.added ? "added to the list" : "already on the list");
+      await notify(res.added ? "added" : "already here");
       break;
     }
     case "menu-list": await showPage("list.html", tab?.windowId); break;
@@ -1736,7 +1722,7 @@ async function onMenuClicked(info, tab) {
     case "menu-queue-link":
       if (info.linkUrl) {
         const res = await addItems([{ url: info.linkUrl.split("#")[0], saved_at: new Date().toISOString() }]);
-        await notify(res.added ? "link added to the list" : "already on the list");
+        await notify(res.added ? "link added" : "already here");
       }
       break;
   }
@@ -1898,9 +1884,6 @@ async function handleMessage(msg) {
       return { ok: true, removed: taken.length, trashed: taken.trashed || [] };
     }
 
-    case "move-stash":
-      return moveStashToList(msg.id, msg.ids);
-
     case "move-stashed":
       return moveStashed(msg.ids || [], msg.to, msg.before || null);
 
@@ -2044,7 +2027,7 @@ async function handleMessage(msg) {
       if (!res.ok) return res;
       if (res.data?.format !== "link-keeper-backup" || !res.data.storage) return { ok: false, error: "not a Link Keeper backup" };
       const count = s => ({
-        "reading list": (s.items || []).length, captures: (s.captures || []).length,
+        "links in no stash": (s.items || []).length, captures: (s.captures || []).length,
         "tagged links": Object.keys(s.linkTags || {}).length, tags: (s.tagDefs?.list || []).length,
         "in the Trash": (s.trash || []).length, "filter rules": Array.isArray(s.filterRules) ? s.filterRules.length : DEFAULT_FILTER_RULES.length,
       });

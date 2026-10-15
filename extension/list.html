@@ -470,10 +470,10 @@
     <h2 id="import-h">Import</h2>
     <p>Paste or choose a file: OneTab's <em>Export URLs</em> text, a TidyTab or Link Keeper export, CSV with a <code>url</code> column
       (and optionally <code>title</code>, <code>group</code>, <code>date</code>), or any text with links in it. A URL on its own line can be followed by the date it was saved.
-      Capture JSONL (from <code>importers/enrich-x.py</code> or Export) merges into the reading list.</p>
+      Capture JSONL (from <code>importers/enrich-x.py</code> or Export) adds its links on their own, in no stash.</p>
     <div class="row dest" id="import-dest" role="radiogroup" aria-label="Import as" hidden>
       <label><input type="radio" name="import-dest" value="stashes" checked> <span>Stashes, under Imports</span></label>
-      <label><input type="radio" name="import-dest" value="list"> <span>Links on the reading list</span></label>
+      <label><input type="radio" name="import-dest" value="list"> <span>Links on their own, in no stash</span></label>
     </div>
     <textarea id="import-text" spellcheck="false" aria-label="Text to import" placeholder="https://example.com/ | Example"></textarea>
     <div class="row">
@@ -489,7 +489,7 @@
 
   <section class="panel" id="dups-panel" hidden aria-labelledby="dups-h">
     <h2 id="dups-h" tabindex="-1">Duplicates</h2>
-    <p>Links that appear more than once in the sources shown, such as in two stashes, or in a stash and the reading list.
+    <p>Links that appear more than once, such as in two stashes, or in a stash and also added on their own.
       Tick the copies to move to the Trash. Nothing is ticked for you.</p>
     <div class="dups-bulk">
       <button class="small" id="dups-newest" title="In every group, tick all but the newest copy">Keep the newest of each</button>
@@ -552,7 +552,7 @@
           <select id="backup-pick" aria-label="Backup to restore"></select>
           <button type="button" class="small" id="backup-restore">Restore…</button>
         </div>
-        <p class="hint">Restoring replaces tags, captures, the reading list and settings with the file's. Restore… first shows the counts now and in the file, and saves what is here now, so restoring that file undoes it. Stashes are bookmarks and stay as they are.</p>
+        <p class="hint">Restoring replaces tags, captures, the links in no stash and settings with the file's. Restore… first shows the counts now and in the file, and saves what is here now, so restoring that file undoes it. Stashes are bookmarks and stay as they are.</p>
       </fieldset>
       <fieldset>
         <legend>Never stash these sites</legend>

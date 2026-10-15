@@ -142,7 +142,7 @@ await check("Settings compares a backup with what is here before restoring it", 
   await backupNow("agent");
   const res = await handleMessage({ type: "compare-backup", name: "latest.json" });
   if (!res.ok) throw new Error(JSON.stringify(res));
-  for (const k of ["reading list", "captures", "tagged links", "tags", "in the Trash", "filter rules"]) {
+  for (const k of ["links in no stash", "captures", "tagged links", "tags", "in the Trash", "filter rules"]) {
     if (typeof res.now[k] !== "number" || res.now[k] !== res.file[k]) throw new Error(`${k}: ${res.now[k]} vs ${res.file[k]}`);
   }
   if ((await handleMessage({ type: "compare-backup", name: "no-such.json" })).ok) throw new Error("a missing file compared");

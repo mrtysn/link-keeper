@@ -298,7 +298,6 @@ function contextEl(card) {
   const facts = [];
   // The other stashes holding it, previewed on hover.
   if (held.length > 1) facts.push(Peek.mark(el("span", { className: "peekable", textContent: `Also in ${plural(held.length - 1, "other stash")}: ${held.slice(1, 3).map(h => stashName(h.stash)).join(", ")}${held.length > 3 ? ", …" : ""}` }), "held", link.key));
-  if (link.list && held.length) facts.push("on the reading list");
   if (isWeb(link.url)) {
     const host = hostOf(link.url);
     const same = deck.slice(index).filter(c => c.link.key !== link.key && isWeb(c.url) && hostOf(c.url) === host).length;
@@ -307,7 +306,7 @@ function contextEl(card) {
   return facts.length ? el("div", { className: "ctx" }, ...facts.flatMap((f, i) => (i ? [" · ", f] : [f]))) : null;
 }
 
-/* The sidebar: every stash on show and then the reading list, as Links lists them grouped by stash, with the top
+/* The sidebar: every stash and then the links in no stash, as Links lists them grouped by stash, with the top
  * card marked in its home stash. Built once per deal; each new card only moves the marks. Any row
  * deals its link next. */
 let sideRows = [];
@@ -338,11 +337,9 @@ function buildSide() {
     group(s.id, stashName(s), `${s.source === "import" ? "Imported" : "Stashed"} ${whenOf(s.created_at)}`,
       s.tabs.filter(t => !hidden.has(t.key)).map(t => ({ key: t.key, url: t.url, title: labelOf(byKey.get(t.key) || {}) || t.title })));
   }
-  if (sources.has("list")) {
-    group("list", "Reading list", "Links you queued to read, and pages you kept",
-      allLinks.filter(l => l.list && !inShown.has(l.key) && !hidden.has(l.key)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
-        .map(l => ({ key: l.key, url: l.url, title: labelOf(l) })));
-  }
+  group("list", "Not in a stash", "Links added on their own: shared, imported from a chat, or captured",
+    allLinks.filter(l => l.list && !inShown.has(l.key) && !hidden.has(l.key)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      .map(l => ({ key: l.key, url: l.url, title: labelOf(l) })));
 }
 
 function renderSide() {
@@ -473,7 +470,7 @@ LinkActions.setup({
     flying = false;
     if (res.ok === false) { await wait; render(); return; }
     const onTop = deck[index]?.link.key === target?.link.key;
-    const leaves = ["list", "move", "remove", "accept"].includes(cmd);
+    const leaves = ["move", "remove", "accept"].includes(cmd);
     if (cmd === "remove" && onTop) tally.removed++;
     if (cmd === "undo" && res.cmd === "remove") tally.removed = Math.max(0, tally.removed - 1);
     if (cmd === "undo" && res.cmd === "later") tally.skipped = Math.max(0, tally.skipped - 1);
@@ -549,7 +546,7 @@ LinkKeys.listen({
   next: () => later(),
   "group-prev": () => jumpGroup(-1), "group-next": () => jumpGroup(1),
   read: onTop("read"), open: onTop("open"),
-  tags: () => openTags(), accept: () => acceptTop(), list: onTop("list"), move: onTop("move"), remove: () => removeTop(),
+  tags: () => openTags(), accept: () => acceptTop(), move: onTop("move"), remove: () => removeTop(),
   undo: () => LinkActions.undo(),
   escape: () => document.querySelector(".tagpop")?.remove(),
 }, { labels: { prev: "back", next: "skip", "group-prev": "◂ stash", "group-next": "stash ▸" } });
