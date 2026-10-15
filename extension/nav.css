@@ -4,9 +4,13 @@
 .app-nav {
   display: flex; flex-wrap: wrap; align-items: stretch; column-gap: 16px;
   margin: 0 calc(-1 * var(--gutter, 0px)) var(--nav-gap, 0px); padding: 0 var(--nav-inset, var(--gutter, 0px));
-  border-bottom: 1px solid var(--line); background: var(--bg);
+  background: var(--bg);
   font: 14px/1.2 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
 }
+/* With no page links in it (Links is the one page) the bar is the name alone: it gets its own room
+   rather than the links' height, and no rule under it. */
+.app-nav:has(.app-pages:empty) { padding-top: 14px; padding-bottom: 6px; }
+.app-nav:has(.app-pages:not(:empty)) { border-bottom: 1px solid var(--line); }
 .app-brand {
   display: flex; align-items: center; gap: 8px;
   font-weight: 650; letter-spacing: -.01em; color: var(--ink); white-space: nowrap;
