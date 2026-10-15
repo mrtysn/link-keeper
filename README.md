@@ -445,8 +445,8 @@ address now opens Links with the pane. Click any row or walk with `W` `S`, the p
 jump a section, and Space / ⇧Space scroll a long pane. It shows the link's capture, whether it is on
 the reading list or in other stashes, and how many links share its site, with the usual actions.
 Two more toggles in the bar, each remembered: **Compact** shows a row as its icon and title only (on
-by default with the pane, and then hovering a title previews the link), and **Stash tools** shows or
-hides the buttons on stash headings. `?stash=<id>` opens one stash alone, with an **Only … ×**
+by default with the pane, and then hovering a title previews the link). A stash heading is its name and count;
+its actions (Open all, Move to list, Star, Lock, Rename, Tag all tabs…, Delete…) are under its **⋯**. `?stash=<id>` opens one stash alone, with an **Only … ×**
 banner to show everything again; a stash's hover preview links there.
 
 **Select** puts a checkbox on every row (shift-click ticks the run since the last tick). A bar at the foot

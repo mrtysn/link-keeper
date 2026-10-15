@@ -77,8 +77,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await key(p, "v"); ok(await p.$eval("#detail", e => e.hidden), "pane: V hides the detail pane");
   await key(p, "v"); ok(await p.$eval("#detail", e => !e.hidden), "pane: V shows it again");
   ok(await p.evaluate(() => document.body.classList.contains("compact")), "pane: rows are compact with the pane on");
-  await p.click("#t-tools"); ok(await p.$eval(".group > h2 .gacts", e => getComputedStyle(e).display === "none"), "pane: Stash tools hides the heading buttons");
-  await p.click("#t-tools");
+  ok(await p.$$eval(".group > h2 .gacts", l => l.length > 0 && l.every(g => { const b = g.querySelectorAll(":scope > button"); return b.length === 1 && b[0].textContent.trim() === "⋯"; })), "pane: a stash heading holds only its ⋯");
   // The Not captured chip shows only links whose text is not saved.
   await p.click('#f-uncaptured'); await p.waitForTimeout(200);
   ok(await p.$$eval("#out ul.rows > li", l => l.length > 0 && l.every(li => !li.querySelector(".rd.on"))), "pane: Not captured shows uncaptured links only");

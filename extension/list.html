@@ -231,13 +231,16 @@
 
   /* --- stash headings --- */
   .group > h2 .when { color: var(--dim); font-size: .8125rem; font-weight: 400; font-variant-numeric: tabular-nums; }
-  .group > h2 .gacts { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+  .group > h2 .gacts { display: flex; flex: none; gap: 4px; margin-left: auto; }
+  /* A stash heading stays one line, its ⋯ at the end: the name gives way first. */
+  .group > h2:has(> .gacts) { flex-wrap: nowrap; }
+  .group > h2:has(> .gacts) > * { flex: none; }
+  .group > h2:has(> .gacts) > .name { flex: 0 1 auto; min-width: 2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .group > h2 .gacts button { margin-left: 0; }
   .rename {
     min-width: 0; flex: 0 1 20rem; min-height: 30px; padding: 4px 10px; font: inherit; font-weight: 600;
     color: var(--ink); background: var(--panel); border: 1px solid var(--field); border-radius: 8px;
   }
-  @media (max-width: 40rem) { .group > h2 .gacts { width: 100%; margin-left: 0; } }
 
   /* stars, locks, duplicates */
   .star-mark { color: var(--seen); }
@@ -339,8 +342,6 @@
   .viewtoggles { margin-left: auto; }
   #only button { min-height: 30px; padding: 4px 12px; border-radius: 999px; font-size: .8125rem; background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
-  /* Stash tools off: the headings keep their names and counts, not their buttons. */
-  body.no-tools .group > h2 .gacts { display: none; }
 
   /* Compact rows: icon, captured mark and title on one line; the rest is in the detail pane. */
   body.compact ul.rows > li { padding: 4px 8px; align-items: center; grid-template-columns: 16px 12px minmax(0, 1fr); border-radius: 6px; }
@@ -464,7 +465,6 @@
       <button class="chip" id="t-pane" aria-pressed="false" title="The list moves into a column on the left and the selected link shows in full on the right (V)">Side by side</button>
       <button class="chip" id="t-compact" aria-pressed="false" title="Rows as icon and title only">Compact</button>
       <button class="chip" id="t-select" aria-pressed="false" title="Tick links to tag them together">Select</button>
-      <button class="chip" id="t-tools" aria-pressed="true" title="Open all, Move to list, Star, Lock and ⋯ on each stash heading">Stash tools</button>
       <button class="chip" id="t-keys" aria-pressed="false" title="Show or hide the key guide (?)">Keys</button>
     </div>
     <span id="only" hidden></span>

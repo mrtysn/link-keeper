@@ -1,10 +1,10 @@
 /* Links: every link from the sources chosen in the top bar — stashed tabs, imports, the reading
  * list — one row per URL, grouped by stash, domain, tag, day or month, or in date order.
  *
- * Three view toggles, each remembered: Side by side (V) narrows the rows to a sidebar and shows the
+ * Two view toggles, each remembered: Side by side (V) narrows the rows to a sidebar and shows the
  * selected link in full beside them — its capture, where else it is held, other links from its
  * site, and the live preview (P); Compact shows a row as its icon and title only, the default with
- * the pane; Stash tools shows or hides the buttons on stash headings. ?pane=1 opens with the pane,
+ * the pane. ?pane=1 opens with the pane,
  * ?stash=<id> shows only that stash.
  *
  * Grouped by stash it is what the Stashed tabs page was: each stash under its own heading with its
@@ -35,7 +35,7 @@ let renaming = null;
 let dragging = null;
 
 /* The view toggles, each remembered in this browser; storage that throws leaves the defaults. */
-const PANE_KEY = "listPane", COMPACT_KEY = "listCompact", COMPACT_PANE_KEY = "listCompactPane", TOOLS_KEY = "listTools";
+const PANE_KEY = "listPane", COMPACT_KEY = "listCompact", COMPACT_PANE_KEY = "listCompactPane";
 const pref = (key, fallback) => {
   try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch (e) { return fallback; }
 };
@@ -107,10 +107,8 @@ const compactNow = () => (pane ? pref(COMPACT_PANE_KEY, true) : pref(COMPACT_KEY
 function applyView() {
   document.body.classList.toggle("pane", pane);
   document.body.classList.toggle("compact", compactNow());
-  document.body.classList.toggle("no-tools", !pref(TOOLS_KEY, true));
   $("t-pane").setAttribute("aria-pressed", String(pane));
   $("t-compact").setAttribute("aria-pressed", String(compactNow()));
-  $("t-tools").setAttribute("aria-pressed", String(pref(TOOLS_KEY, true)));
   $("detail").hidden = !pane;
   fitPanes();
 }
@@ -649,30 +647,22 @@ function stashHeading(stash, shown) {
   h2.append(el("span", { className: "n", textContent: shown === n ? plural(n, "tab") : `${shown} of ${n}`,
     title: stash.source === "import" ? `Imported${stash.format ? ` from ${FORMAT_SHORT[stash.format] || stash.format}` : ""}` : "" }));
 
-  const button = (text, cls, title, fn, disabled = false) => {
-    const b = el("button", { className: `small ${cls}`, textContent: text, title, disabled });
-    b.onclick = fn;
-    return b;
-  };
-  const toggle = (text, on, title, fn) => {
-    const b = button(text, "ghost toggle", title, fn);
-    b.setAttribute("aria-pressed", String(on));
-    return b;
-  };
   const locked = stash.locked;
   const imported = stash.source === "import";
+  // Every action is under ⋯, so a heading is its name and count.
   h2.append(el("div", { className: "gacts" },
-    button("Open all", "", "Reopen every tab, unloaded until you switch to it; the stash stays",
-    () => act({ type: "restore-stash", id: stash.id }, restoredText)),
-    button("Move to list", "", "Add these to the reading list and take them out of the stash",
-      () => act({ type: "move-stash", id: stash.id },
-        r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}` +
-          (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : "")), locked),
-    toggle(stash.starred ? "★ Starred" : "☆ Star", stash.starred, "Starred stashes stay at the top",
-      () => act({ type: "flag-stash", id: stash.id, starred: !stash.starred })),
-    toggle(locked ? "Locked" : "Lock", locked, "A locked stash cannot lose a tab: no delete, remove or move out, and opening keeps it",
-      () => act({ type: "flag-stash", id: stash.id, locked: !locked })),
-    ...popoverMenu("⋯", `More actions for the stash ${stashName(stash)}`, [
+    ...popoverMenu("⋯", `Actions for the stash ${stashName(stash)}`, [
+      { text: "Open all", title: "Reopen every tab, unloaded until you switch to it; the stash stays",
+        run: () => act({ type: "restore-stash", id: stash.id }, restoredText) },
+      { text: "Move to list", disabled: locked, title: locked ? "Unlock it first" : "Add these to the reading list and take them out of the stash",
+        run: () => act({ type: "move-stash", id: stash.id },
+          r => `Moved ${r.moved} to the list${r.skipped ? ` (${r.skipped} were already on it)` : ""}` +
+            (r.stayed ? ` · ${r.stayed} local or browser pages stay here` : "")) },
+      { text: stash.starred ? "Unstar" : "Star", title: "Starred stashes stay at the top",
+        run: () => act({ type: "flag-stash", id: stash.id, starred: !stash.starred }) },
+      { text: locked ? "Unlock" : "Lock", title: "A locked stash cannot lose a tab: no delete, remove or move out",
+        run: () => act({ type: "flag-stash", id: stash.id, locked: !locked }) },
+      "-",
       { text: "Rename", run: () => { renaming = stash.id; render(); } },
       { text: "Tag all tabs…", title: "Add one tag to every tab in this stash",
         run: () => tagAdder(h2, `Tag all ${plural(n, "tab")} of ${stashName(stash)}`,
@@ -1768,7 +1758,6 @@ $("sel-all").onclick = () => { for (const r of rowsOnPage) ticked.add(r.target.l
 $("sel-tag").onclick = () => bulkTagPopover($("sel-tag"));
 $("t-pane").onclick = () => togglePane();
 $("t-compact").onclick = () => { setPref(pane ? COMPACT_PANE_KEY : COMPACT_KEY, !compactNow()); applyView(); };
-$("t-tools").onclick = () => { setPref(TOOLS_KEY, !pref(TOOLS_KEY, true)); applyView(); };
 applyView();
 
 if (location.hash === "#import") { openPanel("import-panel"); previewImport(); }
