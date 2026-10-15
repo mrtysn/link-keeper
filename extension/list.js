@@ -826,6 +826,7 @@ function renderTagChips() {
   const ordered = [...counts.entries()].sort((a, b) => (tagSel.has(b[0]) - tagSel.has(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
   for (const [t, n] of ordered) chips.push(chip(t, t, n, tagChip(t, !hand.has(t), "Suggested, not on any link as a tag yet")));
   if (tagSel.has(UNTAGGED)) chips.sort((a, b) => (b.getAttribute("aria-pressed") === "true") - (a.getAttribute("aria-pressed") === "true"));
+  chips.unshift(newTagChip());
   chipRow(box, "Tags", tagsExpanded, () => { tagsExpanded = !tagsExpanded; renderTagChips(); }, chips, tagSel, () => { tagSel.clear(); render(); });
 }
 
@@ -855,10 +856,10 @@ function renderTagBar() {
   bar.textContent = "";
   const picked = [...tagSel].filter(t => t !== UNTAGGED && t !== SUGGESTED);
   const one = picked.length === 1 && tagSel.size === 1 ? picked[0] : null;
-  bar.hidden = !tagsExpanded && !one;
+  bar.hidden = !one;
   if (bar.hidden) return;
 
-  if (one) {
+  {
     const layers = { own: [], suggested: [], site: [] };
     for (const l of data.links) {
       const s = shownTags(l);
@@ -928,21 +929,33 @@ function renderTagBar() {
       adopt || "", el("span", { className: "tb-tools" }, rename, merge, del)), colours);
   }
 
-  // A new tag, made here (its colour picked once it is chosen) and then put on links with T.
-  const name = el("input", { type: "text", placeholder: "New tag…", className: "tb-new" });
-  name.setAttribute("aria-label", "New tag name");
-  const make = el("button", { type: "submit", className: "small", textContent: "Create" });
-  const form = el("form", { className: "tb-make" }, name, make);
-  form.addEventListener("keydown", e => { if (e.key !== "Escape") e.stopPropagation(); });
-  form.onsubmit = async e => {
-    e.preventDefault();
-    const res = await send({ type: "create-tag", name: name.value, hue: null });
-    if (!res?.ok) return say(res?.error ? res.error[0].toUpperCase() + res.error.slice(1) : "Unable to make it");
-    tagSel.clear(); tagSel.add(res.tag);
-    say(`Made ${res.tag}. Press T on a link to add it.`);
-    await load();
+}
+
+/* "+ New tag", first in the Tags row so it shows with the row folded: it turns into a name field;
+ * Enter makes the tag and picks it, so the tag bar offers its colour; Escape or leaving drops it. */
+function newTagChip() {
+  const b = el("button", { type: "button", className: "chip ghost tb-newtag", textContent: "+ New tag" });
+  b.onclick = () => {
+    const name = el("input", { type: "text", placeholder: "New tag name, Enter", className: "tb-new" });
+    name.setAttribute("aria-label", "New tag name");
+    const form = el("form", { className: "tb-make" }, name);
+    form.addEventListener("keydown", e => {
+      e.stopPropagation();
+      if (e.key === "Escape") form.replaceWith(b);
+    });
+    name.addEventListener("blur", () => { if (!name.value.trim() && form.isConnected) form.replaceWith(b); });
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const res = await send({ type: "create-tag", name: name.value, hue: null });
+      if (!res?.ok) return say(res?.error ? res.error[0].toUpperCase() + res.error.slice(1) : "Unable to make it");
+      tagSel.clear(); tagSel.add(res.tag);
+      say(`Made ${res.tag}. Press T on a link to add it.`);
+      await load();
+    };
+    b.replaceWith(form);
+    name.focus();
   };
-  bar.append(form);
+  return b;
 }
 
 function setFilter(which) {

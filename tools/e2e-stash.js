@@ -493,8 +493,8 @@ await kase("data patches run once and are recorded; a fingerprint not found here
 await kase("tagging one link after another in the Links detail pane: Untagged chip, Enter saves, Enter on empty moves to the next", async () => {
   await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
   await addItems(["a", "b", "c"].map(n => ({ url: `https://pane.example/${n}`, title: `Pane ${n}` })));
-  const { tab, view, doc: d } = await openPage("list.html?pane=1", d => hasRows(d) && /^Untagged/.test(d.querySelector("#tagchips .chip")?.textContent || "") && d.querySelector("#detail .pos")?.textContent, "the List page with its pane");
-  d.querySelector("#tagchips .chip").click();
+  const { tab, view, doc: d } = await openPage("list.html?pane=1", d => hasRows(d) && /^Untagged/.test(d.querySelector("#tagchips .tagchip")?.textContent || "") && d.querySelector("#detail .pos")?.textContent, "the List page with its pane");
+  d.querySelector("#tagchips .tagchip").click();
   await until(() => d.querySelector('#tagchips .chip[aria-pressed="true"]'), "the Untagged chip to apply");
   const untagged = (await getLinks()).links.filter(l => !l.tags.length).length;
   yes(d.querySelectorAll("ul.rows > li").length > 0 && untagged > 0, "the chip shows the untagged links");

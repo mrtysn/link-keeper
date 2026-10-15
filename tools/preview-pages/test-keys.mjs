@@ -248,7 +248,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 // Tagging one link after another, from any page: Explore's Untagged chip, T, Enter on an empty field
 {
   const p = await page("list.html?group=stash&pane=1");
-  await p.click('#tagchips .chip'); await p.waitForTimeout(200);
+  await p.click('#tagchips .tagchip'); await p.waitForTimeout(200);
   const n0 = await p.$$eval("#out ul.rows > li", l => l.length);
   ok(n0 > 0, `untagged: the Untagged chip narrows Links to links with no tags (${n0})`);
   const cur = () => p.$eval(".lk-cursor .ttl", e => e.textContent);
@@ -285,8 +285,8 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 // Tags live on Links: the tag row, and the tag bar's new tag, counts and tools
 {
   const p = await page("list.html?tags");
-  ok(!(await p.$eval("#tagbar", e => e.hidden)), "tags: ?tags opens the tag row and its bar");
-  await p.fill("#tagbar .tb-new", "Read Later"); await p.click("#tagbar .tb-make button"); await p.waitForTimeout(400);
+  ok(await p.$eval("#tagchips .rowtoggle", e => e.getAttribute("aria-expanded")) === "true" && await p.$eval("#tagbar", e => e.hidden), "tags: ?tags opens the tag row; the bar waits for one tag");
+  await p.click("#tagchips .tb-newtag"); await p.fill("#tagchips .tb-new", "Read Later"); await p.press("#tagchips .tb-new", "Enter"); await p.waitForTimeout(400);
   const picked = () => p.$$eval('#tagbar .tb-tag > .tag', l => l.map(e => e.textContent));
   ok((await picked()).some(t => t.startsWith("read later")), `tags: Create makes the tag and picks it (${await picked()})`);
   await p.click("#tagbar .hues button:nth-child(6)"); await p.waitForTimeout(300);
