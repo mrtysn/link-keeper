@@ -29,6 +29,9 @@ let filter = "all";
 const domainSel = new Set();   // empty = every domain
 const tagSel = new Set();      // empty = every tag; UNTAGGED = links with no tag set by hand
 const UNTAGGED = "\u0000untagged";
+// Untagged links the tag model has suggestions for: the Cards page's Suggested deck, as a tag chip.
+const SUGGESTED = "\u0000suggested";
+const hasSuggestions = l => !l.tags.length && !!l.suggested?.length;
 let domainsExpanded = false;
 let tagsExpanded = false;
 let renaming = null;
@@ -105,8 +108,15 @@ try { group = localStorage.getItem(GROUP_KEY) || "domain"; } catch (e) { /* stor
   if (params.get("stash")) { stashOnly = params.get("stash"); group = "stash"; }
   // ?tags opens the tag row (the Tags page's old address forwards here); ?tag=<name> also picks it.
   if (params.has("tags") || params.get("tag")) tagsExpanded = true;
+  // ?cards turns card mode on: the Cards page's old address forwards here with it.
+  if (params.has("cards")) setPref("listCards", true);
   if (params.get("tag")) tagSel.add(cleanTag(params.get("tag")));
-  if ([...params.keys()].length) history.replaceState(null, "", location.pathname + location.hash);
+  // Its own parameters are taken up and dropped from the address; any other (the preview's) stays.
+  const own = ["group", "pane", "stash", "tags", "tag", "cards"];
+  if (own.some(k => params.has(k))) {
+    for (const k of own) params.delete(k);
+    history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash);
+  }
   if (group === "flat") group = "newest";
   if (!GROUPS.includes(group)) group = "domain";
 }
@@ -172,7 +182,7 @@ function matches(link, term) {
   if (filter === "uncaptured" && !(isWeb(link.url) && !link.cap)) return false;
   if (filter === "local" && isWeb(link.url)) return false;
   if (domainSel.size && !domainSel.has(siteOf(link.url))) return false;
-  if (tagSel.size && ![...tagSel].some(t => (t === UNTAGGED ? !link.tags.length : shownTags(link).tags.includes(t)))) return false;
+  if (tagSel.size && ![...tagSel].some(t => (t === UNTAGGED ? !link.tags.length : t === SUGGESTED ? hasSuggestions(link) : shownTags(link).tags.includes(t)))) return false;
   if (!term) return true;
   const cap = link.cap;
   const hay = [link.url, link.title, labelOf(link), cap?.text, link.list?.note, cap?.screenshot, link.date, ...shownTags(link).tags,
@@ -398,27 +408,37 @@ function onRow(cmd) {
 LinkActions.setup({
   data: () => data,
   say,
-  tags: (t, anchor) => (pane ? $("detail").querySelector(".tagger input")?.focus() : anchoredPopover(anchor, tagEditor(t.link, () => load()))),
+  // In card mode the editor opens over the card, which redraws with each tag saved.
+  tags: (t, anchor) => (cardMode ? anchoredPopover($("detail").querySelector(".cm-card.top .cm-head") || anchor, tagEditor(t.link, () => load()))
+    : $("detail").querySelector(".tagger input")?.focus()),
   tagNext: () => { walk(1); onRow("tags")(); },
   async after(cmd, target, res) {
     if (res.ok === false) return;
-    const leaves = ["move", "remove"].includes(cmd);
+    // In card mode, accepting a card's suggested tags deals the next card, as removing does.
+    const leaves = ["move", "remove", ...(cardMode ? ["accept"] : [])].includes(cmd);
     const i = cursorAt();
     if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (leaves || (cmd === "read" && filter === "uncaptured"))) {
-      const next = rowsOnPage[i + 1] || rowsOnPage[i - 1];
+      const next = cardMode ? cardAfter(rowsOnPage[i]) : rowsOnPage[i + 1] || rowsOnPage[i - 1];
       if (next) cursorId = next.id;
+      if (cardMode && cmd === "remove") cardTally.removed++;
     }
+    if (cmd === "undo" && res.cmd === "remove") cardTally.removed = Math.max(0, cardTally.removed - 1);
     if (res.local) render();
     else await load();
+    // In card mode an undone removal or accept comes back on top, where it was dealt.
+    if (cardMode && cmd === "undo" && ["remove", "accept"].includes(res.cmd) && target) {
+      const back = rowsOnPage.find(r => r.target.link.key === target.link.key && (!target.stash || r.target.stash?.id === target.stash.id));
+      if (back) cursorId = back.id;
+    }
     setCursor(cursorId);
   },
 });
 
 LinkKeys.listen({
-  prev: () => walk(-1), next: () => walk(1),
+  prev: () => (cardMode ? cardStep(-1) : walk(-1)), next: () => (cardMode ? cardSkip() : walk(1)),
   "group-prev": () => jumpSection(-1), "group-next": () => jumpSection(1),
   read: onRow("read"), open: onRow("open"),
-  tags: onRow("tags"), accept: onRow("accept"), move: onRow("move"), remove: onRow("remove"),
+  tags: onRow("tags"), accept: onRow("accept"), move: onRow("move"), remove: () => (cardMode ? cardRemove() : onRow("remove")()),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
   preview: () => { setPreview(previewShowing(detailLink()) ? "off" : "this"); },
   escape: () => { document.querySelector(".tagpop")?.remove(); },
@@ -674,6 +694,7 @@ function stashHeading(stash, shown) {
 
 function section(title, count, rows, extraClass = "") {
   const s = el("section", { className: `group${extraClass}` });
+  s.dataset.key = title || "";
   if (title) s.append(el("h2", {}, el("span", { textContent: title }), el("span", { className: "n", textContent: count })));
   s.append(el("ul", { className: "rows" }, ...rows));
   return s;
@@ -690,7 +711,9 @@ function renderByStash(out, visible, term) {
     any = true;
     const ul = el("ul", { className: "rows stash" }, ...rows.map(r => safeRow(r.link, { stash, tab: r.tab, index: r.index })));
     dropTarget(ul, stash, e => (e.target === ul ? { before: null, mark: "drop-end" } : undefined));
-    out.append(el("section", { className: "group" }, stashHeading(stash, rows.length), ul));
+    const sec = el("section", { className: "group" }, stashHeading(stash, rows.length), ul);
+    sec.dataset.key = stash.id;
+    out.append(sec);
   }
   // The links in no stash shown, after the stashes.
   const listOnly = stashOnly && stashOnly !== "list" ? [] : visible.filter(l => l.list && !l.copies.some(c => visibleStash(c.stash))).sort(byNewest);
@@ -794,10 +817,12 @@ function renderTagChips() {
     b.onclick = () => { tagSel.has(id) ? tagSel.delete(id) : tagSel.add(id); render(); };
     return b;
   };
-  for (const t of tagSel) if (t !== UNTAGGED && !counts.has(t)) counts.set(t, 0);   // a picked tag stays in the row
+  for (const t of tagSel) if (t !== UNTAGGED && t !== SUGGESTED && !counts.has(t)) counts.set(t, 0);   // a picked tag stays in the row
   const hand = new Set(data.links.flatMap(l => l.tags));
   const chips = [];
   if (untagged) chips.push(chip(UNTAGGED, "Untagged", untagged));
+  const suggested = data.links.filter(hasSuggestions).length;
+  if (suggested) chips.push(chip(SUGGESTED, "Suggested", suggested));
   const ordered = [...counts.entries()].sort((a, b) => (tagSel.has(b[0]) - tagSel.has(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
   for (const [t, n] of ordered) chips.push(chip(t, t, n, tagChip(t, !hand.has(t), "Suggested, not on any link as a tag yet")));
   if (tagSel.has(UNTAGGED)) chips.sort((a, b) => (b.getAttribute("aria-pressed") === "true") - (a.getAttribute("aria-pressed") === "true"));
@@ -828,7 +853,7 @@ function hueRow(current, onPick) {
 function renderTagBar() {
   const bar = $("tagbar");
   bar.textContent = "";
-  const picked = [...tagSel].filter(t => t !== UNTAGGED);
+  const picked = [...tagSel].filter(t => t !== UNTAGGED && t !== SUGGESTED);
   const one = picked.length === 1 && tagSel.size === 1 ? picked[0] : null;
   bar.hidden = !tagsExpanded && !one;
   if (bar.hidden) return;
@@ -1026,6 +1051,205 @@ let previewTimer = null;
 let detailFor = null;
 
 
+/* --- card mode ------------------------------------------------------------------------------
+ * The Cards page, folded in: with Cards on, the detail pane deals the cursor's group (a stash, a
+ * site, a tag, a day: whatever Group by makes) as a stack of cards, in list order or shuffled.
+ * Dragging the top card left removes it, right or up skips it; S skips, W steps back, Q removes,
+ * and D A deal the next or previous group. The sidebar marks the card on top. */
+
+const CARDS_KEY = "listCards", SHUFFLE_KEY = "listCardsShuffle", CARD_THRESHOLD = 105;
+let cardMode = pref(CARDS_KEY, false);
+let cardShuffle = pref(SHUFFLE_KEY, false);
+const cardTally = { removed: 0, skipped: 0 };
+const shuffledOrder = new Map();   // a group's key → its row ids in the order they were shuffled into
+let cardFlying = false;
+
+const groupOf = row => row?.li.closest("section.group") || null;
+const groupKey = sec => sec?.dataset.key || sec?.querySelector("h2")?.textContent || "";
+
+function shuffleList(list) {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/* The rows of a row's group, in the order they are dealt. A shuffled group keeps its order while it
+ * is dealt: a removed card leaves it, a new one joins at the end. */
+function deckOf(row) {
+  const sec = groupOf(row);
+  const rows = rowsOnPage.filter(r => groupOf(r) === sec);
+  if (!cardShuffle) return rows;
+  const key = groupKey(sec), ids = rows.map(r => r.id);
+  const kept = (shuffledOrder.get(key) || []).filter(id => ids.includes(id));
+  const order = kept.length ? [...kept, ...shuffleList(ids.filter(id => !kept.includes(id)))] : shuffleList(ids);
+  shuffledOrder.set(key, order);
+  return order.map(id => rows.find(r => r.id === id));
+}
+
+/* One card on: the next in the deck, else the first of the next group (the previous, going back). */
+function cardStep(by) {
+  const row = rowsOnPage[cursorAt()];
+  if (!row) return walk(by);
+  const deck = deckOf(row);
+  const to = deck[deck.indexOf(row) + by];
+  if (to) return setCursor(to.id);
+  const sections = [...document.querySelectorAll("#out section.group")].filter(sec => rowsOnPage.some(r => groupOf(r) === sec));
+  const next = sections[sections.indexOf(groupOf(row)) + by];
+  if (!next) return;
+  const first = rowsOnPage.find(r => groupOf(r) === next);
+  const nextDeck = deckOf(first);
+  setCursor((by > 0 ? nextDeck[0] : nextDeck.at(-1)).id);
+}
+
+/* The next card after a row leaves the deck: the one after it, else the one before. */
+function cardAfter(row) {
+  const deck = deckOf(row), i = deck.indexOf(row);
+  return deck[i + 1] || deck[i - 1] || null;
+}
+
+function cardFly(xdir, ydir = 0) {
+  const top = $("detail").querySelector(".cm-card.top");
+  if (!top) return Promise.resolve();
+  cardFlying = true;
+  top.style.transition = "transform .28s ease-out, opacity .28s ease-out";
+  top.style.transform = `translate(${xdir * 620}px, ${ydir * 620 + (ydir ? 0 : 40)}px) rotate(${xdir * 22}deg)`;
+  top.style.opacity = "0";
+  return new Promise(ok => setTimeout(() => { cardFlying = false; ok(); }, 190));
+}
+
+async function cardSkip() {
+  const i = cursorAt(), row = rowsOnPage[i];
+  if (!row) return;
+  await cardFly(0, -1);
+  cardTally.skipped++;
+  const from = row.id;
+  LinkActions.push({ label: "Skip", cmd: "later", target: row.target, local: true, run: () => {
+    cardTally.skipped = Math.max(0, cardTally.skipped - 1);
+    cursorId = from;
+  } });
+  cardStep(1);
+}
+
+async function cardRemove() {
+  const row = rowsOnPage[cursorAt()];
+  if (!row) return;
+  await cardFly(-1);
+  LinkActions.run("remove", row.target);
+}
+
+function setCardMode(on) {
+  cardMode = on;
+  setPref(CARDS_KEY, on);
+  $("t-cards").setAttribute("aria-pressed", String(on));
+  detailFor = null;
+  renderDetail();
+}
+
+/* A card: the site, what is known of the page, where else it is held, and Open. */
+function cardEl(row, top) {
+  const { link } = row.target;
+  const cap = link.cap || {};
+  const host = isWeb(link.url) ? hostOf(link.url) : kindOf(link.url) === "file" ? "Local file" : "Browser page";
+  const card = el("article", { className: `cm-card${top ? " top" : ""}` });
+  const head = el("div", { className: "cm-head" }, srcIcon(link.url),
+    el("div", {}, el("div", { className: "cm-host", textContent: cap.name ? `${cap.name} · ${host}` : host }),
+      el("div", { className: "cm-when" }, [link.date && `saved ${String(link.date).slice(0, 10)}`, cap.kind && cap.kind !== "page" && cap.kind].filter(Boolean).join(" · ") + " ", readBadge(link) || "")));
+  const suggestions = suggestionRow(link);
+  const chips = suggestions ? null : tagChips(link);
+  if (chips) head.append(chips);
+  card.append(head, el("div", { className: "cm-title", textContent: labelOf(link) || row.target.tab?.title || shortUrl(link.url) }));
+  if (suggestions) card.append(suggestions);
+  const agent = agentRow(link);
+  if (agent) card.append(agent);
+  const body = (cap.text || "").replace(/\s+/g, " ").trim();
+  if (body && !(labelOf(link) || "").includes(body.slice(0, 40))) card.append(el("div", { className: "cm-body", textContent: body }));
+  const note = cap.note || link.list?.note;
+  if (note) card.append(el("div", { className: "cm-note", textContent: note }));
+  const pics = [...(cap.shotThumb ? [cap.shotThumb] : []), ...(cap.images || []).slice(0, 3)];
+  if (pics.length) card.append(el("div", { className: "cm-thumbs" }, ...pics.map(src => el("img", { src, loading: "lazy", alt: "" }))));
+  const also = link.copies.filter(c => c.stash !== row.target.stash?.id).map(c => stashById(c.stash)).filter(Boolean);
+  if (also.length) card.append(el("div", { className: "cm-ctx", textContent: `Also in ${plural(also.length, "other stash")}: ${also.slice(0, 2).map(stashName).join(", ")}${also.length > 2 ? ", …" : ""}` }));
+  const open = el("a", { className: "cm-open", href: link.url, target: "_blank", rel: "noopener noreferrer", textContent: "Open ↗" });
+  open.addEventListener("click", e => {
+    if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    LinkActions.run("open", row.target);
+  });
+  card.append(el("div", { className: "cm-foot" }, open, el("span", { className: "cm-url", textContent: shortUrl(link.url).slice(0, 70) })),
+    el("div", { className: "cm-stamp keep", textContent: "skip" }), el("div", { className: "cm-stamp drop", textContent: "remove" }));
+  return card;
+}
+
+/* The pane in card mode: the deal's count and Shuffle, the stack, and the actions under it. */
+function renderCards(row) {
+  const box = $("detail");
+  const deck = deckOf(row), at = deck.indexOf(row);
+  const shuffleB = el("button", { type: "button", className: "chip small", textContent: "Shuffle", title: "Deal this group's cards in a random order" });
+  shuffleB.setAttribute("aria-pressed", String(cardShuffle));
+  shuffleB.onclick = () => { cardShuffle = !cardShuffle; setPref(SHUFFLE_KEY, cardShuffle); shuffledOrder.clear(); detailFor = null; renderDetail(); };
+  const name = groupOf(row)?.querySelector("h2 .name, h2 > span")?.textContent || "";
+  box.append(el("div", { className: "cm-tally" },
+    el("span", { textContent: `${at + 1} of ${deck.length}${name ? ` in ${name}` : ""}` }),
+    el("span", {}, "removed ", el("b", { textContent: cardTally.removed })),
+    el("span", {}, "skipped ", el("b", { textContent: cardTally.skipped })),
+    shuffleB));
+  const stage = el("div", { className: "cm-stage" });
+  deck.slice(at, at + 3).reverse().forEach((r, i, arr) => {
+    const depth = arr.length - 1 - i;
+    const c = cardEl(r, depth === 0);
+    c.style.transform = `translateY(${depth * 9}px) scale(${1 - depth * 0.035})`;
+    c.style.opacity = depth > 1 ? ".55" : "1";
+    c.style.zIndex = String(10 - depth);
+    stage.append(c);
+  });
+  box.append(stage);
+  armCard(stage.querySelector(".cm-card.top"));
+
+  const skipB = el("button", { type: "button", title: `On to the next card, nothing recorded (${LinkKeys.showOf("next")})` }, "Skip", el("kbd", { textContent: LinkKeys.showOf("next") }));
+  skipB.onclick = () => cardSkip();
+  const undoB = el("button", { type: "button", title: `Undo the last action (${LinkKeys.showOf("undo")})`, disabled: !LinkActions.canUndo() }, "Undo", el("kbd", { textContent: LinkKeys.showOf("undo") }));
+  undoB.onclick = () => LinkActions.undo();
+  const bar = LinkActions.bar(row.target);
+  const remove = bar.querySelector('[data-cmd="remove"]');
+  if (remove) remove.onclick = e => { e.stopPropagation(); cardRemove(); };
+  const more = bar.querySelector(".more");
+  more ? more.before(skipB, undoB) : bar.append(skipB, undoB);
+  box.append(el("div", { className: "cm-actions" }, bar),
+    el("p", { className: "cm-keys" }, "Drag left to remove, right or up to skip, or ", ...LinkKeys.hint(["tags", "accept", "read", "remove", "next", "prev", "group-next", "open"])));
+}
+
+function armCard(card) {
+  if (!card) return;
+  let x0 = 0, y0 = 0, dx = 0, dy = 0, dragging = false;
+  card.addEventListener("pointerdown", e => {
+    if (e.target.closest("a, button, input")) return;
+    dragging = true; dx = dy = 0;
+    x0 = e.clientX; y0 = e.clientY;
+    card.setPointerCapture(e.pointerId);
+    card.style.transition = "none";
+  });
+  card.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    dx = e.clientX - x0; dy = e.clientY - y0;
+    card.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 22}deg)`;
+    const p = Math.min(Math.abs(dx) / CARD_THRESHOLD, 1);
+    card.querySelector(".cm-stamp.keep").style.opacity = dx > 0 ? p : 0;
+    card.querySelector(".cm-stamp.drop").style.opacity = dx < 0 ? p : 0;
+  });
+  card.addEventListener("pointerup", () => {
+    if (!dragging) return;
+    dragging = false;
+    card.style.transition = "transform .28s ease-out, opacity .28s ease-out";
+    if (dx <= -CARD_THRESHOLD) cardRemove();
+    else if (dx >= CARD_THRESHOLD || dy < -CARD_THRESHOLD) cardSkip();
+    else { card.style.transform = ""; card.querySelectorAll(".cm-stamp").forEach(s => (s.style.opacity = 0)); }
+  });
+  card.addEventListener("pointercancel", () => { dragging = false; card.style.transform = ""; });
+}
+
 function renderDetail() {
   const box = $("detail");
   const i = cursorAt();
@@ -1040,6 +1264,7 @@ function renderDetail() {
     box.append(el("div", { className: "dempty" }, el("b", { textContent: "Nothing selected" }), "Pick a link on the left, or walk to one with W S."));
     return;
   }
+  if (cardMode) return renderCards(row);
   const { link, stash, tab } = row.target;
   const url = link.url;
   const kind = kindOf(url);
@@ -1903,6 +2128,8 @@ $("sel-done").onclick = () => setSelecting(false);
 $("sel-clear").onclick = () => { ticked.clear(); lastTick = null; paintTicks(); };
 $("sel-all").onclick = () => { for (const r of rowsOnPage) ticked.add(r.target.link.key); paintTicks(); };
 $("sel-tag").onclick = () => bulkTagPopover($("sel-tag"));
+$("t-cards").onclick = () => setCardMode(!cardMode);
+$("t-cards").setAttribute("aria-pressed", String(cardMode));
 $("t-compact").onclick = () => { setPref(pane ? COMPACT_PANE_KEY : COMPACT_KEY, !compactNow()); applyView(); };
 applyView();
 

@@ -913,8 +913,8 @@ await check("the popup's view buttons switch to an open viewer instead of openin
   store.linkTags = { [vm.runInContext('keyOf("https://s.example/1")', ctx)]: ["read later"] };
   for (const type of ["open-cards", "open-cards", "open-explore", "open-list", "open-list"]) await browser.handle({ type });
   const pages = p => tabs.filter(t => t.url.startsWith(`moz-extension://fake-uuid/${p}`)).length;
-  // Explore is Links' detail pane: it opens the Links tab, not one of its own.
-  assert.deepEqual([pages("cards.html"), pages("stash-cards.html"), pages("list.html")], [1, 0, 1], "one tab per viewer");
+  // Explore and Cards are Links now (its detail pane and its card mode): each opens the one Links tab.
+  assert.deepEqual([pages("cards.html"), pages("stash-cards.html"), pages("list.html")], [0, 0, 1], "one Links tab for every viewer");
   let c = plain(await browser.handle({ type: "link-counts" }));
   assert.deepEqual([c.total, c.untagged, c.sources, c.stashes], [3, 2, { tabs: 2, import: 0, list: 2 }, 1]);
   store.viewSources = ["list"];

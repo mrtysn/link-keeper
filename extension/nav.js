@@ -7,10 +7,8 @@
  * window.LinkSources stays for the pages that read it, always every source. */
 
 (() => {
-  const PAGES = [
-    ["list.html", "Links", "Every link, the selected one in full beside the list"],
-    ["cards.html", "Cards", "Go through links one card at a time"],
-  ];
+  // One page now: Links, with card mode. The list stays for any page added later.
+  const PAGES = [];
   const ALL = ["tabs", "import", "list"];
   const here = location.pathname.split("/").pop() || "list.html";
 

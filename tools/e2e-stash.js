@@ -225,8 +225,7 @@ await kase("Links, its detail pane and Cards load in Firefox with the bar, the s
   };
   const list = await open("list.html?group=stash", (d, v) => v.location.pathname === "/list.html" && hasGroups(d));
   const d = list.doc;
-  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["Links", "Cards"], "viewers in the bar");
-  eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "Links", "Links is marked");
+  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), [], "one page: no viewer tabs in the bar");
   eq(d.querySelectorAll(".app-sources").length, 0, "one pile: no source chips");
   yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
   yes([...d.querySelectorAll(".group > h2 .n")].some(n => /\d+ tabs?/.test(n.textContent)), "each stash heading counts its tabs");
@@ -241,8 +240,9 @@ await kase("Links, its detail pane and Cards load in Firefox with the bar, the s
   yes(explore.doc.querySelectorAll("ul.rows > li").length > 300, "every link is listed");
   yes(explore.doc.querySelector("#detail .dtitle"), "a link is shown in full");
 
-  const cards = await open("cards.html", d => d.querySelector(".card.top"));
-  yes(cards.doc.querySelector(".card.top"), "Cards deals a card");
+  const cards = await open("cards.html", (d, v) => v.location.pathname === "/list.html" && d.querySelector(".cm-card.top"));
+  yes(cards.doc.querySelector(".cm-card.top"), "the Cards address opens Links in card mode, dealing a card");
+  cards.view.localStorage.setItem("listCards", "0");   // card mode is remembered; the later cases want the detail
 
   const sessions = await browser.tabs.create({ url: browser.runtime.getURL("sessions.html"), active: true });
   const listUrl = browser.runtime.getURL("list.html");
@@ -432,8 +432,8 @@ await kase("popup: the Stash ▾ scopes stash what they say from the popup", asy
 await kase("Cards: t opens the tag editor over the card; a tag typed there is saved for that link", async () => {
   await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
   await addItems(["a", "b", "c"].map(n => ({ url: `https://card.example/${n}`, title: `Card ${n}` })));
-  const { tab, view, doc: d } = await openPage("cards.html", d => d.querySelector(".card.top .open"), "a card to be dealt");
-  const cardUrl = d.querySelector(".card.top .open")?.href;
+  const { tab, view, doc: d } = await openPage("list.html?cards", d => d.querySelector(".cm-card.top .cm-open"), "a card to be dealt");
+  const cardUrl = d.querySelector(".cm-card.top .cm-open")?.href;
   yes(cardUrl, "a card is dealt");
   d.body.dispatchEvent(new view.KeyboardEvent("keydown", { key: "t", bubbles: true }));
   const input = await until(() => d.querySelector(".tagpop .tagger input"), "the editor to open");
@@ -442,13 +442,14 @@ await kase("Cards: t opens the tag editor over the card; a tag typed there is sa
   input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   const linkOf = async () => (await getLinks()).links.find(l => l.url === cardUrl || l.key === keyOf(cardUrl));
   await until(async () => (await linkOf())?.tags.includes("from cards"), "the tag to be saved for the card's link");
-  await until(() => d.querySelector(".card.top .tags")?.textContent.includes("from cards"), "the card to show the tag");
+  await until(() => d.querySelector(".cm-card.top .tags")?.textContent.includes("from cards"), "the card to show the tag");
   const link = await linkOf();
   yes(link?.tags.includes("from cards"), `saved for the card's link: ${JSON.stringify(link?.tags)}`);
-  yes(d.querySelector(".card.top .tags")?.textContent.includes("from cards"), "the card shows it at once");
+  yes(d.querySelector(".cm-card.top .tags")?.textContent.includes("from cards"), "the card shows it at once");
   input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   await until(() => !d.querySelector(".tagpop"), "Escape to close the editor");
   eq(d.querySelector(".tagpop"), null, "Escape closes it");
+  view.localStorage.setItem("listCards", "0");
   await browser.tabs.remove(tab.id);
 });
 

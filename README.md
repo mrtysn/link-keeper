@@ -129,12 +129,13 @@ Opening or capturing a link records nothing about the link: there is no opened, 
 The **popup** is about the page you are on. Two lines say whether you hold it already — **Held**:
 each stash as its day (or name) and tab count, and *Not in a stash* when it was added on its own; **Captured**: the day, or not
 yet — and, if you do, its tags with nine of the palette, your most used first, the field ready, so
-`1`–`9` or typing tags it then and there. The likely next step is the filled button: **+ List** for a
+`1`–`9` or typing tags it then and there. The likely next step is the filled button: **+ Add** for a
 page you do not hold, **Capture** for one held without its text. Then what to do with it: **Capture** (its ▾
 captures with a full-page screenshot, or with a note), **Remove** — one copy; held in several places,
-its menu names each and you pick one, with **Undo** after — and, for a page not saved yet, **+ List**
-and **Stash tab**. The foot holds links to Links, Cards and Tags, each switching to the
-viewer's tab if one is open, and a small **Stash N tabs** (its ▾ holds the other scopes, each with its count). The last
+its menu names each and you pick one, with **Undo** after — and, for a page not saved yet, **+ Add**
+and **Stash tab**. The strip across the top holds the icon and version, a small **Stash N tabs** (its ▾
+holds the other scopes, each with its count) and **↗**, which opens the Links page (switching to its tab if
+one is open). The last
 action's message comes back when the popup reopens only on the page it was about, within ten
 minutes. Adding links in
 bulk, exports and settings live on the Links page.
@@ -146,7 +147,7 @@ Every link is one pile: a link you mean to get to, whatever context it came in. 
 was added **on its own** — shared from the phone, pulled from a chat, added with `Ctrl+Shift+U` or
 the CLI, or a page you captured — and then it is *not in a stash*. Where it came from is shown on the
 link (its stash, its date, the chat thread it was sent in), never as a separate list. Three
-**viewers** show the pile: **Links** and **Cards**; tags live on Links (the Tags page folded into it in 5.59). (The source chips that narrowed it to
+**Links** page shows the pile, with card mode for going through it one at a time; tags live on it too (the Tags page folded in at 5.59, the Cards page at 5.60). (The source chips that narrowed it to
 stashed tabs, imports or a reading list went in 5.58, with Move to list and its `L` key.)
 
 A URL is one link wherever it is held (a trailing slash, `www.` and a plain `#anchor` do not make a different one; a
@@ -350,27 +351,23 @@ flag for links you went over and want out of focus, set by hand, is reserved and
 Only walking repeats while held, so a held key cannot remove a run of links. Keys never act
 while a field has the keyboard; `Esc` leaves it. Opening a link never changes the stash.
 
-### Cards — one at a time
+### Card mode — one at a time
 
-Open *Cards* and go through the links in the chosen sources as a shuffled deck, one card at a time —
-every link, one tag, the untagged ones or those not captured, as the selector says. `T` tags the
-card, `F` accepts its suggested tags and deals the next card, `E` captures it, `Q` (or a drag left) removes its copy, `S` (or a drag right or up) skips it —
-it comes back next session — and `W` steps back a card. The sidebar lists every stash and then the links in no stash, the card's row marked as the
-deck moves; `A` `D` deal the first link of the previous or next stash, and a click deals any row.
+**Cards** in the Links bar (remembered; the old Cards page's address turns it on) draws the detail pane
+as a stack of cards: the group the cursor is in — a stash, a site, a tag, a day, whatever **Group by**
+makes — in list order, or mixed with **Shuffle**. The sidebar marks the card on top. `T` tags the card,
+`F` accepts its suggested tags and deals the next, `E` captures it, `Q` (or a drag left) removes its copy,
+`S` (or a drag right or up) skips it, and `W` steps back. At the end of a group the next group's cards
+are dealt; `A` `D` jump a group. The tally counts what was removed and skipped this session. The
+**Suggested** chip in the Tags row narrows the list (and the stack) to untagged links the tag model has
+suggestions for.
 
-A card shows what is known. A captured page (`Ctrl+Shift+K`, or **Capture** on any page, key `3`)
-carries its headline, text, embedded links, images and screenshot preview; a stashed tab never captured
-shows only its tab title and address — `x.com/i/status/2086188444317819246` tells you nothing, so
-capturing first makes a card worth looking at.
+A card shows what is known. A captured page (`Ctrl+Shift+K`, or **Capture**, key `3`) carries its
+headline, text, images and screenshot preview; a stashed tab never captured shows only its tab title and
+address, so capturing first makes a card worth looking at.
 
-Removing takes out only the copy the card stands for, into the Trash, and `⌘Z` puts it back. Skipping records
-nothing.
-
-The deck is shuffled fresh each visit: ordered by date it would be 133 x.com cards in a row, and
-mixing the domains keeps each card worth a look.
-The **Order** choice beside the deck selector (remembered) changes that: *Oldest first* or *Newest first* by
-save date, or *By site*, one site at a time with the site holding most links first. Links you have passed
-this session are dimmed in the sidebar, so your place in the pile shows; the card on show never is.
+Removing takes out only the copy the card stands for, into the Trash, and `⌘Z` puts it back on top.
+Skipping records nothing.
 
 ### Stashing tabs
 

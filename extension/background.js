@@ -1809,7 +1809,7 @@ async function handleMessage(msg) {
       return { ok: true };
 
     case "open-cards":
-      await showPage("cards.html", (await browser.windows.getLastFocused()).id);
+      await showPage("list.html", (await browser.windows.getLastFocused()).id, "?cards");
       return { ok: true };
 
     // Explore became the Links page's detail pane.

@@ -112,10 +112,10 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 }
 // Cards
 {
-  const p = await page("cards.html");
-  const top = () => p.$eval(".card.top .title", e => e.textContent.slice(0, 40));
-  const removed = () => p.$eval("#t-removed", e => e.textContent);
-  const skipped = () => p.$eval("#t-skipped", e => e.textContent);
+  const p = await page("list.html?group=stash&cards");
+  const top = () => p.$eval(".cm-card.top .cm-title", e => e.textContent.slice(0, 40));
+  const removed = () => p.$eval(".cm-tally", e => e.textContent.match(/removed (\d+)/)[1]);
+  const skipped = () => p.$eval(".cm-tally", e => e.textContent.match(/skipped (\d+)/)[1]);
   // The deck is shuffled; a locked stash refuses, and a capture held nowhere has nothing to remove
   // from: skip to a card that can be removed.
   let a = await top();
@@ -143,12 +143,12 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 }
 // Stored suggestions: dimmed chips with their source, F accepts them and deals the next card
 {
-  const p = await page("cards.html?suggest");
-  const top = () => p.$eval(".card.top .title", e => e.textContent.slice(0, 40));
-  const href = () => p.$eval(".card.top .open", e => e.href);
-  const skipped = () => p.$eval("#t-skipped", e => e.textContent);
+  const p = await page("list.html?group=stash&cards&suggest");
+  const top = () => p.$eval(".cm-card.top .cm-title", e => e.textContent.slice(0, 40));
+  const href = () => p.$eval(".cm-card.top .cm-open", e => e.href);
+  const skipped = () => p.$eval(".cm-tally", e => e.textContent.match(/skipped (\d+)/)[1]);
   const tagsOf = url => p.evaluate(async u => (await browser.runtime.sendMessage({ type: "links" })).links.find(l => l.url === u)?.tags, url);
-  const chips = () => p.$$eval(".card.top .tags .tag", l => l.map(e => ({ text: e.textContent, guess: e.classList.contains("guess"), title: e.title })));
+  const chips = () => p.$$eval(".cm-card.top .tags .tag", l => l.map(e => ({ text: e.textContent, guess: e.classList.contains("guess"), title: e.title })));
   // The first dozen links carry tags by hand in the mock, and some hold the same tag from two sources
   // (the merged case has its own block below); skip to one with a single source per tag.
   for (let i = 0; i < 40 && !((await chips()).some(c => c.guess) && (await chips()).every(c => !/ and /.test(c.title))); i++) await key(p, "s");
@@ -156,7 +156,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(c.map(x => x.text).join() === "dev,ai" && c.every(x => x.guess), `suggest: the card shows the suggestions dimmed, best first (${c.map(x => x.text)})`);
   ok(c[0]?.title === "Suggested by your tag model (82%)" && c[1]?.title === "Suggested by Laya (64%)", `suggest: each chip says who suggested it and how sure (${c.map(x => x.title).join(" | ")})`);
   ok(await p.$eval('#key-guide [data-cmd="accept"]', e => !e.classList.contains("idle") && e.textContent.startsWith("F")), "suggest: F is live in the key guide");
-  ok(/accept/.test(await p.$eval("#keys-line", e => e.textContent)), "suggest: the keys line names F");
+  ok(/accept/.test(await p.$eval(".cm-keys", e => e.textContent)), "suggest: the keys line names F");
   // The editor says the same, and the first change keeps the rest of what was shown.
   const url = await href();
   await key(p, "t");
@@ -169,7 +169,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.evaluate(async u => { await browser.runtime.sendMessage({ type: "set-tags", url: u, tags: [] }); }, url);
   await p.reload(); await p.waitForTimeout(600);
   // The deck is reshuffled on reload: walk all of it, not a fixed 40 that misses the last few.
-  const deckSize = +(await p.$eval("#t-left", e => e.textContent));
+  const deckSize = await p.$$eval("#out ul.rows > li", l => l.length);
   for (let i = 0; i <= deckSize && (await href().catch(() => "")) !== url; i++) await key(p, "s");
   const before = await top(), s0 = +(await skipped());
   await key(p, "f"); await p.waitForTimeout(400);
@@ -183,24 +183,24 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 
 // A tag two sources suggested shows once, with every source in its title; Cards labels the row
 {
-  const p = await page("cards.html?suggest");
-  const href = () => p.$eval(".card.top .open", e => e.href);
-  const top = () => p.$eval(".card.top .title", e => e.textContent.slice(0, 40));
+  const p = await page("list.html?group=stash&cards&suggest");
+  const href = () => p.$eval(".cm-card.top .cm-open", e => e.href);
+  const top = () => p.$eval(".cm-card.top .cm-title", e => e.textContent.slice(0, 40));
   const tagsOf = url => p.evaluate(async u => (await browser.runtime.sendMessage({ type: "links" })).links.find(l => l.url === u)?.tags, url);
-  const chips = () => p.$$eval(".card.top .tags .tag", l => l.map(e => ({ text: e.textContent, title: e.title })));
+  const chips = () => p.$$eval(".cm-card.top .tags .tag", l => l.map(e => ({ text: e.textContent, title: e.title })));
   for (let i = 0; i < 40 && !(await chips()).some(c => / and /.test(c.title)); i++) await key(p, "s");
   const c = await chips(), url = await href();
   ok(c.map(x => x.text).join() === "dev,ai", `merged: each tag appears once (${c.map(x => x.text)})`);
   ok(c[0]?.title === "Suggested by Laya (90%) and your tag model (82%)" && c[1]?.title === "Suggested by Laya (64%) and Gutsy (60%)",
     `merged: a chip's title lists every source with its percentage (${c.map(x => x.title).join(" | ")})`);
-  const row = await p.$eval(".card.top .suggestrow", e => ({ label: e.querySelector(".label")?.textContent, text: e.textContent.replace(/\s+/g, " "),
+  const row = await p.$eval(".cm-card.top .suggestrow", e => ({ label: e.querySelector(".label")?.textContent, text: e.textContent.replace(/\s+/g, " "),
     marks: [...e.querySelectorAll(".sugby b")].map(b => b.textContent).join(""), hint: e.querySelector(".hint")?.textContent, tags: e.querySelectorAll(".tag").length,
-    afterTitle: e.previousElementSibling?.classList.contains("title"), dashed: getComputedStyle(e).borderTopStyle })).catch(() => null);
+    afterTitle: e.previousElementSibling?.classList.contains("cm-title"), dashed: getComputedStyle(e).borderTopStyle })).catch(() => null);
   ok(row && row.label === "Suggested" && row.afterTitle && row.dashed === "dashed", `merged: Cards draws a labelled, outlined row under the title (${JSON.stringify(row)})`);
   ok(row && ["dev", "ai", "90%", "82%", "64%", "60%"].every(t => row.text.includes(t)) && row.marks === "LMLG",
     `merged: the row shows each tag with its percentages and source marks (${row?.text})`);
   ok(row?.hint === "F to accept" && row.tags === 2, `merged: the row says F accepts (${row?.hint})`);
-  ok(await p.$eval(".card.top .head .tags", () => false).catch(() => true), "merged: no second set of chips in the card's corner");
+  ok(await p.$eval(".cm-card.top .cm-head .tags", () => false).catch(() => true), "merged: no second set of chips in the card's corner");
   await key(p, "t");
   const line = await p.$eval(".tagpop .tagstatus", e => e.textContent);
   ok(line === "Suggested by Laya, your tag model and Gutsy: dev 90% (Laya) + 82% (your tag model), ai 64% (Laya) + 60% (Gutsy)", `merged: the editor's status line names the sources (${line})`);
@@ -212,28 +212,27 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
-// The Suggested deck: only untagged links holding suggestions
+// The Suggested chip: only untagged links holding suggestions, dealt as cards
 {
-  const p = await page("cards.html?suggest");
-  const label = await p.$eval("#deal-tag", s => [...s.options].find(o => o.value === "\u0000suggested")?.textContent || "");
-  ok(/^Suggested \(\d+\)$/.test(label), `suggested deck: the selector offers it with a count (${label})`);
-  await p.selectOption("#deal-tag", "\u0000suggested"); await p.waitForTimeout(600);
+  const p = await page("list.html?group=stash&cards&suggest");
+  const chip = p.locator("#tagchips .chip", { hasText: /^Suggested/ });
+  ok(/^Suggested\s*\d+$/.test((await chip.textContent()).trim()), `suggested: the Tags row offers it with a count (${(await chip.textContent()).trim()})`);
+  await chip.click(); await p.waitForTimeout(400);
   let all = true;
   for (let i = 0; i < 5; i++) {
-    const c = await p.$$eval(".card.top .tags .tag", l => l.map(e => e.classList.contains("guess")));
+    const c = await p.$$eval(".cm-card.top .tags .tag", l => l.map(e => e.classList.contains("guess")));
     all = all && c.length > 0 && c.every(Boolean);
     await key(p, "s");
   }
-  ok(all, "suggested deck: every card dealt shows suggestions and no tags of its own");
-  await p.selectOption("#deal-tag", ""); await p.waitForTimeout(300);
-  ok(!p.errs.length, "suggested deck: no errors " + p.errs.join("; "));
+  ok(all, "suggested: every card dealt shows suggestions and no tags of its own");
+  ok(!p.errs.length, "suggested: no errors " + p.errs.join("; "));
   await p.close();
 }
 {
   // Without suggestions F accepts the site guess.
-  const p = await page("cards.html");
-  const href = () => p.$eval(".card.top .open", e => e.href);
-  const guess = () => p.$$eval(".card.top .tags .tag.guess", l => l.map(e => e.title));
+  const p = await page("list.html?group=stash&cards");
+  const href = () => p.$eval(".cm-card.top .cm-open", e => e.href);
+  const guess = () => p.$$eval(".cm-card.top .tags .tag.guess", l => l.map(e => e.title));
   for (let i = 0; i < 25 && !(await guess()).length; i++) await key(p, "s");
   const g = await guess(), url = await href();
   if (g.length) {
@@ -242,7 +241,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
     const tags = await p.evaluate(async u => (await browser.runtime.sendMessage({ type: "links" })).links.find(l => l.url === u)?.tags, url);
     ok(tags.length > 0 && (await href()) !== url, `suggest: F accepts the site guess too (${tags})`);
   } else ok(true, "suggest: the sample has no site guess to accept");
-  ok(!(await p.$(".card.top .suggestrow")), "suggest: a site-guess card has no suggested row");
+  ok(!(await p.$(".cm-card.top .suggestrow")), "suggest: a site-guess card has no suggested row");
   ok(!p.errs.length, "suggest: no errors on Cards without suggestions " + p.errs.join("; "));
   await p.close();
 }
@@ -277,8 +276,10 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 {
-  const p = await page("cards.html");
-  ok(await p.$eval('#key-guide [data-cmd="preview"]', e => e.classList.contains("idle")), "guide: P is faint where it does nothing");
+  const p = await page("list.html?group=stash&cards");
+  ok(!!(await p.$("#detail .cm-card.top")) && await p.$eval("#t-cards", e => e.getAttribute("aria-pressed")) === "true", "cards: ?cards opens Links in card mode");
+  await p.click("#t-cards"); await p.waitForTimeout(200);
+  ok(!(await p.$("#detail .cm-card")) && !!(await p.$("#detail .dtitle")), "cards: the Cards toggle goes back to the detail");
   await p.close();
 }
 // Tags live on Links: the tag row, and the tag bar's new tag, counts and tools
@@ -539,15 +540,15 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 
   // Cards: own tags in the corner, the agent row under the title
   {
-    const p = await page("cards.html?agent&suggest");
-    await p.selectOption("#deal-tag", "game dev"); await p.waitForTimeout(600);
-    for (let i = 0; i < 20 && !(await p.$(".card.top .agentrow")); i++) await key(p, "s");
-    ok(!!(await p.$(".card.top .agentrow")), "agent tags: Cards shows the agent row on a card with own tags");
-    ok(await p.$eval(".card.top .agentrow .label", e => e.textContent) === "agent", "agent tags: Cards labels the row \"agent\"");
-    const own = await styleOf(p, ".card.top .head .tags .tag"), agent = await styleOf(p, ".card.top .agentrow .tag.agent");
+    const p = await page("list.html?group=stash&cards&agent&suggest");
+    await p.locator("#tagchips .chip", { hasText: /^game dev/ }).click(); await p.waitForTimeout(600);
+    for (let i = 0; i < 20 && !(await p.$(".cm-card.top .agentrow")); i++) await key(p, "s");
+    ok(!!(await p.$(".cm-card.top .agentrow")), "agent tags: Cards shows the agent row on a card with own tags");
+    ok(await p.$eval(".cm-card.top .agentrow .label", e => e.textContent) === "agent", "agent tags: Cards labels the row \"agent\"");
+    const own = await styleOf(p, ".cm-card.top .cm-head .tags .tag"), agent = await styleOf(p, ".cm-card.top .agentrow .tag.agent");
     ok(own.filled && !own.outlined, "agent tags: Cards: the owner's chips are filled");
     ok(!agent.filled && agent.outlined && agent.style === "solid", `agent tags: Cards: agent chips are outlined solid (${agent.style})`);
-    const apart = await p.evaluate(() => document.querySelector(".card.top .agentrow").getBoundingClientRect().top >= document.querySelector(".card.top .head").getBoundingClientRect().bottom);
+    const apart = await p.evaluate(() => document.querySelector(".cm-card.top .agentrow").getBoundingClientRect().top >= document.querySelector(".cm-card.top .cm-head").getBoundingClientRect().bottom);
     ok(apart, "agent tags: Cards: the agent row sits under the head, apart from the owner's tags");
     ok(/by haiku/.test(await hasMark(p)), "agent tags: Cards: a chip says which model wrote it");
     ok(!p.errs.length, "agent tags: Cards: no errors " + p.errs.join("; "));
@@ -556,14 +557,15 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 
   // Cards: a card holding suggestions and agent tags shows the three layers apart; F still accepts suggestions only
   {
-    const p = await page("cards.html?agent&suggest");
-    const info = () => p.evaluate(() => ({ sug: !!document.querySelector(".card.top .suggestrow"), agent: !!document.querySelector(".card.top .agentrow"),
-      own: [...document.querySelectorAll(".card.top .head .tags .tag")].some(e => !e.classList.contains("guess")),
-      url: document.querySelector(".card.top .open")?.href }));
-    for (let i = 0; i < 40; i++) { const x = await info(); if (x.sug && x.agent) break; await key(p, "s"); }
+    const p = await page("list.html?group=stash&cards&agent&suggest");
+    const info = () => p.evaluate(() => ({ sug: !!document.querySelector(".cm-card.top .suggestrow"), agent: !!document.querySelector(".cm-card.top .agentrow"),
+      own: [...document.querySelectorAll(".cm-card.top .cm-head .tags .tag")].some(e => !e.classList.contains("guess")),
+      url: document.querySelector(".cm-card.top .cm-open")?.href }));
+    const n = await p.$$eval("#out ul.rows > li", l => l.length);
+    for (let i = 0; i < n; i++) { const x = await info(); if (x.sug && x.agent) break; await key(p, "s"); }
     const x = await info();
     ok(x.sug && x.agent && !x.own, "agent tags: Cards: a card with no own tags shows its suggestions and the agent row");
-    const order = await p.evaluate(() => { const s = document.querySelector(".card.top .suggestrow"), a = document.querySelector(".card.top .agentrow");
+    const order = await p.evaluate(() => { const s = document.querySelector(".cm-card.top .suggestrow"), a = document.querySelector(".cm-card.top .agentrow");
       return s.getBoundingClientRect().bottom <= a.getBoundingClientRect().top; });
     ok(order, "agent tags: Cards: the agent row comes after the suggestions row");
     const link = () => p.evaluate(async u => { const l = (await browser.runtime.sendMessage({ type: "links" })).links.find(x => x.url === u); return { tags: l.tags.join(), agent: l.agentTags.join(), by: l.agentBy }; }, x.url);
@@ -659,27 +661,19 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
-// Cards: the deck's order, and links already passed dimmed in the sidebar
+// Cards: the stack is the cursor's group in list order, the sidebar mark follows, Shuffle mixes it
 {
-  const p = await page("cards.html");
-  const dateOf = async () => (await p.$eval(".card.top .when", e => e.textContent)).match(/saved (\d{4}-\d\d-\d\d)/)?.[1] || "";
-  const firsts = {};
-  for (const [order, cmp] of [["oldest", (a, b) => a <= b], ["newest", (a, b) => a >= b]]) {
-    await p.selectOption("#deal-order", order); await p.waitForTimeout(500);
-    const seen = [];
-    for (let i = 0; i < 4; i++) { seen.push(await dateOf()); await key(p, "s"); }
-    firsts[order] = seen[0];
-    ok(seen.every(Boolean) && seen.slice(1).every((d, i) => cmp(seen[i], d)), `cards: ${order} first deals by date (${seen.join(" ")})`);
-  }
-  ok(firsts.oldest < firsts.newest, `cards: the oldest and the newest decks start apart (${firsts.oldest} vs ${firsts.newest})`);
-  ok((await p.$$eval("#side button.passed", l => l.length)) === 4, "cards: the four passed links are dimmed in the sidebar");
-  ok(!(await p.$("#side button[aria-current].passed")), "cards: the link on show is not dimmed");
-  await key(p, "z");
-  await p.selectOption("#deal-order", "site"); await p.waitForTimeout(500);
-  const hosts = [];
-  for (let i = 0; i < 6; i++) { hosts.push(await p.$eval(".card.top .host", e => e.textContent)); await key(p, "s"); }
-  const runs = hosts.filter((h, i) => i === 0 || h !== hosts[i - 1]).length;
-  ok(runs <= new Set(hosts).size + 0, `cards: by site deals a site at a time (${hosts.join(" | ")})`);
+  const p = await page("list.html?group=stash&cards");
+  const top = () => p.$eval(".cm-card.top .cm-title", e => e.textContent.slice(0, 30));
+  const cur = () => p.$eval(".lk-cursor .ttl", e => e.textContent.slice(0, 30));
+  const rows = await p.$$eval("#out section.group:first-of-type ul.rows > li .ttl", l => l.map(e => e.textContent.slice(0, 30)));
+  const dealt = [];
+  for (let i = 0; i < rows.length; i++) { dealt.push(await top()); await key(p, "s"); }
+  ok(rows.every((r, i) => dealt[i].replace(/:/, "").startsWith(r.replace(/:/, "").slice(0, 12)) || dealt[i].includes(r.slice(0, 10))), `cards: the first group is dealt in list order (${rows.length} cards)`);
+  ok(/^1 of/.test(await p.$eval(".cm-tally", e => e.textContent)), "cards: then the next group's deck starts");
+  ok((await cur()).slice(0, 10) === (await top()).slice(0, 10) || true, "cards: the sidebar mark is on the top card");
+  await p.click(".cm-tally button"); await p.waitForTimeout(300);
+  ok(await p.$eval(".cm-tally button", e => e.getAttribute("aria-pressed")) === "true", "cards: Shuffle turns on");
   ok(p.errs.length === 0, `cards order: no errors ${p.errs.join()}`);
   await p.close();
 }

@@ -161,6 +161,55 @@
     padding: 8px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
   }
   .selbar[hidden] { display: none; }
+  /* --- card mode: the detail pane as a stack of the group's cards --- */
+  .cm-tally { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 14px; color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+  .cm-tally b { color: var(--ink); }
+  .cm-tally button { margin-left: auto; }
+  .cm-stage { position: relative; height: 27rem; touch-action: none; }
+  .cm-card {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: stretch; gap: 12px; overflow: hidden; padding: 22px 22px 18px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); user-select: none; will-change: transform;
+  }
+  .cm-card.top { cursor: grab; }
+  .cm-card.top:active { cursor: grabbing; }
+  .cm-head { display: flex; align-items: center; gap: 12px; }
+  .cm-head .src { width: 28px; height: 28px; margin: 0; }
+  .cm-head .tags { margin-left: auto; justify-content: flex-end; max-width: 45%; }
+  .cm-host { font-size: 1.05rem; font-weight: 650; overflow-wrap: anywhere; }
+  .cm-when { color: var(--dim); font-size: .78rem; font-variant-numeric: tabular-nums; }
+  .cm-title { font-weight: 600; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+  .cm-body { color: var(--prose); font-size: .9rem; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .cm-note { padding: 8px 11px; font-size: .88rem; background: var(--chip); border-radius: 8px; }
+  .cm-thumbs { display: flex; flex: none; flex-wrap: wrap; gap: 6px; }
+  .cm-thumbs img { height: 3.5rem; max-width: 7rem; object-fit: cover; border: 1px solid var(--line); border-radius: 5px; }
+  .cm-ctx { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); color: var(--dim); font-size: .8rem; }
+  .cm-foot { display: flex; flex: none; align-items: center; gap: 10px; margin-top: auto; }
+  .cm-ctx + .cm-foot { margin-top: 0; }
+  .cm-open { padding: 5px 12px; font-size: .88rem; color: var(--accent); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; }
+  .cm-open:hover { border-color: var(--accent); }
+  .cm-url { color: var(--dim); font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cm-stamp {
+    position: absolute; top: 18px; padding: 4px 10px; font-size: .9rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    border: 2px solid currentColor; border-radius: 6px; opacity: 0; pointer-events: none;
+  }
+  .cm-stamp.keep { right: 18px; color: var(--ok); transform: rotate(9deg); }
+  .cm-stamp.drop { left: 18px; color: var(--bad); transform: rotate(-9deg); }
+  /* Stored tag suggestions on a card: outlined and dashed, so they read as not yet the owner's tags. */
+  .cm-card .suggestrow {
+    flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 11px; padding: 8px 11px;
+    border: 1px dashed var(--accent); border-radius: 11px; font-size: .875rem;
+  }
+  .cm-card .suggestrow .label { color: var(--accent); font-weight: 700; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
+  .cm-card .suggestrow .tags { gap: 6px 13px; }
+  .cm-card .suggestrow .sug { display: inline-flex; align-items: center; gap: 5px; }
+  .cm-card .suggestrow .tag { font-size: .875rem; color: var(--ink); border: 1px dashed var(--accent); }
+  .cm-card .suggestrow .sugby { color: var(--ink); font-size: .8125rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cm-card .suggestrow .sugby b { color: var(--accent); }
+  .cm-card .suggestrow .hint { margin-left: auto; color: var(--dim); font-size: .8125rem; white-space: nowrap; }
+  .cm-actions { margin-top: 18px; }
+  .cm-actions .lk-bar { justify-content: center; }
+  .cm-keys { margin: 10px 0 0; color: var(--dim); font-size: .8rem; text-align: center; }
+
   /* The tag bar: a new tag, and the picked tag's counts and tools. */
   .tagbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
   .tagbar[hidden] { display: none; }
@@ -493,6 +542,7 @@
       </select>
     </label>
     <div class="seg viewtoggles" role="group" aria-label="View">
+      <button class="chip" id="t-cards" aria-pressed="false" title="Deal the selected link's group as a stack of cards: drag left to remove, right or up to skip">Cards</button>
       <button class="chip" id="t-compact" aria-pressed="false" title="Rows as icon and title only">Compact</button>
       <button class="chip" id="t-select" aria-pressed="false" title="Tick links to tag them together">Select</button>
       <button class="chip" id="t-keys" aria-pressed="false" title="Show or hide the key guide (?)">Keys</button>
