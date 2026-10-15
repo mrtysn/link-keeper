@@ -23,7 +23,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `native/` | the helpers Firefox starts for the add-on, registered by `native/install.zsh`: `open-local-files.py` reopens stashed local-file tabs; `link-keeper-bridge.py` backs the add-on's storage up to disk and lets local agents reach it (see *Backups and agents*) |
 | `mac/` | the Link Refresh app: its project-lifecycle manifest (`project-lifecycle.json`), icon and `write-launcher.zsh`, which writes the launcher the bundle runs; `project-lifecycle -C mac install` builds, signs and installs it |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`link-keeper.mjs` — the agents' CLI: read and change links, tags, captures and stashes, live from Firefox or from the latest backup (`--help`)<br>`test-bridge.mjs` — check the bridge and the CLI against a stand-in extension<br>`test-bridge-firefox.zsh` — check backups, restore, agent undo and the CLI in a headless Firefox<br>`release.zsh` — ship a batch: bump the version, sign on AMO, open it in Firefox, commit the release (once per finished batch; AMO allows 24 signings a day)<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`survey-stashed-sites.py` — count stashed links per site, and show which pages of a site are main pages or items (for the filtered-out rules)<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox, its bridge helper pointed at temporary folders so the real backups are never read or written<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks; each check starts from empty stashes, list and tags and waits on what a page draws, never on a delay<br>`test-extractors.zsh` — check in headless Firefox that an x.com capture holds every rendered reply, and that a page walk gathers the ones x.com drops while scrolling, against the saved pages in `extractor-fixtures/`<br>`test-instagram-export.py` — check the Instagram importer against a made-up export: threads, accounts, origins<br>`test-refresh-instagram-accounts.zsh` — run `refresh.zsh` on made-up exports for two accounts, in a temporary repo with its own config<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup, Links, Cards and Tags in any browser with a fake extension API and real capture text<br>`preview-frames/test-preview-frames.zsh` — check in headless Firefox that the Links detail pane's live preview frames sites that forbid framing, and nothing else can<br>`preview-pages/test-keys.zsh` — drive Links (with and without its detail pane), Cards, Tags and the popup in that preview with the shared keys and check each action and its undo, the tag library, the tag palette and the hover previews<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`tag-model/` — learn the owner's tags and suggest them for untagged links (see *Tag suggestions*) |
+| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`link-keeper.mjs` — the agents' CLI: read and change links, tags, captures and stashes, live from Firefox or from the latest backup (`--help`)<br>`test-bridge.mjs` — check the bridge and the CLI against a stand-in extension<br>`test-bridge-firefox.zsh` — check backups, restore, agent undo and the CLI in a headless Firefox<br>`release.zsh` — ship a batch: bump the version, sign on AMO, open it in Firefox, commit the release (once per finished batch; AMO allows 24 signings a day)<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`survey-stashed-sites.py` — count stashed links per site, and show which pages of a site are main pages or items (for the filtered-out rules)<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox, its bridge helper pointed at temporary folders so the real backups are never read or written<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks; each check starts from empty stashes, list and tags and waits on what a page draws, never on a delay<br>`test-extractors.zsh` — check in headless Firefox that an x.com capture holds every rendered reply, and that a page walk gathers the ones x.com drops while scrolling, against the saved pages in `extractor-fixtures/`<br>`test-instagram-export.py` — check the Instagram importer against a made-up export: threads, accounts, origins<br>`test-refresh-instagram-accounts.zsh` — run `refresh.zsh` on made-up exports for two accounts, in a temporary repo with its own config<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup and Links (card mode included) in any browser with a fake extension API and real capture text<br>`preview-frames/test-preview-frames.zsh` — check in headless Firefox that the Links detail pane's live preview frames sites that forbid framing, and nothing else can<br>`preview-pages/test-keys.zsh` — drive Links (list and card mode) and the popup in that preview with the shared keys and check each action and its undo, the tag library, the tag palette and the hover previews<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`tag-model/` — learn the owner's tags and suggest them for untagged links (see *Tag suggestions*) |
 
 ## Backups and agents
 
@@ -58,7 +58,7 @@ shims and Homebrew before anything else; without that, `python3` is simply absen
 That is the whole routine, and it covers both sources: the newest export under Telegram's download
 folder, and — if one exists — the newest Instagram export that actually contains messages. It resolves
 every link it can without a browser, rebuilds both HTML views, and then holds the result on a loopback
-port. Open the extension's list page and it collects the file itself — no dialog, nothing to paste.
+port. Open the extension's Links page and it collects the file itself — no dialog, nothing to paste.
 
 Better still, exports are optional altogether once the phone-share path is up: the `android/` share
 target puts **Link Keeper** in Android's share sheet, POSTs the link to the `receiver/` endpoint on
@@ -133,7 +133,7 @@ yet — and, if you do, its tags with nine of the palette, your most used first,
 page you do not hold, **Capture** for one held without its text. Then what to do with it: **Capture** (its ▾
 captures with a full-page screenshot, or with a note), **Remove** — one copy; held in several places,
 its menu names each and you pick one, with **Undo** after — and, for a page not saved yet, **+ Add**
-and **Stash tab**. The strip across the top holds the icon and version, a small **Stash N tabs** (its ▾
+and **Stash tab**. The strip across the top holds the icon, the name with the version under it, a small **Stash N tabs** (its ▾
 holds the other scopes, each with its count) and **↗**, which opens the Links page (switching to its tab if
 one is open). The last
 action's message comes back when the popup reopens only on the page it was about, within ten
@@ -146,9 +146,9 @@ Every link is one pile: a link you mean to get to, whatever context it came in. 
 **stash** (made from your open tabs, or imported from OneTab, TidyTab, a file or pasted text), or it
 was added **on its own** — shared from the phone, pulled from a chat, added with `Ctrl+Shift+U` or
 the CLI, or a page you captured — and then it is *not in a stash*. Where it came from is shown on the
-link (its stash, its date, the chat thread it was sent in), never as a separate list. Three
-**Links** page shows the pile, with card mode for going through it one at a time; tags live on it too (the Tags page folded in at 5.59, the Cards page at 5.60). (The source chips that narrowed it to
-stashed tabs, imports or a reading list went in 5.58, with Move to list and its `L` key.)
+link (its stash, its date, the chat thread it was sent in), never as a separate list. The
+**Links** page is the one page: it shows the pile, with card mode for going through it one at a time, and holds the tags too (the Tags page folded in at 5.59, the Cards page at 5.60; their old addresses forward to it). (The source chips that narrowed it to
+stashed tabs, imports or a reading list went in 5.58, with Move to list and its `L` key. What was the reading list is now **Not in a stash**.)
 
 A URL is one link wherever it is held (a trailing slash, `www.` and a plain `#anchor` do not make a different one; a
 `#fragment` holding a `/`, like Gmail's `#inbox/<message id>`, does). Outside the stash grouping it shows once, with
@@ -158,8 +158,8 @@ entries.
 
 ### Tags
 
-A tag belongs to a link — the URL wherever it is held — so tagging it on Links shows on its Cards
-copies too. Until a link has tags of its own, what kind of site it is shows in their place,
+A tag belongs to a link — the URL wherever it is held — so tagging it shows on all its
+copies. Until a link has tags of its own, what kind of site it is shows in their place,
 dashed: `code` (GitHub, GitLab…), `video`, `post`, `discussion`, `game`, `paper`, `doc`, `article`,
 `local file`. Guesses are never saved; the first change in the editor makes the shown tags yours,
 and removing every tag brings the guess back.
@@ -174,10 +174,10 @@ and the old Tags page's address forwards there.
 tags of its own: a chip's hover says who suggested it and how sure — *Suggested by your tag model
 (82%)*, *by Laya* (system-one) or *by Gutsy* — and the editor's status line lists them. A tag two
 sources both suggested shows once, its hover naming each: *Suggested by Laya (90%) and Gutsy (60%)*;
-chips run in order of their highest percentage. In Cards a link with stored suggestions also gets a
+chips run in order of their highest percentage. In card mode a link with stored suggestions also gets a
 labelled **Suggested** row under the title, dashed so it reads as not yet your tags: each tag with
 every source's mark (L Laya, G Gutsy, M your tag model) and percentage, and an *F to accept* hint. `F` accepts everything shown
-as the link's tags in one step (site guesses too) and, in Cards, deals the next card; `⌘Z` takes it
+as the link's tags in one step (site guesses too) and, in card mode, deals the next card; `⌘Z` takes it
 back. To fix one instead, open the editor and change it: the first change saves what was shown plus
 the change, so removing one wrong suggestion keeps the rest. They are stored apart from tags
 (`tagSuggestions`, `{ [link key]: { at, tags: [{ tag, p, by }] } }`, `p` 0–1, `by` `system-one`, `gutsy` or
@@ -189,7 +189,7 @@ entry stays in storage after the link is tagged, unshown.
 **Agent tags** are a third layer, written by Claude agents and never counted as your tags. Each link
 shows them in a row of their own after yours, labelled **agent**, as outlined chips: your tags are
 filled, a suggestion's dashed, an agent's solid-outlined, so the three differ in form as well as place.
-The row is on Links (the detail pane's editor), List, Cards (under the title, after any Suggested row),
+The row is on Links (the detail pane's editor, and in card mode under the title, after any Suggested row),
 the tag library's link lists and the tag editor, and a chip's hover names the model. They are stored
 apart (`agentTags`, `{ [link key]: { at, by, tags: [name] } }`, `by` the model such as `haiku`), change
 neither your tags nor the suggestions, and `F` still accepts only the suggestions. Agents write them with
@@ -197,21 +197,21 @@ neither your tags nor the suggestions, and `F` still accepts only the suggestion
 removes a link's entry; the message is `set-agent-tags`, journaled so `undo` reverts it) and read them with
 `link-keeper agent-tags`; `links --json` carries `agentTags` and `agentBy` per link.
 
-- `F` accepts the shown suggestions (or site guesses) as the link's tags; Cards moves on to the next card.
+- `F` accepts the shown suggestions (or site guesses) as the link's tags; card mode moves on to the next card.
 - `T` on any page opens the editor: the link's chips, a field, and under it a palette of every tag
   there is — click one, or press `1`–`9` on the empty field, to put it on or take it off. Typing
   narrows the palette (spaces and punctuation ignored, so `gamejam` finds *game jam*); Enter or Tab
   takes the first match, and a name the palette lacks is offered as **+ new tag**. Backspace takes
-  the last tag off; Escape stops. Every change is saved at once. the Links detail pane has the editor in its
-  detail pane, and Cards opens it over the card.
-- **Tagging many in a row** works on every page: Enter on the empty field moves to the next link
+  the last tag off; Escape stops. Every change is saved at once. the editor sits in the Links
+  detail pane, and card mode opens it over the card.
+- **Tagging many in a row**: Enter on the empty field moves to the next link
   with its editor already open, so `T`, type, Enter, Enter, type, … runs down the links; Escape
-  stops. Narrow first to the links that need it: **Untagged** is a tag chip on Links, and
-  an option in Cards' tag selector. Cards' **Suggested** deals only the untagged links holding
-  stored suggestions, most confident first, so `F` and a fix clear them quickly.
+  stops. Narrow first to the links that need it: **Untagged** is a chip in the Tags row, and
+  so is **Suggested**, which keeps only the untagged links holding
+  stored suggestions, so `F` and a fix clear them quickly.
 - A stash heading's **⋯ → Tag all tabs…** adds one tag to every tab in it.
-- List has a row of tag chips — any of them, or **Untagged** for the links with none of their own —
-  and **Group by Tag**, where a link shows under each of its tags. Cards deals one tag at a time.
+- Links has a row of tag chips — any of them, or **Untagged** for the links with none of their own —
+  and **Group by Tag**, where a link shows under each of its tags. In card mode, Group by Tag deals one tag at a time.
 - The tag library is the Tags row and tag bar on Links; a tag is a collection, its links the list
   once it is picked. It starts with presets — *to-read, to-watch, to-try, reference, inspiration,
   work, personal, buy, dev, ai, design, news, video, shopping, music, games* — ahead of the tags
@@ -282,28 +282,29 @@ stopped run resumes where it stopped; the result, `{url: [tags]}`, is written to
 `agent-tags-set.json` beside it and sent with `link-keeper agent-tags-set FILE --by haiku` (merges;
 `--all` replaces). `--no-write` only writes the file and prints that command.
 
-### Acting on a link — the same on every page
+### Acting on a link — the same in every view
 
-Links, Cards and Tags offer one set of actions on a link, drawn the same way and answering to
+Rows, the detail pane and cards offer one set of actions on a link, drawn the same way and answering to
 the same keys. There are four things to do with a link: **tag** it (`T`, or `F` to accept what is suggested), **capture** it (save its text,
-images and links), **remove** it, or **skip** it for now. Under the one link Cards and the Links detail pane show,
-**Open**, **Tags**, **Capture** and **Remove** are buttons with their keys; on a row of List,
-Tags, Capture and Remove show. Move, To list and removing the link's *other* copies sit under **⋯** —
+images and links), **remove** it, or **skip** it for now. Under the one link the detail pane and card mode show,
+**Open**, **Tags**, **Capture** and **Remove** are buttons with their keys; on a row,
+Tags, Capture and Remove show. Move and removing the link's *other* copies sit under **⋯** —
 nothing acts on more than the copy in front of you unless you pick it there. The keys are laid out
 for a left hand on WASD: W S walk (walking on is skipping) and A D jump a group, as in a game. The
 number row works as reddit's keyboard navigation (RES) has it.
 
 | Key | Action |
 |---|---|
-| `W` `S` (`1` `2`, `↑` `↓`) | previous / next link; a sidebar and the view beside it move together; held, they repeat |
-| `A` `D` | previous / next group: the section on Links (a stash, grouped by stash), the stash on Cards, the tag on Tags |
+| `W` `S` (`1` `2`, `↑` `↓`) | previous / next link (in card mode `S` skips the card and `W` steps back); the list and the pane beside it move together; held, they repeat |
+| `A` `D` | previous / next group: the section on Links (a stash, grouped by stash; in card mode, the next group's stack) |
 | `T` | tags |
-| `F` | accept the suggested tags as the link's tags (Cards then deals the next card) |
+| `F` | accept the suggested tags as the link's tags (card mode then deals the next card) |
 | `E` (`3`) | capture: load it in a background tab and save its text, images and links |
 | `Q` (`⌘⌫`) | remove this copy — from its stash, or the one added on its own — then on to the next link |
 | `4` | open — a stashed tab reopens through its stash, keeping its container |
 | `M` | move to another stash (a field filters the stashes) |
 | `⌘Z` | undo — any of the above, a removal or a move included; a stash emptied by it is written again |
+| `P` | the live preview for this link on / off |
 | `/` `?` `Esc` | filter · the key guide · back out |
 
 The **key guide** draws these keys where they sit on the keyboard, docked in the bottom-right corner
@@ -321,10 +322,10 @@ letter.
 
 **Filtered out.** Some pages are tools, not reading: an inbox, a home feed, Drive's home, your own
 profile. They are still stashed with the rest, but a rule in **Settings → Filtered out** tags them
-**filtered-out**, and Links and Cards keep them out of the pile and its counts; Links' filters
+**filtered-out**, and Links keeps them out of the pile and its counts; its filters
 are **All** (the pile), split with nothing left over into **Captured**, **Not captured** and
 **Local & browser** (files and browser pages, which cannot be captured), and **Filtered out**, which
-shows only these, apart from the pile; Tags lists them
+shows only these, apart from the pile; the Tags row lists them
 like any tag. A rule is one site's main page —
 `reddit.com` is Reddit's front page and never a post; `*` stands for anything, as in
 `mail.google.com/mail/u/*/#inbox`, which is the inbox but not an email under it. Saving applies the
@@ -334,13 +335,13 @@ it tagged. Right-click a page → **Filter out this page** adds it.
 **Hover previews.** Anything that names something held elsewhere previews it after a moment's
 hover, in a card you can move into and click: a stash (its name, when it was stashed, its tabs, and
 where this link sits among them), the other stashes holding a link, a tag (its newest links), a
-link in a sidebar or on Tags (its text, picture, state, tags and where it is held), a site chip on
-List (its links and how many are captured), and an *In N stashes* badge (the stashes holding it). Escape, a click elsewhere or leaving closes it. One module draws them all (`peek.js`): a page
+link in a compact row (its text, picture, state, tags and where it is held), a site chip on
+Links (its links and how many are captured), and an *In N stashes* badge (the stashes holding it). Escape, a click elsewhere or leaving closes it. One module draws them all (`peek.js`): a page
 marks an element with `Peek.mark(node, kind, id)`, and a new kind is one `Peek.kind()` renderer.
 
 Whether a link was captured shows the same way everywhere: a **captured** badge (its date on hover)
 or a dashed **not captured** on a row, card or the detail pane's header, and a page icon beside the title in Links'
-rows and the Cards sidebar. 
+rows.
 
 There is no opened, seen, kept, dropped or skipped state, and nothing marks a link automatically: opening
 or capturing it changes nothing about it. Keep and Drop left the pages in 5.38, and their code is gone;
@@ -355,7 +356,7 @@ while a field has the keyboard; `Esc` leaves it. Opening a link never changes th
 
 **Cards** in the Links bar (remembered; the old Cards page's address turns it on) draws the detail pane
 as a stack of cards: the group the cursor is in — a stash, a site, a tag, a day, whatever **Group by**
-makes — in list order, or mixed with **Shuffle**. The sidebar marks the card on top. `T` tags the card,
+makes — in list order, or mixed with **Shuffle**. The list marks the card on top. `T` tags the card,
 `F` accepts its suggested tags and deals the next, `E` captures it, `Q` (or a drag left) removes its copy,
 `S` (or a drag right or up) skips it, and `W` steps back. At the end of a group the next group's cards
 are dealt; `A` `D` jump a group. The tally counts what was removed and skipped this session. The
@@ -388,17 +389,16 @@ default key, *Stash only this tab* and *Show stashed tabs*, can be bound in Fire
 Stashes are **Firefox bookmarks**, as TidyTab's were: *Other Bookmarks / Link Keeper stashes*, one
 folder per stash named after its time (or what you rename it to), one bookmark per tab in tab order.
 So they outlive the extension, travel with Firefox Sync, and can be edited in Firefox's own library;
-the page shows what the bookmarks hold. What a bookmark cannot carry — a tab's container and a stash's
-lock and star — sits beside it in the add-on's
+the page shows what the bookmarks hold. What a bookmark cannot carry — a tab's container — sits beside it in the add-on's
 storage; an uninstall loses those, never a tab. A reinstall finds the folder again by its name.
 Stashes made before 5.9 move into bookmarks once, when 5.9 first runs; the old record is kept aside
 (`sessions_before_bookmarks`) rather than deleted.
 
-There is one List tab to show stashes in, like OneTab's tab: pin it, and stashing, the popup's
-**Stashed** button and the menu all switch to that tab, grouped by stash, in whichever window it is,
+There is one Links tab to show stashes in, like OneTab's tab: pin it, and stashing, the popup's
+**↗** and the menu all switch to that tab, grouped by stash, in whichever window it is,
 instead of opening another. A new one opens only when none is open. Stashing a whole window while
 the page is pinned in a different window closes the stashed window, as OneTab does. Until 5.14 this
-was a separate Stashed tabs page; its address (`sessions.html`) now forwards to List grouped by
+was a separate Stashed tabs page; its address (`sessions.html`) now forwards to Links grouped by
 stash, so a tab pinned on it keeps working. Link Keeper's own pages are never stashed.
 
 - Pinned tabs, empty tabs and never-stash sites stay open; everything else is stashed. Stashing
@@ -436,15 +436,16 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
 **The detail pane** is always on: the rows sit in a column on the left and the selected one shows in
 full beside it — Explore, before 5.43, was this as a page of its own, and its old address now opens Links. Click any row or walk with `W` `S`, the pane following; `A` `D`
 jump a section, and Space / ⇧Space scroll a long pane. It shows the link's capture, whether it is on
-in other stashes, where it came from, and how many links share its site, with the usual actions.
-Two more toggles in the bar, each remembered: **Compact** shows a row as its icon and title only (on
-by default with the pane, and then hovering a title previews the link). A stash heading is its name and count;
+in other stashes, where it came from, and how many links share its site, with the usual actions
+(with **Cards** on, it shows the card stack instead; see *Card mode*). The edge between the list and the pane drags to resize
+them. Beside **Cards**, the bar has **Compact**, remembered: a row as its icon and title only (on
+by default with the pane, and then hovering a title previews the link), **Select** and **Keys**. A stash heading is its name and count;
 its actions (Open all, Rename, Tag all tabs…, Delete…) are under its **⋯**. `?stash=<id>` opens one stash alone, with an **Only … ×**
 banner to show everything again; a stash's hover preview links there.
 
 **Select** puts a checkbox on every row (shift-click ticks the run since the last tick). A bar at the foot
 counts what is ticked: **Tag…** adds one tag, picked or typed, to all of them and keeps the tags they had;
-**Select all shown** ticks everything the filters leave; **Done** clears the ticks and hides the bar.
+**Select all shown** ticks everything the filters leave; **Clear** unticks them; **Done** clears the ticks and hides the bar.
 
 The **live preview** is a third pane on the right of the detail (drag its edge to resize it; × closes it), showing the page itself, half a second after you land on a
 link: **Off** as each link opens, **This link** (`P`) for the link you are on only, or **Keep on** for
@@ -465,16 +466,17 @@ a throwaway headless Firefox — real tabs, real bookmarks, a temporary profile 
 
 ### The Links page
 
-*Open list* in the popup opens it — the readable view when there are hundreds of links, rather than
+The popup's **↗** opens it — the readable view when there are hundreds of links, rather than
 a 22rem popup.
 
 - The top of the page is three bands before the list: the counts and the page actions (only **Stash this
   window** is filled; the rest are quiet text buttons, and one whose panel is open is outlined), the
-  filter box, the five filters as one segmented control, the grouping and the view switches (a tick means
-  on, **Keys** shows the key guide), then one line each of **Sites** and **Tags** chips whose label opens
-  them whole. Selected chips come first so they stay in sight on the one line.
-- **Group by** Stash (each stash under its heading with its actions, then the links in no stash),
-  Domain (local files and browser pages under their own names), Day, Month, or flat newest-
+  filter box, the five filters as one segmented control, the grouping and the view switches (**Cards**,
+  **Compact**, **Select**, and **Keys**, which shows the key guide), then one line each of **Sites** and **Tags** chips whose label opens
+  them whole; with one tag picked, the tag bar opens under them. Selected chips come first so they stay in sight on the one line.
+  The list, the detail pane and the live preview sit side by side below, each resizable.
+- **Group by** Stash (each stash under its heading with its actions, then the links in no stash,
+  under **Not in a stash**), Domain (local files and browser pages under their own names), Tag, Day, Month, or flat newest-
   or oldest-first. Grouped by stash, a URL in two stashes is a row in each; everywhere else it is
   one row.
 - Filter box searches URLs, titles, captured text, notes and embedded links; domain chips narrow to
@@ -483,7 +485,7 @@ a 22rem popup.
 - Rows show the captured title, the post's text and any links found inside it, so a tweet you
   already read is legible without opening it again.
 - Per row: **Tags**, **Capture** (or **Capture again**) and **Remove** (this copy), and **⋯** holds
-  Open or **Open in this tab**, Move, **To list**, the stash moves when grouped by stash, and a
+  Open or **Open in this tab** (for a link in no stash), Move, the stash moves when grouped by stash, and a
   **Remove from …** for each *other* place it is held.
 
 **Duplicates (N)**, shown when any address is held in more than one place among the sources on show
@@ -500,19 +502,19 @@ be left with no copy outside the Trash; the footer counts what is ticked and say
 Everything removed — from a stash or a link added on its own — Q, a stash's Delete, Duplicates, the CLI's
 `remove` — waits there for 30 days (the add-on's storage, key `trash`, so backups
 carry it). **Restore** puts a tab back in its stash at its old place with its marks, writing a deleted
-stash again once, and a reading-list link back on the list; **Delete forever** and **Empty Trash** ask
-first. Moving a link (to the list, between stashes) and undoing a move leave nothing in it; `⌘Z` after a removal takes its entry out again. Entries older than
+stash again once, and a link added on its own back among those in no stash; **Delete forever** and **Empty Trash** ask
+first. Moving a link between stashes and undoing a move leave nothing in it; `⌘Z` after a removal takes its entry out again. Entries older than
 30 days are dropped whenever the Trash is read, and at start. A capture removed through the CLI's
 `remove --capture` waits there too, as its own entry, and Restore puts it back.
 
-Clicking a reading-list title opens it in a new tab and marks that entry current, so a
-`Ctrl+Shift+K` there attaches the capture to the right list entry; clicking a stashed tab's title
+Clicking the title of a link in no stash opens it in a new tab and marks that entry current, so a
+`Ctrl+Shift+K` there attaches the capture to the right entry; clicking a stashed tab's title
 reopens it through its stash, in its container.
 
-### Filling the list
+### Filling Links
 
 - **`Ctrl+Shift+U`** or the popup's **+ Add** — add the page you are on, in no stash.
-- **Paste URLs** into List's **Import** and choose *Links on their own, in no stash*, one per line. Each
+- **Paste URLs** into Links' **Import** and choose *Links on their own, in no stash*, one per line. Each
   line may carry the date the link was originally saved, tab or space separated — which is exactly
   what the scripts in `importers/` produce:
 
@@ -534,7 +536,7 @@ already exist.
 viewport, and stitches the tiles into a single PNG named after the post. Leave the tab alone for a
 second while it walks the page.
 
-Files land in `~/Downloads/link-keeper/`, and the subfolder is configurable in List's **Settings**. It cannot be moved out of Downloads: the `downloads` API resolves filenames against
+Files land in `~/Downloads/link-keeper/`, and the subfolder is configurable in Links' **Settings**. It cannot be moved out of Downloads: the `downloads` API resolves filenames against
 the browser's download directory and rejects `..`, so no extension can write elsewhere. If the
 files need to live somewhere else, make that subfolder a symlink — Firefox writes through it.
 
@@ -569,10 +571,10 @@ destinations the post linked to. A bare `x.com/i/status/<id>` resolves fine, han
 
     ./importers/telegram.py result.json | ./importers/enrich-x.py > link-captures.jsonl
 
-Then, in the list page, **Import** → choose the file or paste it. Those links arrive already captured, so
+Then, on the Links page, **Import** → choose the file or paste it. Those links arrive already captured, so
 their cards show their text straight away.
 
-Import lives in the list page rather than the popup on purpose: choosing a file opens an OS dialog,
+Import lives on the Links page rather than the popup on purpose: choosing a file opens an OS dialog,
 which closes a browser-action popup and destroys its JavaScript before the change event can fire — the
 file is silently never read. A tab survives it.
 
@@ -658,7 +660,7 @@ chat does not re-litigate links already decided. Output and the sidecar both def
 `DATA_DIR` rather than the current directory. `tools/refresh.zsh` runs this on every export
 alongside the message view, into fixed filenames in `DATA_DIR` so the queue is right there after
 every refresh; `--urls` prints the same `URL<TAB>date` lines as `importers/telegram.py` if you
-just want to paste into List's Import instead.
+just want to paste into Links' Import instead.
 
 The link extraction underneath — walking `result.json`'s messages and text entities, the
 `.sh`/`.py`/`.so`/`.io`-as-TLD wrinkle, schemeless links held out rather than guessed at — lives
@@ -737,8 +739,8 @@ section, one of them showing its heading only after scrolling.
 
 ### Getting the data out
 
-List's **Export** menu writes `link-captures.jsonl` (captures), `link-worklist.jsonl` (the reading
-list) or every stash as JSON, to
+Links' **Export** menu writes `link-captures.jsonl` (captures), `link-worklist.jsonl` (the links in no
+stash) or every stash as JSON, to
 Downloads. Nothing clears the store in bulk, so exporting twice is fine.
 
 ## What gets extracted
@@ -798,7 +800,7 @@ still valid.
 | `tabs` | point the current tab at the next link |
 | `storage`, `unlimitedStorage` | hold the list and the captures between restarts |
 | `menus` | the right-click actions |
-| `downloads.open` | opening a screenshot from the list page, since a `file://` image cannot be loaded there |
+| `downloads.open` | opening a screenshot from the Links page, since a `file://` image cannot be loaded there |
 | `downloads` | write screenshot PNGs and the exported JSONL |
 | `notifications` | report the result of keyboard and menu actions, which have nowhere else to speak |
 | `*://*/*` *(optional)* | reading pixels for a screenshot; requested on first use, revocable, and not needed for text |
