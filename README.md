@@ -167,7 +167,7 @@ and removing every tag brings the guess back.
 Picking one tag in Links' **Tags** row opens the **tag bar** above the list: the tag's count in each layer —
 yours, the untagged links the model suggests it for, and those whose site suggests it — **Make it yours on
 N links** for the last two, **Rename**, **Merge into…**, its colour and **Delete** (⌘Z undoes a rename, merge or
-delete; a merge asks first). The bar also makes a **New tag**. `list.html?tag=<name>` opens Links on a tag,
+delete; a merge asks first). **+ New tag**, first in the Tags row, makes one: type its name, Enter, and it is picked so the bar offers its colour. `list.html?tag=<name>` opens Links on a tag,
 and the old Tags page's address forwards there.
 
 **Suggestions** from a local model take the guesses' place, dimmed the same way, until the link has
