@@ -1654,7 +1654,6 @@ const MENU = [
   { id: "menu-filter", title: "Filter out this page (a site's main page)", contexts: ["page"] },
   { id: "menu-sep", type: "separator", contexts: ["page", "selection", "image"] },
   { id: "menu-list", title: "Links", contexts: ["page", "selection", "image"] },
-  { id: "menu-cards", title: "Cards", contexts: ["page", "selection", "image"] },
   { id: "menu-sep-stash", type: "separator", contexts: ["page", "selection", "image"] },
   ...stashMenu("page", "Stash", ["page", "selection", "image"]),
   ...stashMenu("tab", "Stash to Link Keeper", ["tab"]),
@@ -1750,7 +1749,6 @@ async function onMenuClicked(info, tab) {
       break;
     }
     case "menu-list": await showPage("list.html", tab?.windowId); break;
-    case "menu-cards": await showPage("cards.html", tab?.windowId); break;
     case "menu-queue-link":
       if (info.linkUrl) {
         const res = await addItems([{ url: info.linkUrl.split("#")[0], saved_at: new Date().toISOString() }]);
@@ -1846,8 +1844,26 @@ async function grabChat(tabId, range) {
   if (r.mode === "since") r.since = Date.parse(`${r.since}T00:00:00`);
   if (r.mode === "since" && !Number.isFinite(r.since)) return { ok: false, error: "that date could not be read" };
   if (r.mode === "last") r.n = Math.max(1, Math.min(100000, Number(r.n) || CHAT_LAST_N));
-  const [{ result: res }] = await browser.scripting.executeScript({ target: { tabId }, func: range => window.LKChat.grab(range), args: [r] });
-  if (!res?.ok) return { ok: false, error: res?.error || "the chat could not be read" };
+  // Start the grab in the page, then check on it each second until it ends (chat-grab.js start/poll).
+  const call = async (func, args = []) => {
+    const [inj] = await browser.scripting.executeScript({ target: { tabId }, func, args });
+    if (inj?.error) throw new Error(inj.error.message || String(inj.error));
+    return inj?.result;
+  };
+  let res;
+  try {
+    const started = await call(range => window.LKChat.start(range), [r]);
+    if (!started?.ok) return { ok: false, error: started?.error || "the grab did not start on the page" };
+    for (const end = Date.now() + 17 * 60_000; Date.now() < end;) {
+      await new Promise(ok => setTimeout(ok, 1000));
+      const state = await call(() => window.LKChat.poll());
+      if (state?.done) { res = state.result; break; }
+    }
+  } catch (e) {
+    return { ok: false, error: `the chat could not be read: ${e.message || e}` };
+  }
+  if (!res) return { ok: false, error: "the grab did not finish within 17 minutes" };
+  if (!res.ok) return { ok: false, error: res.error || "the chat could not be read" };
   // A link typed into a message may still be t.co's wrapper; follow it to the real address.
   for (const m of res.messages) {
     for (const l of m.links || []) {

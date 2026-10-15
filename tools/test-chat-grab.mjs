@@ -129,6 +129,20 @@ await check("since a date loads only as far back as needed", async () => {
   assert.equal(calls(), 1);
 });
 
+await check("start and poll: the grab runs on, poll reports it done with the result; an error keeps its text", async () => {
+  const { LK } = makePage({ pages });
+  assert.equal(LK.start({ mode: "all" }, FAST).ok, true);
+  assert.equal(LK.start({ mode: "all" }).ok, false, "one grab at a time");
+  let state;
+  for (let i = 0; i < 200 && !(state = LK.poll()).done; i++) await new Promise(r => setTimeout(r, 25));
+  assert.deepEqual([state.done, state.result.ok, state.result.messages.length], [true, true, 12]);
+  const broken = makePage({ pages });
+  broken.LK.READERS.x.items = () => { throw new Error("boom"); };
+  broken.LK.start({ mode: "all" }, FAST);
+  for (let i = 0; i < 200 && !(state = broken.LK.poll()).done; i++) await new Promise(r => setTimeout(r, 25));
+  assert.deepEqual([state.result.ok, state.result.error], [false, "the grab broke: boom"]);
+});
+
 await check("a covered range says so; the last N stop without loading", async () => {
   const { LK } = makePage({ pages });
   assert.equal((await LK.grab({ mode: "last", n: 2 }, FAST)).stopped, "range");

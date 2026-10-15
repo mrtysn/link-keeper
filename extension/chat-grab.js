@@ -320,5 +320,20 @@ window.LKChat = window.LKChat || (() => {
     }));
   }
 
-  return { info, grab, READERS };
+  /* The extension drives a grab in two short calls rather than one long one: start() sets it going and
+   * returns at once, poll() reports how far it got and, at the end, its result. A grab takes minutes,
+   * and a script call that waits on a promise that long is not something to rely on. Any error is kept
+   * as its own text, so the notification can say what broke. */
+  let run = null;
+  function start(range, opts) {
+    if (run && !run.done) return { ok: false, error: "a grab is already running on this page" };
+    run = { done: false, result: null, started: Date.now() };
+    const mine = run;
+    grab(range, opts).then(res => { mine.result = res; }, e => { mine.result = { ok: false, error: `the grab broke: ${e?.message || e}` }; })
+      .finally(() => { mine.done = true; });
+    return { ok: true };
+  }
+  const poll = () => (run ? { done: run.done, result: run.done ? run.result : null, ms: Date.now() - run.started } : { done: true, result: { ok: false, error: "no grab was started on this page" } });
+
+  return { info, grab, start, poll, READERS };
 })();
