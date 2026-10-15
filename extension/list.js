@@ -752,7 +752,8 @@ function renderDomainChips() {
     b.onclick = () => { domainSel.has(host) ? domainSel.delete(host) : domainSel.add(host); render(); };
     return b;
   };
-  chipRow(box, "Sites", domainsExpanded, () => { domainsExpanded = !domainsExpanded; render(); },
+  // Opening or closing a row redraws that row only: a full render rebuilds every link row.
+  chipRow(box, "Sites", domainsExpanded, () => { domainsExpanded = !domainsExpanded; renderDomainChips(); },
     hosts.map(([host, n]) => chip(host, n)), domainSel, () => { domainSel.clear(); render(); });
 }
 
@@ -780,7 +781,7 @@ function renderTagChips() {
   const ordered = [...counts.entries()].sort((a, b) => (tagSel.has(b[0]) - tagSel.has(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
   for (const [t, n] of ordered) chips.push(chip(t, t, n, tagChip(t, !hand.has(t), "Suggested, not on any link as a tag yet")));
   if (tagSel.has(UNTAGGED)) chips.sort((a, b) => (b.getAttribute("aria-pressed") === "true") - (a.getAttribute("aria-pressed") === "true"));
-  chipRow(box, "Tags", tagsExpanded, () => { tagsExpanded = !tagsExpanded; render(); }, chips, tagSel, () => { tagSel.clear(); render(); });
+  chipRow(box, "Tags", tagsExpanded, () => { tagsExpanded = !tagsExpanded; renderTagChips(); }, chips, tagSel, () => { tagSel.clear(); render(); });
 }
 
 function setFilter(which) {
