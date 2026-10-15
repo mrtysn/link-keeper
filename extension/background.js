@@ -126,7 +126,8 @@ function dateOf(item) {
 }
 
 
-async function addItems(entries, note = "") {
+/* group: where the new links go — the day's group by default, a named batch's own, or null for none. */
+async function addItems(entries, note = "", group = dayGroup()) {
   const items = await getItems();
   const byId = new Map(items.map(i => [keyOf(i.url), i]));
   let added = 0, updated = 0, skipped = 0;
@@ -160,6 +161,10 @@ async function addItems(entries, note = "") {
   }
 
   await setItems(items);
+  if (group && added) {
+    const fresh = items.slice(-added).map(i => ({ url: i.url, title: i.title, saved_at: i.saved_at }));
+    await addToGroup(fresh, group);
+  }
   return { ok: true, added, updated, skipped, total: items.length };
 }
 
@@ -617,7 +622,9 @@ async function queueActiveTab() {
  */
 
 const ROOT_TITLE = "Link Keeper stashes";
-const TAB_META = ["container"];
+// saved_at: the link's own date (when a chat message was sent, a post was saved), kept per tab now
+// that every link sits in a group.
+const TAB_META = ["container", "saved_at"];
 const STASH_SETTINGS = { afterStash: "show", exclude: [] };
 /* The List page grouped by stash is where stashes are shown; sessions.html, the Stashed tabs page
  * before 5.14, only forwards there. The viewer pages themselves are never stashed: they are views,
@@ -673,9 +680,11 @@ const editMeta = fn => metaQueue(async () => {
 
 const getStashSettings = async () => ({ ...STASH_SETTINGS, ...await read("stashSettings", {}) });
 
-/* Newest first: { id, name, created_at, source, format,
- * tabs: [{ id, url, title?, container? }] }. Bookmarks moved or
- * edited in Firefox's own library show up here as they are. */
+/* In the order they came into Link Keeper, newest first: { id, name, created_at, ingested_at, source,
+ * format, group_key, tabs: [{ id, url, title?, container?, saved_at? }] }. ingested_at is when the
+ * group came in — written for groups made since 5.64, else the folder's own date — so an import of
+ * old stashes sits where it was imported, not at its stashes' dates. Bookmarks moved or edited in
+ * Firefox's own library show up here as they are. */
 async function getSessions() {
   await migrateStashes();
   const [tree] = await browser.bookmarks.getSubTree(await stashRoot());
@@ -686,9 +695,11 @@ async function getSessions() {
       id: folder.id,
       name: folder.title,
       created_at: m.created_at || new Date(folder.dateAdded).toISOString(),
+      ingested_at: m.ingested_at || (folder.dateAdded ? new Date(folder.dateAdded).toISOString() : m.created_at || null),
       // "import" when an import wrote it, "tabs" when it was stashed from open tabs.
       source: m.source === "import" ? "import" : "tabs",
       ...(m.format && { format: m.format }),
+      ...(m.group_key && { group_key: m.group_key }),
       tabs: (folder.children || []).filter(n => n.url).map(b => ({
         id: b.id,
         url: b.url,
@@ -697,7 +708,9 @@ async function getSessions() {
       })),
     };
   });
-  return sessions;
+  // Stable: groups with no date keep their bookmark order.
+  const at = s => Date.parse(s.ingested_at) || 0;
+  return sessions.map((s, i) => [s, i]).sort((a, b) => (at(b[0]) - at(a[0])) || a[1] - b[1]).map(([s]) => s);
 }
 
 async function findStash(id) {
@@ -708,14 +721,15 @@ async function findStash(id) {
  * reads it all back. ok is false unless every bookmark made is in the folder with its URL, and
  * every container is recorded. onFolder hears the new
  * folder's id before anything else is written, so a caller can undo a write that fails halfway. */
-async function writeStash(tabs, { name, created_at, onFolder, source, format } = {}) {
+async function writeStash(tabs, { name, created_at, onFolder, source, format, ingested_at, group_key } = {}) {
   const at = created_at || new Date().toISOString();
   const folder = await browser.bookmarks.create({ parentId: await stashRoot(), index: 0, title: name || stashTitle(at) });
   await onFolder?.(folder.id);
   const made = [];
   for (const t of tabs) made.push(await browser.bookmarks.create({ parentId: folder.id, title: t.title || t.url, url: t.url }));
   await editMeta(m => {
-    m.stashes[folder.id] = { created_at: at, ...(source === "import" && { source, ...(format && { format }) }) };
+    m.stashes[folder.id] = { created_at: at, ...(source === "import" && { source, ...(format && { format }) }),
+      ...(ingested_at && { ingested_at }), ...(group_key && { group_key }) };
     made.forEach((b, i) => {
       const extra = Object.fromEntries(TAB_META.filter(k => tabs[i][k] != null).map(k => [k, tabs[i][k]]));
       if (Object.keys(extra).length) m.tabs[b.id] = extra;
@@ -728,6 +742,42 @@ async function writeStash(tabs, { name, created_at, onFolder, source, format } =
     made.every((b, i) => have.get(b.id) === asBookmarked(tabs[i].url)) &&
     made.every((b, i) => !tabs[i].container || meta.tabs[b.id]?.container === tabs[i].container);
   return { id: folder.id, ok };
+}
+
+/* --- groups: every way links come in makes one -------------------------------------------------
+ * A stash, an import, a chat grab, a refresh hand-over and a single "+ Add" are the same thing: a
+ * group of links with the time it came in. A batch makes its own group; single adds collect into the
+ * day's ("Added Oct 15, 2026", group_key "day:2026-10-15"). Links already in the target group are not
+ * added twice. Each tab keeps its own date (saved_at). */
+const dayOf = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dayLabel = (d = new Date()) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+const dayGroup = () => ({ name: `Added ${dayLabel()}`, group_key: `day:${dayOf()}` });
+
+const groupQueue = serial();
+function addToGroup(tabs, { name, group_key, ingested_at } = {}) {
+  return groupQueue(async () => {
+    const seen = new Set();
+    const clean = tabs.filter(t => t?.url && !seen.has(keyOf(t.url)) && seen.add(keyOf(t.url)))
+      .map(t => ({ url: asBookmarked(t.url), ...(t.title && { title: String(t.title).slice(0, 500) }), ...(t.saved_at && { saved_at: t.saved_at }) }));
+    if (!clean.length) return { ok: true, added: 0 };
+    const target = group_key ? (await getSessions()).find(s => s.group_key === group_key) : null;
+    if (!target) {
+      const at = ingested_at || new Date().toISOString();
+      const res = await writeStash(clean, { name, created_at: at, ingested_at: at, group_key });
+      return { ok: res.ok, id: res.id, added: clean.length, made: true };
+    }
+    // Into the day's group, newest at the top: links it already holds are skipped.
+    const have = new Set(target.tabs.map(x => keyOf(x.url)));
+    const fresh = clean.filter(x => !have.has(keyOf(x.url)));
+    const made = [];
+    for (const [i, x] of fresh.entries()) made.push([await browser.bookmarks.create({ parentId: target.id, index: i, title: x.title || x.url, url: x.url }), x]);
+    await editMeta(m => {
+      for (const [b, x] of made) if (x.saved_at) m.tabs[b.id] = { ...(m.tabs[b.id] || {}), saved_at: x.saved_at };
+      // The group moves up as it fills: it came in again just now.
+      if (made.length && m.stashes[target.id]) m.stashes[target.id].ingested_at = new Date().toISOString();
+    });
+    return { ok: true, id: target.id, added: made.length };
+  });
 }
 
 async function removeStashFolder(id) {
@@ -768,6 +818,7 @@ function migrateStashes() {
  * if the data it touched changes afterwards. A patch acts only when its fingerprint matches what
  * is stored; otherwise it records why it skipped and changes nothing. One that throws is not
  * recorded, so the next launch tries it again. */
+const GROUP_PATCH = "2026-10-15-group-loose-links";
 const DATA_PATCHES = [
   {
     // The OneTab import of 29 Sep 2026 ran on 5.10, before imports were marked (5.14), so its
@@ -858,7 +909,83 @@ const DATA_PATCHES = [
       return gone;
     },
   },
+  {
+    // x.com's icon was saved from a tab showing a notification count, red dot and all. It goes; a
+    // clean tab saves it again (saveFavicons now skips counted tabs), and until then the drawn one shows.
+    id: "2026-10-15-drop-badged-x-icon",
+    async run() {
+      const all = await read("favicons", {});
+      const gone = ["x.com", "twitter.com", "www.x.com"].filter(h => all[h]);
+      for (const h of gone) delete all[h];
+      if (gone.length) await browser.storage.local.set({ favicons: all });
+      return { dropped: gone };
+    },
+  },
+  {
+    // Every link sits in a group since 5.64: the links in no stash become groups, one per day and
+    // source they came in ("Instagram export · Oct 14, 2026"), placed among the stashes by that day.
+    // Nothing else changes — their list entries and captures stay — so undoGrouping() takes the groups
+    // back out. A backup is written first.
+    id: GROUP_PATCH,
+    async run() {
+      if (typeof bridge !== "undefined") {
+        for (let i = 0; i < 20 && bridge.state !== "on"; i++) await new Promise(r => setTimeout(r, 500));
+        const saved = await backupNow("before-grouping");
+        if (!saved?.ok) throw new Error(`no backup, so nothing grouped: ${saved?.error || "the helper did not answer"}`);
+      }
+      return groupLooseLinks();
+    },
+  },
 ];
+
+// Where a loose link came from, by the importer that wrote its capture.
+const SOURCE_LABELS = { "instagram-export": "Instagram export", "watch-reel": "Instagram reels", "x-archive": "X archive",
+  fxtwitter: "Refresh", web: "Refresh", api: "Refresh", exa: "Refresh", redirect: "Refresh" };
+
+async function groupLooseLinks() {
+  const { links } = await getLinks();
+  const caps = new Map((await getCaptures()).map(c => [keyOf(c.url), c]));
+  const groups = new Map();
+  for (const l of links) {
+    if (!l.list || l.copies.length) continue;
+    const c = caps.get(l.key);
+    const when = l.list.added_at || c?.captured_at || new Date().toISOString();
+    const at = new Date(when);
+    const label = c?.via === "chat-grab" ? `${(Array.isArray(c.thread) ? c.thread[0] : c.thread) || "Chat"} chat`
+      : !l.list.loose && !SOURCE_LABELS[c?.via] ? "Added" : SOURCE_LABELS[c?.via] || "Added";
+    const day = dayOf(at);
+    const g = groups.get(`${day}|${label}`) || groups.set(`${day}|${label}`, { label, day, at: when, tabs: [] }).get(`${day}|${label}`);
+    if (when < g.at) g.at = when;
+    g.tabs.push({ url: l.url, title: l.title || l.cap?.title || undefined, saved_at: l.list.saved_at || c?.saved_at || undefined });
+  }
+  const made = [];
+  try {
+    for (const g of [...groups.values()].sort((a, b) => a.at.localeCompare(b.at))) {
+      g.tabs.sort((a, b) => (b.saved_at || "").localeCompare(a.saved_at || ""));
+      const res = await writeStash(g.tabs, { name: `${g.label} · ${dayLabel(new Date(g.at))}`, created_at: g.at, ingested_at: g.at,
+        ...(g.label === "Added" && { group_key: `day:${g.day}` }), onFolder: id => { made.push(id); } });
+      if (!res.ok) throw new Error("a group did not read back");
+    }
+  } catch (e) {
+    for (const id of made) await removeStashFolder(id);
+    throw e;
+  }
+  return { groups: made.length, links: [...groups.values()].reduce((n, g) => n + g.tabs.length, 0), stashes: made };
+}
+
+/* Takes the groups the conversion made back out: the links go back to being in no stash. Groups that
+ * have since been deleted are skipped; links added to one since are kept in no stash with the rest. */
+async function undoGrouping() {
+  const done = await read("dataPatches", {});
+  const rec = done[GROUP_PATCH];
+  if (!rec?.stashes?.length || rec.undone) return { ok: false, error: "there is no grouping to undo" };
+  const have = new Set((await getSessions()).map(s => s.id));
+  let removed = 0;
+  for (const id of rec.stashes) if (have.has(id)) { await removeStashFolder(id); removed++; }
+  rec.undone = new Date().toISOString();
+  await browser.storage.local.set({ dataPatches: done });
+  return { ok: true, removed };
+}
 
 let patching = null;
 function applyDataPatches() {
@@ -1183,6 +1310,9 @@ function saveFavicons(tabs) {
   const want = new Map();
   for (const t of tabs) {
     if (!/^https?:/.test(t.url || "") || !/^(data:image\/|https:)/.test(t.favIconUrl || "")) continue;
+    // A tab titled "(3) Home / X" shows a notification count, and sites like X draw it into the
+    // favicon too: that one would stand for the site with a red dot. Wait for a clean tab.
+    if (/^\(\d+\+?\)\s/.test(t.title || "")) continue;
     const host = hostOfUrl(t.url);
     if (host && !want.has(host)) want.set(host, t.favIconUrl);
   }
@@ -1883,6 +2013,13 @@ async function grabChat(tabId, range) {
   }
   const records = chatRecords(res.messages, chat.thread, chat.platform);
   const counts = await importChatRecords(records);
+  // The grab is a group of its own, newest message first, each link dated by its sending.
+  const label = chat.thread?.handle || chat.thread?.name || chat.site;
+  if (records.length) {
+    await addToGroup([...records].sort((a, b) => (b.saved_at || "").localeCompare(a.saved_at || ""))
+      .map(r => ({ url: r.url, title: r.text ? `${r.author?.handle ? `${r.author.handle}: ` : ""}${r.text.replace(/\s+/g, " ").slice(0, 200)}` : r.title, saved_at: r.saved_at })),
+      { name: `${label} chat · ${dayLabel()}` });
+  }
   const times = res.messages.map(m => m.at).filter(Number.isFinite);
   if (chat.key && times.length) {
     const grabs = await read("chatGrabs", {});
@@ -2025,6 +2162,14 @@ async function handleMessage(msg) {
     case "link-counts":
       return linkCounts();
 
+    case "grouping-status": {
+      const rec = (await read("dataPatches", {}))[GROUP_PATCH];
+      return rec ? { at: rec.at, groups: rec.groups || 0, links: rec.links || 0, undone: rec.undone || null, skipped: rec.skipped || null } : null;
+    }
+
+    case "undo-grouping":
+      return undoGrouping();
+
     case "chat-info":
       return msg.tabId ? chatInfo(msg.tabId).catch(() => null) : null;
 
@@ -2148,7 +2293,8 @@ async function handleMessage(msg) {
       return { ok: true };
 
     case "add":
-      return addItems(msg.urls, msg.note);
+      // A page's batch (a paste, a refresh's queue) names its own group; anything else joins the day's.
+      return addItems(msg.urls, msg.note, msg.group?.name ? { name: String(msg.group.name).slice(0, 200), group_key: msg.group.key ? String(msg.group.key) : undefined } : dayGroup());
 
     case "queue-active": {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -2190,6 +2336,7 @@ async function handleMessage(msg) {
       const captures = await getCaptures();
       const byId = new Map(captures.map(c => [keyOf(c.url), c]));
       let added = 0, enriched = 0, skipped = 0;
+      const fresh = [];
       for (const rec of msg.records || []) {
         if (!rec?.url) continue;
         const key = keyOf(rec.url);
@@ -2197,6 +2344,7 @@ async function handleMessage(msg) {
         if (!existing) {
           captures.push(rec);
           byId.set(key, rec);
+          fresh.push(rec);
           added++;
         } else if (!existing.text && rec.text) {
           Object.assign(existing, rec);
@@ -2206,8 +2354,13 @@ async function handleMessage(msg) {
         }
       }
       await setCaptures(captures);
-
-
+      // The links new to Link Keeper join the batch's group: the page names it, else the day's.
+      if (fresh.length) {
+        const held = new Set((await getSessions()).flatMap(s => s.tabs.map(t => keyOf(t.url))));
+        const group = msg.group?.name ? { name: String(msg.group.name).slice(0, 200), group_key: msg.group.key ? String(msg.group.key) : undefined } : dayGroup();
+        await addToGroup(fresh.filter(r => !held.has(keyOf(r.url)))
+          .map(r => ({ url: r.url, title: r.title || (r.text ? r.text.replace(/\s+/g, " ").slice(0, 200) : undefined), saved_at: r.saved_at || undefined })), group);
+      }
       await mergeTags(msg.records || []);
       return { ok: true, added, enriched, skipped, total: captures.length };
     }

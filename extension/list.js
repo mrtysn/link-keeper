@@ -1521,6 +1521,25 @@ $("filter-save").onclick = async () => {
 };
 
 /* Backups: what the bridge last wrote, and the files to restore from. */
+/* Every way in makes a group since 5.64; the links that were in no stash were grouped once. Settings
+ * says so, and can take those groups back out. */
+async function loadGrouping() {
+  const g = await send({ type: "grouping-status" });
+  $("grouping-set").hidden = !g || (!g.groups && !g.undone);
+  if (!g) return;
+  $("grouping-status").textContent = g.undone
+    ? `The ${plural(g.links, "link")} that were in no stash were grouped on ${new Date(g.at).toLocaleDateString()}, and the grouping was undone on ${new Date(g.undone).toLocaleDateString()}.`
+    : `Every link now sits in a group, in the order they came in. On ${new Date(g.at).toLocaleDateString()} the ${plural(g.links, "link")} that were in no stash became ${plural(g.groups, "group")}, one per day and source.`;
+  $("grouping-undo").hidden = !!g.undone;
+}
+$("grouping-undo").onclick = async () => {
+  if (!confirm("Take the groups made from the links that were in no stash back out? The links stay; they go back to being in no stash.")) return;
+  const res = await send({ type: "undo-grouping" });
+  $("grouping-msg").textContent = res?.ok ? `Removed ${plural(res.removed, "group")}.` : res?.error || "Unable to undo it";
+  await loadGrouping();
+  await load();
+};
+
 async function loadBackups() {
   const st = await send({ type: "bridge-status" });
   const last = st.lastBackup;
@@ -1567,7 +1586,7 @@ $("exclude-form").onsubmit = e => {
 function openPanel(which) {
   for (const id of ["settings-panel", "import-panel", "dups-panel", "trash-panel"]) $(id).hidden = id !== which || !$(id).hidden;
   $("settings").setAttribute("aria-expanded", String(!$("settings-panel").hidden));
-  if (!$("settings-panel").hidden) { loadFilterRules(); loadBackups(); }
+  if (!$("settings-panel").hidden) { loadFilterRules(); loadBackups(); loadGrouping(); }
   $("import").setAttribute("aria-expanded", String(!$("import-panel").hidden));
   $("dups").setAttribute("aria-expanded", String(!$("dups-panel").hidden));
   if (!$("import-panel").hidden) $("import-text").focus();
@@ -1996,14 +2015,14 @@ const captureSummary = res => `${res.added} new, ${res.enriched} filled in, ${re
  * one, then stays open with the result instead of vanishing. */
 $("import-go").onclick = async () => {
   if (parsed?.format === "captures") {
-    const res = await send({ type: "import-captures", records: parsed.records });
+    const res = await send({ type: "import-captures", records: parsed.records, group: batchGroup("Imported captures") });
     importDone(captureSummary(res));
     return load();
   }
   if (!parsed?.stashes.length) return;
   if (importDest() === "list") {
     // Re-adding a link with a date fills the date in; one already dated is left as it is.
-    const res = await send({ type: "add", urls: listEntries() });
+    const res = await send({ type: "add", urls: listEntries(), group: batchGroup("Pasted links") });
     importDone(`Added ${plural(res.added, "link")}` + (res.updated ? `, ${res.updated} dated` : "") +
       (res.skipped ? `, ${res.skipped} already here` : ""));
     return load();
@@ -2045,6 +2064,10 @@ $("import-go").onclick = async () => {
 
 /* If a refresh is waiting on loopback, take it now. Import is idempotent, so doing this on every
  * visit costs nothing and means the only step after a rebuild is opening this page. */
+/* A batch brought in from this page is one group, named for what it is and the day: "Pasted links ·
+ * Oct 15, 2026". Its key keeps one batch's several calls (a refresh's captures and queue) together. */
+const batchGroup = label => ({ name: `${label} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`, key: `batch:${label}:${Date.now()}` });
+
 async function takePendingRefresh() {
   const res = await send({ type: "fetch-pending" });
   if (!res?.ok) return;
@@ -2062,13 +2085,14 @@ async function takePendingRefresh() {
     records = parseStashImport(body).records || [];
   }
   if (!records.length && !queue.length) return;
+  const handover = batchGroup("Refresh hand-over");
   const bits = [];
   if (records.length) {
-    const out = await send({ type: "import-captures", records });
+    const out = await send({ type: "import-captures", records, group: handover });
     bits.push(`${records.length} read: ${out.added} new, ${out.enriched} filled in`);
   }
   if (queue.length) {
-    const out = await send({ type: "add", urls: queue });
+    const out = await send({ type: "add", urls: queue, group: handover });
     bits.push(`${queue.length} needing a browser: ${out.added} queued${out.skipped ? `, ${out.skipped} already there` : ""}`);
   }
   openPanel("import-panel");

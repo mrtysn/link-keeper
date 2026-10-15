@@ -896,6 +896,10 @@ await check("site icons: saved from tabs as they are stashed, as data when reada
   await bg.saveFavicons([{ ...withHttps, favIconUrl: "https://cdn.example/other.png" }]);
   assert.equal(store.favicons[host(withHttps.url)].icon, "https://cdn.example/other.png", "an unreadable one keeps its address");
   assert.equal(Object.keys(store.favicons).length, 2, "tabs without an icon add nothing");
+  await bg.saveFavicons([{ url: "https://x.com/home", title: "(3) Home / X", favIconUrl: "data:image/png;base64,REDDOT" }]);
+  assert.equal(store.favicons["x.com"], undefined, "a tab showing a notification count gives no icon");
+  await bg.saveFavicons([{ url: "https://x.com/home", title: "Home / X", favIconUrl: "data:image/png;base64,CLEAN" }]);
+  assert.equal(store.favicons["x.com"].icon, "data:image/png;base64,CLEAN", "a clean one does");
 });
 
 await check("page-info: the page you are on, with each stash that holds it, or nothing", async () => {
@@ -972,6 +976,52 @@ await check("the popup's view buttons switch to an open viewer instead of openin
   store.viewSources = ["list"];
   c = plain(await browser.handle({ type: "link-counts" }));
   assert.deepEqual([c.total, c.untagged], [3, 2], "counts take every link, whatever an old source choice says");
+});
+
+await check("every way in makes a group: loose links grouped by day and source once, undone cleanly; adds join the day's group; groups sort by when they came in", async () => {
+  const { browser, store, bm } = makeBrowser([]);
+  const bg = await load(browser);
+  // One stash stashed from tabs, its folder dated Sep 20.
+  await bg.getSessions();
+  const root = (await browser.bookmarks.getChildren("unfiled_____")).find(n => n.title === "Link Keeper stashes").id;
+  const f = await browser.bookmarks.create({ parentId: root, index: 0, title: "Sep 20 tabs" });
+  bm.nodes.get(f.id).dateAdded = Date.parse("2026-09-20T10:00:00Z");
+  await browser.bookmarks.create({ parentId: f.id, url: "https://tabs.example/1" });
+  store.items = [{ url: "https://added.example/a", added_at: "2026-08-10T10:00:00Z" }, { url: "https://added.example/b", added_at: "2026-08-10T12:00:00Z", saved_at: "2025-01-01T00:00:00Z" }];
+  store.captures = [
+    { url: "https://www.instagram.com/reel/AAA/", via: "instagram-export", captured_at: "2026-10-14T09:00:00Z", text: "a reel" },
+    { url: "https://x.com/a/status/1", via: "chat-grab", thread: ["@m"], senders: ["@m"], captured_at: "2026-10-15T08:00:00Z", saved_at: "2026-09-01T10:00:00Z", text: "a post" },
+    { url: "https://tabs.example/1", via: "web", captured_at: "2026-10-01T00:00:00Z", text: "in a stash already" },
+  ];
+  const seeded = store.dataPatches || {};
+  for (const id of ["2026-09-29-mark-onetab-import", "2026-10-07-capture-is-not-keep", "2026-10-07-filter-own-linkedin", "2026-10-15-purge-opened-marks-and-verdicts"]) seeded[id] = { at: "x" };
+  store.dataPatches = seeded;
+  await bg.applyDataPatches();
+  let s = plain(await bg.getSessions());
+  assert.deepEqual(s.map(x => [x.name, x.tabs.length]), [["@m chat · Oct 15, 2026", 1], ["Instagram export · Oct 14, 2026", 1], ["Sep 20 tabs", 1], ["Added · Aug 10, 2026", 2]],
+    "one group per day and source, in the order they came in, a stash among them by its folder's date");
+  assert.equal(s[3].group_key, "day:2026-08-10", "an Added group is that day's");
+  const links = plain(await browser.handle({ type: "links" })).links;
+  assert.equal(links.find(l => l.url === "https://x.com/a/status/1").date.slice(0, 10), "2026-09-01", "a grouped link keeps its own date");
+  assert.ok(!links.some(l => l.list && !l.copies.length), "no link is left in no stash");
+  assert.deepEqual(plain(await browser.handle({ type: "grouping-status" })).groups, 3);
+
+  // A single add today joins today's group, made at the first add and moved up as it fills.
+  await browser.handle({ type: "add", urls: ["https://new.example/1"] });
+  await browser.handle({ type: "add", urls: ["https://new.example/2", "https://new.example/1"] });
+  s = plain(await bg.getSessions());
+  const today = s.find(x => x.group_key === `day:${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`);
+  assert.deepEqual([s[0].id === today.id, today.tabs.map(x => x.url)], [true, ["https://new.example/2", "https://new.example/1"]], "today's group, newest at the top, no link twice");
+  // A named batch is a group of its own.
+  await browser.handle({ type: "add", urls: ["https://paste.example/1"], group: { name: "Pasted links · Oct 15, 2026", key: "batch:paste:1" } });
+  assert.equal(plain(await bg.getSessions())[0].name, "Pasted links · Oct 15, 2026");
+
+  const undo = plain(await browser.handle({ type: "undo-grouping" }));
+  assert.deepEqual([undo.ok, undo.removed], [true, 3]);
+  s = plain(await bg.getSessions());
+  assert.ok(!s.some(x => /Instagram export|@m chat|Added · Aug/.test(x.name)), "the groups it made are gone");
+  assert.ok(s.some(x => x.name === "Sep 20 tabs") && s.some(x => x.name === "Pasted links · Oct 15, 2026"), "and nothing else");
+  assert.equal(plain(await browser.handle({ type: "undo-grouping" })).ok, false, "only once");
 });
 
 /* Stash folders as the 29 Sep import left them: written within ten seconds, in these sizes, plus

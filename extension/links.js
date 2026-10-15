@@ -189,6 +189,8 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
       const link = linkFor(t.url, t.title);
       link.copies.push({ stash: s.id, tab: t.id, container: t.container || null });
       addSource(link, source);
+      // A tab's own date (a chat message's sending): the link's date unless the list has one.
+      if (t.saved_at && (!link.sentAt || t.saved_at < link.sentAt)) link.sentAt = t.saved_at;
       return { id: t.id, key: link.key, url: t.url, title: t.title || null, container: t.container || null };
     });
     return { id: s.id, name: s.name, created_at: s.created_at, source, format: s.format || null, tabs };
@@ -197,7 +199,8 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
 
   for (const link of byKey.values()) {
     const stashed = link.copies.map(c => stashAt.get(c.stash)).filter(Boolean).sort()[0] || null;
-    link.date = link.list?.saved_at || link.list?.added_at || stashed;
+    link.date = link.list?.saved_at || link.sentAt || link.list?.added_at || stashed;
+    delete link.sentAt;
     link.tags = (tags[link.key] || []).slice();
     link.suggested = link.tags.length ? [] : suggestionsFor(suggestions, link.key);
     const agent = agentTagsFor(agentTags, link.key);
