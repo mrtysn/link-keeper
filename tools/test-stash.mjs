@@ -1054,6 +1054,24 @@ await check("tag-links adds a tag to every link given and keeps the tags they ha
   assert.equal((await browser.handle({ type: "tag-links", urls: ["https://a.example/"], tags: [""] })).ok, false);
 });
 
+await check("a tag rename, merge or delete can be put back exactly", async () => {
+  const { browser, store } = makeBrowser([]);
+  store.items = [{ url: "https://a.example/" }, { url: "https://b.example/" }];
+  store.linkTags = { "a.example": ["x", "keep"], "b.example": ["y"] };
+  await load(browser);
+  const snapshot = () => JSON.stringify([store.linkTags, store.tagDefs?.list?.map(d => d.name)]);
+  await browser.handle({ type: "create-tag", name: "x" });
+  const start = snapshot();
+  const merge = await browser.handle({ type: "rename-tag", from: "x", to: "y" });
+  assert.deepEqual(store.linkTags["a.example"], ["y", "keep"]);
+  await browser.handle({ type: "put-tags-back", before: merge.before });
+  assert.equal(snapshot(), start, "the merge is undone");
+  const del = await browser.handle({ type: "delete-tag", tag: "keep" });
+  assert.deepEqual(store.linkTags["a.example"], ["x"]);
+  await browser.handle({ type: "put-tags-back", before: del.before });
+  assert.equal(snapshot(), start, "the delete is undone");
+});
+
 await check("removing keeps a copy in the trash for 30 days, and restoring puts it back where it was", async () => {
   const { browser, store } = makeBrowser([]);
   store.sessions = [{ id: "a", created_at: "2026-09-28T00:00:00Z", tabs: [{ url: "https://1.example/", title: "One" }, { url: "https://2.example/", container: "firefox-container-5" }, { url: "https://3.example/" }] }];

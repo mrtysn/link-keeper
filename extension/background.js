@@ -1547,9 +1547,24 @@ async function tagLinks(urls, add) {
 }
 
 /* Rename a tag everywhere; renaming onto an existing tag merges the two. */
+/* What a rename, merge or delete is about to change: the tags of every link carrying either name,
+ * and the library, so putTagsBack can undo it. */
+const tagsBefore = (all, lib, names) => ({
+  links: Object.fromEntries(Object.entries(all).filter(([, ts]) => names.some(n => ts.includes(n))).map(([k, ts]) => [k, [...ts]])),
+  lib: lib.map(d => ({ ...d })),
+});
+
+const putTagsBack = before => editTags((all, lib) => {
+  if (!before?.links || !Array.isArray(before.lib)) return { ok: false, error: "nothing to put back" };
+  for (const [k, ts] of Object.entries(before.links)) all[k] = tagList(ts);
+  lib.splice(0, lib.length, ...before.lib);
+  return { ok: true };
+});
+
 const renameTag = (from, to) => editTags((all, lib) => {
   const a = cleanTag(from), b = cleanTag(to);
   if (!a || !b) return { ok: false, error: "a tag needs a name" };
+  const before = tagsBefore(all, lib, [a, b]);
   // In the library: renamed in place, or, merging, the old one gone and the one it joined kept.
   const i = lib.findIndex(d => d.name === a);
   if (lib.some(d => d.name === b)) { if (i !== -1) lib.splice(i, 1); }
@@ -1560,11 +1575,12 @@ const renameTag = (from, to) => editTags((all, lib) => {
     all[k] = tagList(all[k].map(t => (t === a ? b : t)));
     n++;
   }
-  return { ok: true, links: n };
+  return { ok: true, links: n, before };
 });
 
 const deleteTag = tag => editTags((all, lib) => {
   const a = cleanTag(tag);
+  const before = tagsBefore(all, lib, [a]);
   const i = lib.findIndex(d => d.name === a);
   if (i !== -1) lib.splice(i, 1);
   let n = 0;
@@ -1573,7 +1589,7 @@ const deleteTag = tag => editTags((all, lib) => {
     all[k] = all[k].filter(t => t !== a);
     n++;
   }
-  return { ok: true, links: n };
+  return { ok: true, links: n, before };
 });
 
 /* Tags carried by imported records ({ url, tags }), merged into what is already set. */
@@ -1942,6 +1958,9 @@ async function handleMessage(msg) {
 
     case "delete-tag":
       return deleteTag(msg.tag);
+
+    case "put-tags-back":
+      return putTagsBack(msg.before);
 
     case "create-tag":
       return createTag(msg.name, msg.hue);

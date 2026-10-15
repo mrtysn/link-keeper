@@ -1071,13 +1071,22 @@ async function setPreview(mode) {
 
 /* Every tag set by hand, with how many links carry it. Renaming onto a tag that exists merges the
  * two; deleting takes it off every link. */
+/* Every tag on a link, as the chip row counts them: yours, and for links with none of yours, the
+ * model's suggestions or the site's guess (dashed). Yours can be renamed, merged and deleted here. */
 function renderTagManager() {
   const list = $("tag-list");
   list.textContent = "";
-  const counts = new Map();
-  for (const l of data.all.links) for (const t of l.tags) counts.set(t, (counts.get(t) || 0) + 1);
-  if (!counts.size) list.append(el("li", { className: "none", textContent: "None yet. Use ✎ on a row to add one." }));
-  for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+  const total = new Map(), own = new Map();
+  for (const l of data.all.links) {
+    for (const t of shownTags(l).tags) total.set(t, (total.get(t) || 0) + 1);
+    for (const t of l.tags) own.set(t, (own.get(t) || 0) + 1);
+  }
+  if (!total.size) list.append(el("li", { className: "none", textContent: "None yet. Press T on a link to add one." }));
+  for (const [t, all] of [...total.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+    const n = own.get(t) || 0;
+    const count = el("a", { className: "n", href: `tags.html?tag=${encodeURIComponent(t)}`, textContent: all,
+      title: `${t}: ${n} yours, ${all - n} suggested or guessed · open it in Tags` });
+    if (!n) { list.append(el("li", {}, tagChip(t, true, "Suggested or guessed; not on any link as your tag yet"), count)); continue; }
     const name = el("button", { className: "link", title: "Rename; a name already in use merges the two" }, tagChip(t));
     name.onclick = () => {
       const input = el("input", { type: "text", value: t, className: "rename-tag" });
@@ -1086,8 +1095,10 @@ function renderTagManager() {
         if (!input.isConnected) return;
         const to = input.value.toLowerCase().replace(/\s+/g, " ").trim();
         if (save && to && to !== t) {
-          const merging = counts.has(to);
-          await act({ type: "rename-tag", from: t, to }, r => `${merging ? "Merged" : "Renamed"} ${t} → ${to} on ${plural(r.links, "link")}`);
+          const merging = own.has(to) || TAG_LIB.names.includes(to);
+          const r = await renameTagUndoably(t, to, merging, n);
+          if (r) say(r.ok ? `${merging ? "Merged" : "Renamed"} ${t} → ${to} on ${plural(r.links, "link")} · ⌘Z undoes it` : r.error || "Unable to rename it");
+          await load();
         } else render();
       };
       input.addEventListener("keydown", e => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); });
@@ -1098,11 +1109,13 @@ function renderTagManager() {
     };
     const del = el("button", { className: "small ghost", textContent: "×", title: `Delete ${t} from every link` });
     del.setAttribute("aria-label", `Delete the tag ${t}`);
-    del.onclick = () => {
-      if (!confirm(`Delete the tag “${t}” from ${plural(n, "link")}? The links stay.`)) return;
-      act({ type: "delete-tag", tag: t }, r => `Deleted ${t} from ${plural(r.links, "link")}`);
+    del.onclick = async () => {
+      const r = await deleteTagUndoably(t, n);
+      if (!r) return;
+      say(r.ok ? `Deleted ${t} from ${plural(r.links, "link")} · ⌘Z puts it back` : r.error || "Unable to delete it");
+      await load();
     };
-    list.append(el("li", {}, name, el("span", { className: "n", textContent: n }), del));
+    list.append(el("li", {}, name, count, del));
   }
 }
 

@@ -122,9 +122,10 @@ function renderColl(by) {
       const to = input.value.toLowerCase().replace(/\s+/g, " ").trim();
       if (!keep || !to || to === chosen) return render();
       const merging = by.has(to);
-      const res = await send({ type: "rename-tag", from: chosen, to });
-      if (!res?.ok) return say(res?.error || "Unable to rename it");
-      say(`${merging ? "Merged" : "Renamed"} ${chosen} → ${to} on ${plural(res.links, "link")}`);
+      const res = await renameTagUndoably(chosen, to, merging, links.length);
+      if (!res) return render();
+      if (!res.ok) return say(res.error || "Unable to rename it");
+      say(`${merging ? "Merged" : "Renamed"} ${chosen} → ${to} on ${plural(res.links, "link")} · ⌘Z undoes it`);
       chosen = to;
       await load();
     };
@@ -141,9 +142,10 @@ function renderColl(by) {
   merge.onchange = async () => {
     const to = merge.value;
     if (!to) return;
-    const res = await send({ type: "rename-tag", from: chosen, to });
-    if (!res?.ok) return say(res?.error || "Unable to merge it");
-    say(`Merged ${chosen} into ${to} on ${plural(res.links, "link")}`);
+    const res = await renameTagUndoably(chosen, to, true, links.length);
+    if (!res) { merge.value = ""; return; }
+    if (!res.ok) return say(res.error || "Unable to merge it");
+    say(`Merged ${chosen} into ${to} on ${plural(res.links, "link")} · ⌘Z undoes it`);
     chosen = to;
     await load();
   };
@@ -161,7 +163,8 @@ function renderColl(by) {
     const gone = chosen;
     const res = await send({ type: "delete-tag", tag: gone });
     if (!res?.ok) return say(res?.error || "Unable to delete it");
-    say(`Deleted ${gone}${res.links ? ` from ${plural(res.links, "link")}; the links stay` : ""}`);
+    if (res.before) LinkActions.push({ label: "Delete tag", cmd: "delete-tag", run: () => send({ type: "put-tags-back", before: res.before }) });
+    say(`Deleted ${gone}${res.links ? ` from ${plural(res.links, "link")}; the links stay` : ""} · ⌘Z puts it back`);
     chosen = null;
     await load();
   };

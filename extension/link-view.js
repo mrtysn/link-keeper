@@ -507,6 +507,25 @@ function anchoredPopover(anchor, content) {
   return pop;
 }
 
+/* Rename a tag, or merge it into one that exists (asking first), or delete it (asking first); each
+ * can be undone with ⌘Z, which puts every link's tags and the library back as they were. */
+async function renameTagUndoably(from, to, merging, n) {
+  if (merging && !confirm(`Merge “${from}” into “${to}”? The ${plural(n, "link")} tagged ${from} get ${to} instead, and ${from} goes.`)) return null;
+  const res = await send({ type: "rename-tag", from, to });
+  if (res?.ok && res.before && typeof LinkActions !== "undefined") {
+    LinkActions.push({ label: merging ? "Merge" : "Rename", cmd: "rename-tag", run: () => send({ type: "put-tags-back", before: res.before }) });
+  }
+  return res;
+}
+async function deleteTagUndoably(tag, n) {
+  if (!confirm(`Delete the tag “${tag}” from ${plural(n, "link")}? The links stay; ⌘Z puts it back.`)) return null;
+  const res = await send({ type: "delete-tag", tag });
+  if (res?.ok && res.before && typeof LinkActions !== "undefined") {
+    LinkActions.push({ label: "Delete tag", cmd: "delete-tag", run: () => send({ type: "put-tags-back", before: res.before }) });
+  }
+  return res;
+}
+
 /* The ✎ that opens a link's editor in a popover. */
 function tagButton(link, onSaved) {
   const btn = el("button", { type: "button", className: "small ghost tagedit", textContent: "✎", title: "Tags" });
