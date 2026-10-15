@@ -439,9 +439,8 @@ stash, so a tab pinned on it keeps working. Link Keeper's own pages are never st
   tabs**, which moves it between the two sources. Stashes imported before 5.14 were not marked;
   the one known import of that time is marked by a data patch (below), any other by hand.
 
-**The detail pane** (the bar's **Side by side** toggle, or `V`) narrows the rows to a sidebar and shows
-the selected one in full beside it — Explore, before 5.43, was this as a page of its own, and its old
-address now opens Links with the pane. Click any row or walk with `W` `S`, the pane following; `A` `D`
+**The detail pane** is always on: the rows sit in a column on the left and the selected one shows in
+full beside it — Explore, before 5.43, was this as a page of its own, and its old address now opens Links. Click any row or walk with `W` `S`, the pane following; `A` `D`
 jump a section, and Space / ⇧Space scroll a long pane. It shows the link's capture, whether it is on
 the reading list or in other stashes, and how many links share its site, with the usual actions.
 Two more toggles in the bar, each remembered: **Compact** shows a row as its icon and title only (on

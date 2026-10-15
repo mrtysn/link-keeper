@@ -35,7 +35,7 @@ let renaming = null;
 let dragging = null;
 
 /* The view toggles, each remembered in this browser; storage that throws leaves the defaults. */
-const PANE_KEY = "listPane", COMPACT_KEY = "listCompact", COMPACT_PANE_KEY = "listCompactPane";
+const COMPACT_KEY = "listCompact", COMPACT_PANE_KEY = "listCompactPane";
 const pref = (key, fallback) => {
   try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch (e) { return fallback; }
 };
@@ -82,7 +82,8 @@ function setSideWidth(px, save = false) {
     setSideWidth(width() + by * (e.shiftKey ? 4 : 1), true);
   });
 }
-let pane = pref(PANE_KEY, false);
+// The list and the selected link side by side, always.
+const pane = true;
 let stashOnly = null;   // ?stash=<id> (or "list"): only that stash, until its banner is closed
 
 let group = "domain";
@@ -96,7 +97,6 @@ try { group = localStorage.getItem(GROUP_KEY) || "domain"; } catch (e) { /* stor
     group = asked;
     try { localStorage.setItem(GROUP_KEY, asked); } catch (e) { /* not remembered */ }
   }
-  if (params.get("pane") === "1") { pane = true; setPref(PANE_KEY, true); }
   if (params.get("stash")) { stashOnly = params.get("stash"); group = "stash"; }
   if ([...params.keys()].length) history.replaceState(null, "", location.pathname + location.hash);
   if (group === "flat") group = "newest";
@@ -107,7 +107,6 @@ const compactNow = () => (pane ? pref(COMPACT_PANE_KEY, true) : pref(COMPACT_KEY
 function applyView() {
   document.body.classList.toggle("pane", pane);
   document.body.classList.toggle("compact", compactNow());
-  $("t-pane").setAttribute("aria-pressed", String(pane));
   $("t-compact").setAttribute("aria-pressed", String(compactNow()));
   $("detail").hidden = !pane;
   fitPanes();
@@ -122,13 +121,6 @@ function fitPanes() {
 }
 window.addEventListener("scroll", fitPanes, { passive: true });
 window.addEventListener("resize", fitPanes);
-
-function togglePane(on = !pane) {
-  pane = on;
-  setPref(PANE_KEY, on);
-  applyView();
-  render();
-}
 
 function say(text) { $("msg").textContent = text; }
 
@@ -420,7 +412,7 @@ LinkKeys.listen({
   read: onRow("read"), open: onRow("open"),
   tags: onRow("tags"), accept: onRow("accept"), list: onRow("list"), move: onRow("move"), remove: onRow("remove"),
   undo: () => LinkActions.undo(), filter: () => $("q").focus(),
-  detail: () => togglePane(), preview: () => { if (!pane) togglePane(true); setPreview(previewShowing(detailLink()) ? "off" : "this"); },
+  preview: () => { setPreview(previewShowing(detailLink()) ? "off" : "this"); },
   escape: () => { document.querySelector(".tagpop")?.remove(); },
 }, { labels: { "group-prev": "◂ section", "group-next": "section ▸" } });
 // The Keys toggle shows or hides the key guide, and says whether it is showing.
@@ -1761,7 +1753,6 @@ $("sel-done").onclick = () => setSelecting(false);
 $("sel-clear").onclick = () => { ticked.clear(); lastTick = null; paintTicks(); };
 $("sel-all").onclick = () => { for (const r of rowsOnPage) ticked.add(r.target.link.key); paintTicks(); };
 $("sel-tag").onclick = () => bulkTagPopover($("sel-tag"));
-$("t-pane").onclick = () => togglePane();
 $("t-compact").onclick = () => { setPref(pane ? COMPACT_PANE_KEY : COMPACT_KEY, !compactNow()); applyView(); };
 applyView();
 
