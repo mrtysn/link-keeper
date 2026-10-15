@@ -17,7 +17,7 @@
  * prevents both, and Delete asks first.
  */
 
-const GROUPS = ["stash", "domain", "tag", "day", "month", "newest", "oldest"];
+const GROUPS = ["stash", "domain", "tag", "chat", "day", "month", "newest", "oldest"];
 const GROUP_KEY = "listGroup";
 // All is the pile; captured, uncaptured and local split it with nothing left over. Filtered out is
 // apart from the pile.
@@ -692,10 +692,10 @@ function stashHeading(stash, shown) {
 
 /* --- grouping ------------------------------------------------------------------------- */
 
-function section(title, count, rows, extraClass = "") {
+function section(title, count, rows, extraClass = "", sub = "") {
   const s = el("section", { className: `group${extraClass}` });
   s.dataset.key = title || "";
-  if (title) s.append(el("h2", {}, el("span", { textContent: title }), el("span", { className: "n", textContent: count })));
+  if (title) s.append(el("h2", {}, el("span", { textContent: title }), ...(sub ? [el("span", { className: "when", textContent: sub })] : []), el("span", { className: "n", textContent: count })));
   s.append(el("ul", { className: "rows" }, ...rows));
   return s;
 }
@@ -724,6 +724,8 @@ function renderByStash(out, visible, term) {
   return any;
 }
 
+const NO_CHAT = "Not from a chat";
+
 function bucketsOf(visible) {
   if (group === "newest") return [["", [...visible].sort(byNewest)]];
   if (group === "oldest") return [["", [...visible].sort(byNewest).reverse()]];
@@ -737,6 +739,21 @@ function bucketsOf(visible) {
       }
     }
     return [...buckets.entries()].sort((a, b) => (a[0] === "Untagged") - (b[0] === "Untagged") || b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  }
+  if (group === "chat") {
+    // A link shows under each thread it came from, labelled with the account when one is known; the rest go last.
+    const buckets = new Map();
+    for (const l of [...visible].sort(byNewest)) {
+      for (const t of l.origin?.thread?.length ? l.origin.thread : [NO_CHAT]) {
+        if (!buckets.has(t)) buckets.set(t, { links: [], account: null });
+        const b = buckets.get(t);
+        b.links.push(l);
+        b.account ||= l.origin?.account || null;
+      }
+    }
+    return [...buckets.entries()]
+      .sort((a, b) => (a[0] === NO_CHAT) - (b[0] === NO_CHAT) || b[1].links.length - a[1].links.length || a[0].localeCompare(b[0]))
+      .map(([name, b]) => [name, b.links, b.account || ""]);
   }
   const keyFor = {
     domain: l => siteOf(l.url),
@@ -1044,7 +1061,7 @@ function renderRows() {
     renderByStash(out, visible, term);
     return;
   }
-  for (const [name, list] of bucketsOf(visible)) out.append(section(name, list.length, list.map(l => safeRow(l, null))));
+  for (const [name, list, sub] of bucketsOf(visible)) out.append(section(name, list.length, list.map(l => safeRow(l, null)), "", sub));
 }
 
 /* --- the detail pane ------------------------------------------------------------------------

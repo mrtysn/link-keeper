@@ -75,6 +75,8 @@ def cap(c: dict, i: int) -> dict:
         "verdict": "keep" if i == 6 else ("drop" if i == 7 else None),
         # one link that arrived by DM, for the checks that its origin shows in the detail and the hover
         **({"account": "main", "thread": ["alice_123", "bob_456"], "senders": ["Alice", "Bob"]} if i == 1 else {}),
+        # two more in one named thread, so Group by chat has a group with a count
+        **({"thread": ["@friend"], "senders": ["@friend", "@me"]} if i in (2, 5) else {}),
     }
 
 

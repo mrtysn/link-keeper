@@ -723,6 +723,34 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
+// Group by chat: a link shows under each thread it came from, the account dimmed after the name; the rest go last
+{
+  let p = await page("list.html?group=chat");
+  const groups = () => p.$$eval("#out section.group", l => l.map(s => ({ name: s.querySelector("h2 > span").textContent, n: +s.querySelector("h2 .n").textContent, rows: s.querySelectorAll("li").length, sub: s.querySelector("h2 .when")?.textContent || "" })));
+  const g = await groups();
+  const friend = g.find(x => x.name === "@friend");
+  ok(friend?.n === 2 && friend.rows === 2, `chat: a @friend group holds its two links (${JSON.stringify(friend)})`);
+  ok(g.length >= 4 && g.at(-1).name === "Not from a chat" && g.at(-1).n > 2, `chat: Not from a chat comes last (${g.map(x => x.name)})`);
+  ok(g.findIndex(x => x.name === "@friend") === 0, "chat: the biggest chat is first");
+  const alice = g.find(x => x.name === "alice_123"), bob = g.find(x => x.name === "bob_456");
+  ok(alice?.n === 1 && bob?.n === 1 && alice.sub === "main", "chat: a link in two threads shows under both, with the account after the name");
+  await p.selectOption("#groupby", "tag"); await p.waitForTimeout(200);
+  await p.selectOption("#groupby", "chat"); await p.waitForTimeout(200);
+  ok((await groups()).some(x => x.name === "@friend"), "chat: the select chooses it");
+  await p.close();
+  p = await page("list.html?group=chat&cards");
+  const deal = () => p.$eval(".cm-tally span", e => e.textContent);
+  const first = await deal();
+  ok(/^1 of 2 in @friend$/.test(first), `chat: Cards deals the cursor's group (${first})`);
+  await key(p, "d"); await p.waitForTimeout(300);
+  const next = await deal();
+  ok(next !== first && /in alice_123$/.test(next), `chat: D jumps to the next group in Cards (${next})`);
+  await key(p, "a"); await p.waitForTimeout(300);
+  ok(await deal() === first, "chat: A jumps back");
+  ok(!p.errs.length, "chat: no errors " + p.errs.join("; "));
+  await p.close();
+}
+
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

@@ -212,6 +212,7 @@ removes a link's entry; the message is `set-agent-tags`, journaled so `undo` rev
 - A stash heading's **⋯ → Tag all tabs…** adds one tag to every tab in it.
 - Links has a row of tag chips — any of them, or **Untagged** for the links with none of their own —
   and **Group by Tag**, where a link shows under each of its tags. In card mode, Group by Tag deals one tag at a time.
+  **Group by Chat** does the same for direct-message links, one group per thread (the account dimmed after the name), with the rest under **Not from a chat**.
 - The tag library is the Tags row and tag bar on Links; a tag is a collection, its links the list
   once it is picked. It starts with presets — *to-read, to-watch, to-try, reference, inspiration,
   work, personal, buy, dev, ai, design, news, video, shopping, music, games* — ahead of the tags
