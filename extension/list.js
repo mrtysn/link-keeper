@@ -338,6 +338,14 @@ function bulkTagPopover(anchor) {
   const pop = anchoredPopover(anchor, box);
 }
 
+/* The row's place counted in links, not rows: a link held in two stashes is one link, so the pane
+ * counts the same total as the page's header. */
+function linkNumber(i) {
+  const seen = new Set();
+  for (const r of rowsOnPage.slice(0, i + 1)) seen.add(r.target.link.key);
+  return seen.size;
+}
+
 function setCursor(id, scroll = true) {
   cursorId = id;
   for (const r of rowsOnPage) r.li.classList.toggle("lk-cursor", r.id === id);
@@ -643,9 +651,7 @@ function stashHeading(stash, shown) {
     if (renamed(stash)) h2.append(el("span", { className: "when", textContent: whenOf(stash.created_at) }));
   }
   const n = stash.tabs.length;
-  // Where it came from is the source chips' to say; the count's hover names an import's format.
-  h2.append(el("span", { className: "n", textContent: shown === n ? plural(n, "tab") : `${shown} of ${n}`,
-    title: stash.source === "import" ? `Imported${stash.format ? ` from ${FORMAT_SHORT[stash.format] || stash.format}` : ""}` : "" }));
+  h2.append(el("span", { className: "n", textContent: shown === n ? plural(n, "tab") : `${shown} of ${n}` }));
 
   const locked = stash.locked;
   const imported = stash.source === "import";
@@ -952,7 +958,7 @@ function renderDetail() {
     el("div", {},
       el("div", { className: "site", textContent: kind === "web" ? hostOf(url) : kind === "file" ? "Local file" : "Browser page" }),
       el("div", { className: "when" }, when, readBadge(link))),
-    el("div", { className: "pos", textContent: `${i + 1} / ${rowsOnPage.length}` })));
+    el("div", { className: "pos", textContent: `${linkNumber(i)} / ${new Set(rowsOnPage.map(r => r.target.link.key)).size}` })));
 
   const title = labelOf(link) || tab?.title || null;
   box.append(el("h2", { className: `dtitle${title ? "" : " plain"}`, textContent: title || shortUrl(url) }));
@@ -1521,7 +1527,6 @@ const FORMAT_NAMES = {
   "link-keeper": "a Link Keeper export", tidytab: "a TidyTab export", json: "a JSON list", csv: "CSV",
   onetab: "OneTab's Export URLs", text: "text with links in it", captures: "capture JSONL",
 };
-const FORMAT_SHORT = { "link-keeper": "Link Keeper", tidytab: "TidyTab", json: "JSON", csv: "CSV", onetab: "OneTab", text: "text" };
 let parsed = null;
 const importDest = () => document.querySelector('input[name="import-dest"]:checked')?.value || "stashes";
 
