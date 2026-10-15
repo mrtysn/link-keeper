@@ -342,8 +342,7 @@ await kase("Tags: the ✎ editor on a List row saves a tag for the URL, every pa
 });
 
 await kase("the popup: this page, Stash ▾ for the window, and the viewers as links", async () => {
-  await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
-  const { tab, doc: d } = await openPage("popup.html", d => d.getElementById("where").textContent && d.querySelectorAll(".viewers [data-open]").length === 3, "the popup");
+  const { tab, doc: d } = await openPage("popup.html", d => d.getElementById("where").textContent && d.querySelectorAll(".viewers [data-open]").length === 2, "the popup");
   // Opened as a tab, the popup's own page is the one it is on: a browser page.
   yes(/cannot be saved/.test(d.getElementById("where").textContent), `a browser page says so: ${d.getElementById("where").textContent}`);
   eq([...d.querySelectorAll(".viewers [data-open]")].map(b => b.textContent), ["Links", "Cards"], "the viewers as links");
