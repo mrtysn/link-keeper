@@ -1,3 +1,6 @@
+/* Scrollbars in the page's own colours and thin, so a scrolling pane shows no bright gutter. */
+:root { scrollbar-color: var(--mark, var(--dim)) transparent; scrollbar-width: thin; }
+
 /* The action bar, its ⋯ menu, the stash picker, the key list and the keyboard cursor — shared by
    List, Cards, Explore and Tag (link-actions.js and link-keys.js draw them). Colours come from the
    page's tokens; Cards names its verdict colours --keep and --skip, the others --ok and --bad. */
