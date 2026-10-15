@@ -232,7 +232,7 @@ await kase("Links, its detail pane and Cards load in Firefox with the bar, the s
   eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "Links", "Links is marked");
   eq([...d.querySelectorAll(".app-sources button")].map(b => b.getAttribute("aria-pressed")), ["true", "true", "true"], "every source on at first");
   yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
-  yes([...d.querySelectorAll(".group > h2 .badge")].some(b => b.textContent.startsWith("Imported")), "an import is marked on its heading");
+  yes([...d.querySelectorAll(".group > h2 .n")].some(n => n.title.startsWith("Imported")), "an import's tab count names where it came from on hover");
   eq(d.getElementById("groupby").value, "stash", "grouped by stash");
 
   // Turning Stashed tabs and Imports off leaves the reading list, on every page.
