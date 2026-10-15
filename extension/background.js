@@ -1772,8 +1772,9 @@ async function chatInfo(tabId) {
   const tab = await browser.tabs.get(tabId);
   if (!isChatPage(tab.url)) return null;
   await chatScript(tabId);
-  const [{ result }] = await browser.scripting.executeScript({ target: { tabId }, func: () => window.LKChat.info() });
-  if (!result) return null;
+  const [{ result }] = await browser.scripting.executeScript({ target: { tabId }, func: () => ({ ...window.LKChat.info(), run: window.LKChat.poll() }) });
+  if (!result?.platform) return null;
+  if (result.run?.none) delete result.run;
   const key = result.thread?.id ? `${result.platform}:${result.thread.id}` : null;
   return { ...result, key, last: key ? (await read("chatGrabs", {}))[key] || null : null };
 }
@@ -1851,19 +1852,29 @@ async function grabChat(tabId, range) {
     return inj?.result;
   };
   let res;
+  const badge = text => browser.action.setBadgeText({ tabId, text }).catch(() => {});
   try {
     const started = await call(range => window.LKChat.start(range), [r]);
     if (!started?.ok) return { ok: false, error: started?.error || "the grab did not start on the page" };
-    for (const end = Date.now() + 17 * 60_000; Date.now() < end;) {
+    // A paused grab can wait as long as you like; the limit is on time spent without word from the page.
+    for (let quiet = 0; quiet < 120;) {
       await new Promise(ok => setTimeout(ok, 1000));
-      const state = await call(() => window.LKChat.poll());
-      if (state?.done) { res = state.result; break; }
+      const state = await call(() => window.LKChat.poll()).catch(() => null);
+      if (!state) { quiet++; continue; }
+      quiet = 0;
+      if (state.done) { res = state.result; break; }
+      badge(String(state.progress?.links ?? ""));
     }
   } catch (e) {
     return { ok: false, error: `the chat could not be read: ${e.message || e}` };
+  } finally {
+    badge("");
   }
-  if (!res) return { ok: false, error: "the grab did not finish within 17 minutes" };
-  if (!res.ok) return { ok: false, error: res.error || "the chat could not be read" };
+  // Show what happened in the page's panel too: the popup is likely closed by now.
+  const tell = (text, ok) => call((t, o) => window.LKChat.finish(t, o), [text, ok]).catch(() => {});
+  if (!res) { const error = "the chat page stopped answering: was it closed or reloaded?"; return { ok: false, error }; }
+  if (res.cancelled) { await tell("Cancelled: nothing was saved.", false); return { ok: false, cancelled: true, error: "cancelled: nothing was saved" }; }
+  if (!res.ok) { await tell(res.error || "the chat could not be read", false); return { ok: false, error: res.error || "the chat could not be read" }; }
   // A link typed into a message may still be t.co's wrapper; follow it to the real address.
   for (const m of res.messages) {
     for (const l of m.links || []) {
@@ -1879,14 +1890,17 @@ async function grabChat(tabId, range) {
     grabs[chat.key] = { newest: Math.max(prev, ...times), at: new Date().toISOString(), name: chat.thread?.handle || chat.thread?.name || null };
     await browser.storage.local.set({ chatGrabs: grabs });
   }
-  return { ok: true, chat: chat.thread?.handle || chat.thread?.name || chat.site, messages: res.messages.length, links: records.length,
+  const out = { ok: true, chat: chat.thread?.handle || chat.thread?.name || chat.site, messages: res.messages.length, links: records.length,
     ...counts, stopped: res.stopped, loads: res.loads, unread: res.unread,
     from: times.length ? new Date(Math.min(...times)).toISOString() : null, to: times.length ? new Date(Math.max(...times)).toISOString() : null };
+  await tell(describeGrab(out), true);
+  return out;
 }
 
 /* Why a grab stopped loading older messages, in words: whether what it brought covers the range. */
 const STOPPED = {
   range: "That covers the range.",
+  "by-you": "Stopped by you; what was loaded is saved.",
   start: "It reached the start of the chat.",
   "no-loader": "Stopped early: the page's loader for older messages was not found; the site may have changed.",
   "nothing-new": "Stopped early: a load of older messages brought nothing within 20 seconds. Grab again to go further.",
@@ -2013,6 +2027,10 @@ async function handleMessage(msg) {
 
     case "chat-info":
       return msg.tabId ? chatInfo(msg.tabId).catch(() => null) : null;
+
+    case "chat-control":
+      return browser.scripting.executeScript({ target: { tabId: msg.tabId }, func: a => window.LKChat.control(a), args: [msg.action] })
+        .then(([inj]) => inj?.result || { ok: false, error: "the chat page did not answer" }, e => ({ ok: false, error: String(e.message || e) }));
 
     case "grab-chat": {
       // A long chat takes minutes and the popup may be closed by then: the result is also a notification.

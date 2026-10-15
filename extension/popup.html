@@ -123,6 +123,7 @@
   #chat input[type="number"] { width: 5.5rem; }
   #chat input[type="date"] { width: 9.5rem; }
   #chat .go { margin-top: 8px; width: 100%; }
+  #chat-run .range button { flex: 1; min-height: 30px; font-size: 12px; }
   #chat:has(~ #page[hidden]) { border-bottom: 0; padding-bottom: 0; }
 
   .msg { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; }
@@ -175,6 +176,15 @@
       <input id="chat-since" type="date" hidden>
     </div>
     <button class="primary go" id="chat-grab">Grab links</button>
+    <!-- While a grab runs on the page: its progress and controls, the same as the page's own panel. -->
+    <div id="chat-run" hidden>
+      <p class="last" id="chat-progress" role="status"></p>
+      <div class="range">
+        <button id="chat-pause">Pause</button>
+        <button id="chat-stop">Stop and save</button>
+        <button class="danger" id="chat-cancel">Cancel</button>
+      </div>
+    </div>
   </section>
 
   <!-- The page you are on. popup.js fills it from the background's page-info. -->

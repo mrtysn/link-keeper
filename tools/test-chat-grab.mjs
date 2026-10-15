@@ -143,6 +143,40 @@ await check("start and poll: the grab runs on, poll reports it done with the res
   assert.deepEqual([state.result.ok, state.result.error], [false, "the grab broke: boom"]);
 });
 
+const until = async (LK, ok) => { let s; for (let i = 0; i < 400 && !ok(s = LK.poll()); i++) await new Promise(r => setTimeout(r, 10)); return s; };
+
+await check("pause holds the next load, resume carries on, and progress is reported", async () => {
+  const { LK, calls } = makePage({ pages });
+  // The first load goes out as the grab starts; pause holds every one after it.
+  LK.start({ mode: "all" }, { pauseMs: [50, 50] });
+  LK.control("pause");
+  await new Promise(r => setTimeout(r, 300));
+  const held = LK.poll();
+  assert.deepEqual([held.done, held.paused, held.progress.messages, held.progress.loads], [false, true, 8, 1]);
+  const n = calls();
+  await new Promise(r => setTimeout(r, 200));
+  assert.equal(calls(), n, "no load while paused");
+  LK.control("resume");
+  const end = await until(LK, s => s.done);
+  assert.deepEqual([end.result.ok, end.result.stopped, end.result.messages.length], [true, "start", 12]);
+});
+
+await check("stop keeps what is loaded; cancel keeps nothing", async () => {
+  const a = makePage({ pages });
+  a.LK.start({ mode: "all" }, { pauseMs: [200, 200] });
+  await until(a.LK, s => s.progress?.loads >= 1);
+  a.LK.control("stop");
+  const stopped = await until(a.LK, s => s.done);
+  assert.deepEqual([stopped.result.ok, stopped.result.stopped], [true, "by-you"]);
+  assert.ok(stopped.result.messages.length >= 8 && stopped.result.messages.length < 12, `${stopped.result.messages.length} messages`);
+  const b = makePage({ pages });
+  b.LK.start({ mode: "all" }, { pauseMs: [200, 200] });
+  b.LK.control("cancel");
+  const cancelled = await until(b.LK, s => s.done);
+  assert.deepEqual([cancelled.result.ok, cancelled.result.cancelled], [false, true]);
+  assert.equal(b.LK.control("pause").ok, false, "no controls once it is over");
+});
+
 await check("a covered range says so; the last N stop without loading", async () => {
   const { LK } = makePage({ pages });
   assert.equal((await LK.grab({ mode: "last", n: 2 }, FAST)).stopped, "range");

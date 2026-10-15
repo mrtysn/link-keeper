@@ -304,7 +304,32 @@ async function showChat() {
   if (saved.n) $("chat-n").value = saved.n;
   $("chat-since").value = saved.since || `${new Date().getFullYear()}-01-01`;
   chatFields();
+  showRun(chat.run);
 }
+
+/* A grab running on the page: its progress, and Pause/Resume, Stop and save, Cancel, checked each
+ * second while the popup is open. */
+let runTimer = null;
+function showRun(run) {
+  const running = !!run && !run.done;
+  $("chat-run").hidden = !running;
+  for (const id of ["chat-grab", "chat-mode", "chat-n", "chat-since"]) $(id).closest(".range, #chat-grab").hidden = running;
+  clearTimeout(runTimer);
+  if (!running) { if (run?.done && !run.none) chatFields(); return; }
+  const p = run.progress || {};
+  const back = p.oldest ? `, back to ${new Date(p.oldest).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}` : "";
+  $("chat-progress").textContent = `${run.paused ? "Paused" : "Grabbing"}: ${p.messages || 0} messages${back} · ${p.links || 0} links. The panel on the page shows it too.`;
+  $("chat-pause").textContent = run.paused ? "Resume" : "Pause";
+  runTimer = setTimeout(async () => showRun((await send({ type: "chat-info", tabId: tab.id }).catch(() => null))?.run), 1000);
+}
+const chatControl = async action => {
+  const res = await send({ type: "chat-control", tabId: tab.id, action });
+  if (!res?.ok) say(res?.error || "the chat page did not answer", "bad");
+  showRun((await send({ type: "chat-info", tabId: tab.id }).catch(() => null))?.run);
+};
+$("chat-pause").onclick = () => chatControl($("chat-pause").textContent === "Resume" ? "resume" : "pause");
+$("chat-stop").onclick = () => chatControl("stop");
+$("chat-cancel").onclick = () => chatControl("cancel");
 const shortWhen = t => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 function chatFields() {
   $("chat-n").hidden = $("chat-mode").value !== "last";
@@ -315,8 +340,10 @@ $("chat-grab").onclick = async () => {
   const range = { mode: $("chat-mode").value, n: Number($("chat-n").value), since: $("chat-since").value };
   try { localStorage.setItem(CHAT_KEY, JSON.stringify(range)); } catch (e) { /* not remembered */ }
   $("chat-grab").disabled = true;
-  say("Grabbing: older messages load on the page a page at a time, a few seconds apart. You can close this popup; a notification says when it is done.");
+  say("Grabbing: older messages load a few seconds apart. A panel on the chat page shows the progress, with Pause, Stop and Cancel; you can close this popup.");
+  setTimeout(async () => showRun((await send({ type: "chat-info", tabId: tab.id }).catch(() => null))?.run), 800);
   const res = await send({ type: "grab-chat", tabId: tab.id, range });
+  showRun(null);
   $("chat-grab").disabled = false;
   say(res?.summary || res?.error || "the chat could not be read", res?.ok ? "ok" : "bad");
 };

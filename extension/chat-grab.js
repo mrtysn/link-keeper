@@ -263,7 +263,7 @@ window.LKChat = window.LKChat || (() => {
    *
    * Older pages load at a person's scrolling pace, a pause of 1.5–3 s between them: the requests are
    * the ones the page makes when you scroll up, and a burst of them is what a site rate-limits. */
-  async function grab(range, { maxLoads = 2000, maxMs = 15 * 60_000, pauseMs = [1500, 3000] } = {}) {
+  async function grab(range, { maxLoads = 2000, maxMs = 15 * 60_000, pauseMs = [1500, 3000], control = {} } = {}) {
     const found = readerHere();
     if (!found) return { ok: false, error: "this page is not a chat Link Keeper can read" };
     const [, r] = found;
@@ -279,9 +279,25 @@ window.LKChat = window.LKChat || (() => {
       return false;
     };
 
-    const started = Date.now();
+    // control: { paused, stop, cancel } set from outside (the panel, the popup); progress is written
+    // back to it after every load. Time spent paused does not count against maxMs.
+    const report = () => {
+      const times = messages.map(m => m.at).filter(Number.isFinite);
+      control.progress = { messages: messages.length, links: new Set(messages.flatMap(m => m.links.map(l => l.url))).size,
+        oldest: times.length ? Math.min(...times) : null, loads, paused: !!control.paused };
+    };
     let loads = 0, stopped = null, lastWasFailed = false;
+    report();
+    let started = Date.now();
     while (!stopped) {
+      while (control.paused && !control.stop && !control.cancel) {
+        const t0 = Date.now();
+        report();
+        await sleep(300);
+        started += Date.now() - t0;
+      }
+      if (control.cancel) return { ok: false, cancelled: true, error: "cancelled: nothing was saved" };
+      if (control.stop) { stopped = "by-you"; break; }
       if (enough()) { stopped = "range"; break; }
       // A refusal counts only after this grab's own load: a flag left from an earlier failure must
       // not stop every later grab before it tries.
@@ -291,6 +307,10 @@ window.LKChat = window.LKChat || (() => {
       if (loads >= maxLoads) { stopped = "limit"; break; }
       if (Date.now() - started >= maxMs) { stopped = "time"; break; }
       if (loads) await sleep(pauseMs[0] + Math.random() * (pauseMs[1] - pauseMs[0]));
+      // Pressed during the pause between loads: honoured before the next one goes out.
+      if (control.cancel) return { ok: false, cancelled: true, error: "cancelled: nothing was saved" };
+      if (control.stop) { stopped = "by-you"; break; }
+      if (control.paused) continue;
       const before = r.items().length;
       // A flag already up before this load says nothing about it.
       const failedNow = () => (wasFailed ? null : tryGet(() => r.failed?.()));
@@ -307,6 +327,7 @@ window.LKChat = window.LKChat || (() => {
       }
       lastWasFailed = wasFailed;
       messages = read();
+      report();
     }
 
     messages.sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
@@ -320,20 +341,125 @@ window.LKChat = window.LKChat || (() => {
     }));
   }
 
-  /* The extension drives a grab in two short calls rather than one long one: start() sets it going and
-   * returns at once, poll() reports how far it got and, at the end, its result. A grab takes minutes,
-   * and a script call that waits on a promise that long is not something to rely on. Any error is kept
-   * as its own text, so the notification can say what broke. */
+  /* The extension drives a grab in short calls rather than one long one: start() sets it going and
+   * returns at once, poll() reports its progress and, at the end, its result, control() pauses, resumes,
+   * stops (keeping what it has) or cancels it. A grab takes minutes, and a script call that waits on a
+   * promise that long is not something to rely on. Any error is kept as its own text. */
   let run = null;
-  function start(range, opts) {
+  function start(range, opts = {}) {
     if (run && !run.done) return { ok: false, error: "a grab is already running on this page" };
-    run = { done: false, result: null, started: Date.now() };
+    run = { done: false, result: null, started: Date.now(), control: {}, chat: tryGet(() => readerHere()?.[1].thread()) || null };
     const mine = run;
-    grab(range, opts).then(res => { mine.result = res; }, e => { mine.result = { ok: false, error: `the grab broke: ${e?.message || e}` }; })
-      .finally(() => { mine.done = true; });
+    grab(range, { ...opts, control: mine.control })
+      .then(res => { mine.result = res; }, e => { mine.result = { ok: false, error: `the grab broke: ${e?.message || e}` }; })
+      .finally(() => { mine.done = true; tryGet(Panel.draw); });
+    tryGet(Panel.show);   // a page that cannot draw it still runs the grab
     return { ok: true };
   }
-  const poll = () => (run ? { done: run.done, result: run.done ? run.result : null, ms: Date.now() - run.started } : { done: true, result: { ok: false, error: "no grab was started on this page" } });
+  const poll = () => (run
+    ? { done: run.done, saved: !!run.saved, result: run.done ? run.result : null, progress: run.control.progress || null, paused: !!run.control.paused, ms: Date.now() - run.started }
+    : { done: true, none: true, result: { ok: false, error: "no grab was started on this page" } });
+  function control(action) {
+    if (!run || run.done) return { ok: false, error: "no grab is running" };
+    if (action === "pause") run.control.paused = true;
+    if (action === "resume") run.control.paused = false;
+    if (action === "stop") run.control.stop = true;
+    if (action === "cancel") run.control.cancel = true;
+    tryGet(Panel.draw);
+    return { ok: true };
+  }
+  // The extension's word on what was saved, once the links are in: shown in the panel.
+  function finish(text, ok) {
+    if (run) Object.assign(run, { saved: true, summary: text, summaryOk: ok });
+    tryGet(Panel.draw);
+    return { ok: true };
+  }
 
-  return { info, grab, start, poll, READERS };
+  /* The panel: a corner of the chat page while a grab runs, since the popup closes once you click. It
+   * sits in a closed shadow root, so the page's styles do not reach it and its script cannot read it;
+   * the page can only see that an element is there. */
+  const Panel = {
+    host: null, root: null, timer: null,
+    show() {
+      if (!Panel.host) {
+        Panel.host = document.createElement("link-keeper-grab");
+        Panel.root = Panel.host.attachShadow({ mode: "closed" });
+        Panel.root.innerHTML = `<style>
+          :host { all: initial; }
+          .box { position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; width: 300px; padding: 12px 14px;
+            font: 13px/1.45 -apple-system, "Helvetica Neue", sans-serif; color: #e8e6e3; background: #24272c;
+            border: 1px solid #3a3f46; border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); }
+          .head { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+          .head span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .x { background: none; border: 0; color: #c0bdb9; font-size: 16px; cursor: pointer; padding: 0 2px; }
+          .line { margin-top: 6px; color: #d8d5d1; }
+          .msg.err { margin-top: 6px; color: #ffa693; white-space: pre-wrap; overflow-wrap: anywhere; }
+          .msg.ok { margin-top: 6px; color: #4fcf95; white-space: pre-wrap; }
+          .msg.wait { margin-top: 6px; color: #c0bdb9; }
+          .acts { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+          button.b { font: inherit; padding: 4px 10px; border-radius: 8px; border: 1px solid #3a3f46; background: #2b2f35; color: #e8e6e3; cursor: pointer; }
+          button.b.primary { background: #c1b4fe; border-color: #c1b4fe; color: #16171a; font-weight: 600; }
+          button.b.danger { color: #ffa693; }
+        </style><div class="box" role="status" aria-live="polite"><div class="head"><span></span><button class="x" title="Close" aria-label="Close">×</button></div>
+          <div class="line"></div><div class="msg"></div><div class="acts"></div></div>`;
+        Panel.root.querySelector(".x").onclick = () => { if (!run || run.done) Panel.hide(); else control("cancel"); };
+      }
+      if (!Panel.host.isConnected) document.documentElement.append(Panel.host);
+      clearInterval(Panel.timer);
+      Panel.timer = setInterval(Panel.draw, 500);
+      Panel.draw();
+    },
+    hide() { clearInterval(Panel.timer); Panel.host?.remove(); },
+    button(text, cls, fn) {
+      const b = document.createElement("button");
+      b.className = `b ${cls}`;
+      b.textContent = text;
+      b.onclick = fn;
+      return b;
+    },
+    draw() {
+      if (!Panel.root || !run) return;
+      const $ = s => Panel.root.querySelector(s);
+      const who = run.chat?.handle || run.chat?.name || "this chat";
+      const p = run.control.progress || {};
+      const back = p.oldest ? new Date(p.oldest).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+      const counts = `${p.messages || 0} messages${back ? `, back to ${back}` : ""} · ${p.links || 0} links`;
+      const acts = $(".acts");
+      acts.textContent = "";
+      $(".x").hidden = !run.done;   // while it runs, Cancel says what closing would do
+      const msg = $(".msg");
+      msg.textContent = "";
+      msg.className = "msg";
+      if (!run.done) {
+        $(".head span").textContent = `Link Keeper · grabbing ${who}`;
+        $(".line").textContent = run.control.cancel ? "Cancelling…" : run.control.stop ? `Stopping… ${counts}`
+          : run.control.paused ? `Paused. ${counts}` : `Loading older messages… ${counts}`;
+        if (!run.control.stop && !run.control.cancel) {
+          acts.append(run.control.paused ? Panel.button("Resume", "primary", () => control("resume")) : Panel.button("Pause", "", () => control("pause")),
+            Panel.button("Stop and save", "", () => control("stop")), Panel.button("Cancel", "danger", () => control("cancel")));
+        }
+        return;
+      }
+      clearInterval(Panel.timer);
+      const res = run.result || {};
+      $(".head span").textContent = `Link Keeper · ${who}`;
+      $(".line").textContent = counts;
+      if (run.saved) {
+        msg.className = `msg ${run.summaryOk ? "ok" : "err"}`;
+        msg.textContent = run.summary || "";
+      } else if (!res.ok) {
+        msg.className = "msg err";
+        msg.textContent = res.error || "the chat could not be read";
+      } else {
+        msg.className = "msg wait";
+        msg.textContent = "Saving the links…";
+      }
+      const text = msg.textContent;
+      if (text && (run.saved || !res.ok)) {
+        acts.append(Panel.button("Copy", "", () => navigator.clipboard?.writeText(text).catch(() => {})), Panel.button("Close", "primary", Panel.hide));
+      }
+    },
+  };
+
+  return { info, grab, start, poll, control, finish, READERS };
 })();
