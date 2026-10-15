@@ -453,7 +453,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await same.close();
   const other = await page("popup.html?msg");
   ok(await other.$eval("#msg", e => e.textContent) === "", "popup: but not on another page");
-  ok(!!(await other.$(".foot #stash")), "popup: Stash window sits in the foot");
+  ok(!!(await other.$("header #stash")), "popup: Stash sits in the top strip");
   await other.close();
 }
 {

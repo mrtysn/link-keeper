@@ -277,14 +277,12 @@ for (const [menu, anchor] of [["stash-menu", "stash-more"], ["keep-menu", "keep-
   });
 }
 
-/* --- the viewers --------------------------------------------------------------------- */
+/* --- the page ------------------------------------------------------------------------ */
 
-for (const b of document.querySelectorAll(".viewers [data-open]")) {
-  b.onclick = async () => {
-    await send({ type: b.dataset.open });
-    window.close();
-  };
-}
+$("open-links").onclick = async () => {
+  await send({ type: "open-list" });
+  window.close();
+};
 
 /* Restore what the last popup session had in flight: the note, and the message if it is about
  * this page and recent. */
