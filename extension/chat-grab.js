@@ -64,6 +64,12 @@ window.LKChat = window.LKChat || (() => {
     },
     hasOlder: () => !!tryGet(() => X.state()?.chatItems?.hasOlderItems),
     loading: () => !!tryGet(() => X.state()?.chatItems?.isLoading),
+    // x.com marks a refused load on the list's state (a rate limit, a network error).
+    failed() {
+      const items = tryGet(() => X.state()?.chatItems);
+      if (!tryGet(() => items?.didPullFail)) return null;
+      return str(tryGet(() => items.pullFailureReason?.name)) || str(tryGet(() => items.pullFailureReason)) || "x.com refused the load";
+    },
     // The page asks for older messages when its list reaches the top: a callback the list component
     // keeps in a hook, which sends ScrolledToTop. Found by what it sends, not by its hook's position.
     loadOlder() {
@@ -221,7 +227,8 @@ window.LKChat = window.LKChat || (() => {
       for (let url of text.match(/https?:\/\/[^\s<>"')\]]+/g) || []) {
         const wrapped = url.match(/^https?:\/\/l\.instagram\.com\/\?u=([^&]+)/);
         if (wrapped) url = decodeURIComponent(wrapped[1]);
-        links.push({ url: INSTAGRAM.canonical(url), kind: /instagram\.com\/(reel|p)\//.test(url) ? "ig-post" : "page" });
+        const canon = INSTAGRAM.canonical(url);
+        links.push({ url: canon, kind: /instagram\.com\/reel\//.test(canon) ? "reel" : /instagram\.com\/p\//.test(canon) ? "ig-post" : "page" });
       }
       return { key: id, at: Number.isFinite(at) && at > 0 ? at : null, mine: !!me && str(tryGet(() => m.sender_fbid)) === me,
         sender: str(tryGet(() => sender?.name)) || str(tryGet(() => INSTAGRAM.ref(src, sender?.user_dict)?.full_name)), links: dedupe(links) };
@@ -243,16 +250,21 @@ window.LKChat = window.LKChat || (() => {
     if (!found) return null;
     const [platform, r] = found;
     const ready = !!tryGet(() => r.ready());
-    return { platform, site: r.label, thread: tryGet(() => r.thread()) || null, ready, locked: !ready && !r.notYet, notYet: r.notYet || null };
+    return { platform, site: r.label, thread: tryGet(() => r.thread()) || null, ready, locked: !ready };
   }
 
   /* range: { mode: "last", n } | { mode: "since", since (ms) } | { mode: "after", after (ms) } | { mode: "all" }
-   * Returns { messages (oldest first), reachedStart, loads, timedOut }. */
-  async function grab(range, { maxLoads = 2000, maxMs = 15 * 60_000 } = {}) {
+   * Returns { messages (oldest first), stopped, loads }. stopped says why loading older pages ended:
+   * "range" (the range is covered), "start" (the chat's first message is loaded), or an early stop —
+   * "failed: <reason>" (the site refused the load), "no-loader" (the page's loader was not found),
+   * "nothing-new" (a load brought nothing within 20 s), "time" or "limit".
+   *
+   * Older pages load at a person's scrolling pace, a pause of 1.5–3 s between them: the requests are
+   * the ones the page makes when you scroll up, and a burst of them is what a site rate-limits. */
+  async function grab(range, { maxLoads = 2000, maxMs = 15 * 60_000, pauseMs = [1500, 3000] } = {}) {
     const found = readerHere();
     if (!found) return { ok: false, error: "this page is not a chat Link Keeper can read" };
     const [, r] = found;
-    if (r.notYet) return { ok: false, error: r.notYet };
     if (!r.ready()) return { ok: false, error: "the chat's messages are not on the page: open the chat, enter your passcode if asked, and wait for it to load" };
 
     const read = () => r.items().map(it => tryGet(() => r.message(it))).filter(Boolean);
@@ -266,17 +278,26 @@ window.LKChat = window.LKChat || (() => {
     };
 
     const started = Date.now();
-    let loads = 0, reachedStart = false;
-    while (!enough() && loads < maxLoads && Date.now() - started < maxMs) {
-      if (!r.hasOlder()) { reachedStart = true; break; }
+    let loads = 0, stopped = null;
+    while (!stopped) {
+      if (enough()) { stopped = "range"; break; }
+      const failed = tryGet(() => r.failed?.());
+      if (failed) { stopped = `failed: ${failed}`; break; }
+      if (!r.hasOlder()) { stopped = "start"; break; }
+      if (loads >= maxLoads) { stopped = "limit"; break; }
+      if (Date.now() - started >= maxMs) { stopped = "time"; break; }
+      if (loads) await sleep(pauseMs[0] + Math.random() * (pauseMs[1] - pauseMs[0]));
       const before = r.items().length;
-      if (!r.loadOlder()) break;
+      if (!r.loadOlder()) { stopped = "no-loader"; break; }
       loads++;
       // Wait for the page to fetch and decrypt the next page of messages.
       const end = Date.now() + 20_000;
-      while (Date.now() < end && r.items().length === before) await sleep(250);
+      while (Date.now() < end && r.items().length === before && !tryGet(() => r.failed?.())) await sleep(250);
       while (Date.now() < end && r.loading()) await sleep(250);
-      if (r.items().length === before) { reachedStart = !r.hasOlder(); break; }
+      if (r.items().length === before) {
+        const why = tryGet(() => r.failed?.());
+        stopped = why ? `failed: ${why}` : r.hasOlder() ? "nothing-new" : "start";
+      }
       messages = read();
     }
 
@@ -286,9 +307,8 @@ window.LKChat = window.LKChat || (() => {
     if (range.mode === "after") messages = messages.filter(m => !Number.isFinite(m.at) || m.at > range.after);
     // Plain copies: page objects must not cross into the extension.
     return JSON.parse(JSON.stringify({
-      ok: true, messages, reachedStart, loads,
+      ok: true, messages, stopped, loads,
       unread: messages.filter(m => !Number.isFinite(m.at)).length,
-      timedOut: Date.now() - started >= maxMs,
     }));
   }
 

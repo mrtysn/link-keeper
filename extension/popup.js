@@ -294,10 +294,10 @@ async function showChat() {
   // The chat's own address is no link to keep: the page part gives way to the chat's.
   $("page").hidden = true;
   $("chat-who").textContent = chat.thread?.handle || chat.thread?.name ? `· ${chat.thread.handle || chat.thread.name}` : `· ${chat.site}`;
-  $("chat-last").textContent = chat.notYet ? `${chat.notYet}.` : chat.locked ? "Its messages are not on the page yet: enter your passcode if asked, and wait for the chat to load."
+  $("chat-last").textContent = chat.locked ? "Its messages are not on the page yet: enter your passcode if asked, and wait for the chat to load."
     : chat.last ? `Last grabbed ${shortWhen(chat.last.at)}, up to the message of ${shortWhen(chat.last.newest)}.`
     : "Never grabbed: Since the last grab takes the last 200 messages.";
-  $("chat-grab").disabled = !!(chat.locked || chat.notYet);
+  $("chat-grab").disabled = !!chat.locked;
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(CHAT_KEY) || "{}"); } catch (e) { /* not remembered */ }
   if (saved.mode) $("chat-mode").value = saved.mode;
@@ -315,7 +315,7 @@ $("chat-grab").onclick = async () => {
   const range = { mode: $("chat-mode").value, n: Number($("chat-n").value), since: $("chat-since").value };
   try { localStorage.setItem(CHAT_KEY, JSON.stringify(range)); } catch (e) { /* not remembered */ }
   $("chat-grab").disabled = true;
-  say("Grabbing: it scrolls the chat on the page. You can close this popup; a notification says when it is done.");
+  say("Grabbing: older messages load on the page a page at a time, a few seconds apart. You can close this popup; a notification says when it is done.");
   const res = await send({ type: "grab-chat", tabId: tab.id, range });
   $("chat-grab").disabled = false;
   say(res?.summary || res?.error || "the chat could not be read", res?.ok ? "ok" : "bad");

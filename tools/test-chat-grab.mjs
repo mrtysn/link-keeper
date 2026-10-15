@@ -19,6 +19,7 @@ async function check(name, fn) {
 }
 
 const kotlin = arr => ({ toArray: () => arr.slice() });
+const FAST = { pauseMs: [0, 0] };
 const E_ = ms => ({ epochSeconds: Math.floor(ms / 1000), nanosecondsOfSecond: (ms % 1000) * 1e6 });
 const T0 = Date.parse("2026-09-01T10:00:00Z");
 const DAY = 86_400_000;
@@ -47,7 +48,7 @@ const post = (handle, id, extra = {}) => ({
 const card = url => ({ urlToOpen: url, displayTitle: "A page", source: { urlToOpen: url } });
 
 /* The page: newest page of messages first loaded; each ScrolledToTop prepends the next older page. */
-function makePage({ pages, locked = false, path: pathname = "/i/chat/111-222" }) {
+function makePage({ pages, locked = false, path: pathname = "/i/chat/111-222", refuse = false, noLoader = false }) {
   const state = { chatItems: { items: null, hasOlderItems: pages.length > 1, isLoading: false }, toolbarState: {
     title: "Friend", otherParticipant: { user: { screenName: "friend", name: "Friend" } } } };
   let loaded = pages.length - 1;
@@ -55,6 +56,7 @@ function makePage({ pages, locked = false, path: pathname = "/i/chat/111-222" })
   const component = { state: { state } };
   let calls = 0;
   const onTop = function () { void "ScrolledToTop"; calls++; setTimeout(() => {
+    if (refuse) { state.chatItems.didPullFail = true; state.chatItems.pullFailureReason = { name: "RateLimited" }; return; }
     if (loaded === 0) return;
     loaded--;
     state.chatItems.items = pages[loaded].concat(state.chatItems.items);
@@ -62,7 +64,7 @@ function makePage({ pages, locked = false, path: pathname = "/i/chat/111-222" })
     fiber.memoizedProps = { ...fiber.memoizedProps, chatItems: state.chatItems.items };
   }, 30); };
   // The hooks: unrelated ones first, then the callback in a ref, as the survey found at hook #24.
-  const hooks = [{ memoizedState: 1 }, { memoizedState: { current: () => "other" } }, { memoizedState: { current: onTop } }];
+  const hooks = [{ memoizedState: 1 }, { memoizedState: { current: () => "other" } }, ...(noLoader ? [] : [{ memoizedState: { current: onTop } }])];
   hooks.forEach((h, i) => { h.next = hooks[i + 1] || null; });
   const fiber = { memoizedProps: { chatItems: state.chatItems.items, component }, memoizedState: hooks[0], return: null, alternate: null };
   const scroller = { "__reactFiber$x": { memoizedProps: {}, return: fiber } };
@@ -92,7 +94,7 @@ await check("info names the chat and the other person from the page's data", () 
 await check("a page with no chat list loaded says it is not ready, and grab says what to do", async () => {
   const { LK } = makePage({ pages, locked: true });
   assert.equal(LK.info().ready, false);
-  const res = await LK.grab({ mode: "all" });
+  const res = await LK.grab({ mode: "all" }, FAST);
   assert.equal(res.ok, false);
   assert.match(res.error, /passcode/);
 });
@@ -104,7 +106,7 @@ await check("not a chat page: info is null", () => {
 
 await check("the last N messages come from what is loaded, without loading older pages", async () => {
   const { LK, calls } = makePage({ pages });
-  const res = await LK.grab({ mode: "last", n: 3 });
+  const res = await LK.grab({ mode: "last", n: 3 }, FAST);
   assert.equal(res.ok, true);
   assert.deepEqual(res.messages.map(m => m.key), ["uuid-9", "uuid-10", "uuid-11"]);
   assert.equal(calls(), 0);
@@ -112,28 +114,53 @@ await check("the last N messages come from what is loaded, without loading older
 
 await check("the whole chat loads every older page, oldest first, and reaches the start", async () => {
   const { LK, calls } = makePage({ pages });
-  const res = await LK.grab({ mode: "all" });
+  const res = await LK.grab({ mode: "all" }, FAST);
   assert.equal(res.messages.length, 12);
   assert.equal(res.messages[0].key, "uuid-0");
-  assert.deepEqual([res.reachedStart, calls()], [true, 2]);
+  assert.deepEqual([res.stopped, calls()], ["start", 2]);
 });
 
 await check("since a date loads only as far back as needed", async () => {
   const { LK, calls } = makePage({ pages });
-  const res = await LK.grab({ mode: "since", since: T0 + 5 * DAY });
+  const res = await LK.grab({ mode: "since", since: T0 + 5 * DAY }, FAST);
   assert.deepEqual(res.messages.map(m => m.key), ["uuid-5", "uuid-6", "uuid-7", "uuid-8", "uuid-9", "uuid-10", "uuid-11"]);
   assert.equal(calls(), 1);
 });
 
+await check("a covered range says so; the last N stop without loading", async () => {
+  const { LK } = makePage({ pages });
+  assert.equal((await LK.grab({ mode: "last", n: 2 }, FAST)).stopped, "range");
+});
+
+await check("older pages load a pause apart, not back to back", async () => {
+  const { LK } = makePage({ pages });
+  const t0 = Date.now();
+  const res = await LK.grab({ mode: "all" }, { pauseMs: [150, 150] });
+  assert.equal(res.loads, 2);
+  assert.ok(Date.now() - t0 >= 150, `took ${Date.now() - t0} ms`);
+});
+
+await check("a load the site refuses stops the grab and says why", async () => {
+  const { LK, calls } = makePage({ pages, refuse: true });
+  const res = await LK.grab({ mode: "all" }, FAST);
+  assert.deepEqual([res.ok, res.stopped, calls(), res.messages.length], [true, "failed: RateLimited", 1, 4]);
+});
+
+await check("no loader on the page: what is loaded, and an early stop named", async () => {
+  const { LK } = makePage({ pages, noLoader: true });
+  const res = await LK.grab({ mode: "all" }, FAST);
+  assert.deepEqual([res.stopped, res.messages.length], ["no-loader", 4]);
+});
+
 await check("after the last grab takes only newer messages", async () => {
   const { LK } = makePage({ pages });
-  const res = await LK.grab({ mode: "after", after: T0 + 9 * DAY });
+  const res = await LK.grab({ mode: "after", after: T0 + 9 * DAY }, FAST);
   assert.deepEqual(res.messages.map(m => m.key), ["uuid-10", "uuid-11"]);
 });
 
 await check("each message: exact time, sender, mine, and its links", async () => {
   const { LK } = makePage({ pages });
-  const res = await LK.grab({ mode: "all" });
+  const res = await LK.grab({ mode: "all" }, FAST);
   const by = k => res.messages.find(m => m.key === k);
   assert.equal(by("uuid-0").at, T0);
   assert.deepEqual([by("uuid-0").sender, by("uuid-0").mine, by("uuid-1").sender, by("uuid-1").mine], ["@friend", false, "@me", true]);
@@ -199,9 +226,9 @@ await check("Instagram: the thread, its other person, and the label the export i
 
 await check("Instagram: every message from the store, older pages loaded, with time, sender and links", async () => {
   const { LK, calls } = makeInstagram({ pages: igPages });
-  const res = await LK.grab({ mode: "all" });
+  const res = await LK.grab({ mode: "all" }, FAST);
   assert.deepEqual(res.messages.map(m => m.key), ["mid.$0", "mid.$1", "mid.$2", "mid.$3"]);
-  assert.deepEqual([res.reachedStart, calls()], [true, 1]);
+  assert.deepEqual([res.stopped, calls()], ["start", 1]);
   const by = k => res.messages.find(m => m.key === k);
   assert.deepEqual([by("mid.$0").at, by("mid.$0").sender, by("mid.$0").mine, by("mid.$1").mine], [T0, "Friend Name", false, true]);
   assert.deepEqual(by("mid.$0").links.map(l => [l.url, l.kind, l.author.handle]), [["https://www.instagram.com/reel/AAA/", "reel", "author"]], "a reel: its canonical address");
@@ -211,7 +238,7 @@ await check("Instagram: every message from the store, older pages loaded, with t
 
 await check("Instagram: the last N take only what is loaded", async () => {
   const { LK, calls } = makeInstagram({ pages: igPages });
-  const res = await LK.grab({ mode: "last", n: 2 });
+  const res = await LK.grab({ mode: "last", n: 2 }, FAST);
   assert.deepEqual([res.messages.map(m => m.key), calls()], [["mid.$2", "mid.$3"], 0]);
 });
 

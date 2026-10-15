@@ -1643,8 +1643,8 @@ browser.commands.onCommand.addListener(async name => {
  */
 
 /* The chat pages chat-grab.js reads, as menu URL patterns and as a test on a tab's URL. */
-const CHAT_PAGES = ["*://x.com/i/chat/*", "*://x.com/messages/*", "*://twitter.com/messages/*", "*://www.instagram.com/direct/t/*"];
-const CHAT_PAGE_RE = /^https:\/\/((www\.)?(x|twitter)\.com\/(i\/chat|messages)\/|www\.instagram\.com\/direct\/t\/)/;
+const CHAT_PAGES = ["*://x.com/i/chat/*", "*://www.instagram.com/direct/t/*"];
+const CHAT_PAGE_RE = /^https:\/\/((www\.)?x\.com\/i\/chat\/|www\.instagram\.com\/direct\/t\/)/;
 const CHAT_LAST_N = 200;
 
 const MENU = [
@@ -1826,7 +1826,7 @@ async function importChatRecords(records) {
       const more = rec[f].filter(v => !list.includes(v));
       if (more.length) { have[f] = [...list, ...more]; changed = true; }
     }
-    if (!have.text && rec.text) { Object.assign(have, { text: rec.text, author: rec.author || have.author, kind: rec.kind }); changed = true; }
+    if (!have.text && rec.text) { Object.assign(have, { text: rec.text, author: rec.author || have.author, kind: have.kind || rec.kind }); changed = true; }
     if (!have.saved_at && rec.saved_at) { have.saved_at = rec.saved_at; changed = true; }
     if (changed) updated++;
   }
@@ -1840,7 +1840,6 @@ async function grabChat(tabId, range) {
   const chat = await chatInfo(tabId).catch(e => ({ error: String(e.message || e) }));
   if (!chat) return { ok: false, error: "this tab is not a chat Link Keeper can read" };
   if (chat.error) return { ok: false, error: chat.error };
-  if (chat.notYet) return { ok: false, error: chat.notYet };
   if (chat.locked) return { ok: false, error: "the chat's messages are not on the page: open the chat, enter your passcode if asked, and wait for it to load" };
   let r = { ...range };
   if (r.mode === "after") r = chat.last?.newest ? { mode: "after", after: chat.last.newest } : { mode: "last", n: CHAT_LAST_N };
@@ -1865,18 +1864,28 @@ async function grabChat(tabId, range) {
     await browser.storage.local.set({ chatGrabs: grabs });
   }
   return { ok: true, chat: chat.thread?.handle || chat.thread?.name || chat.site, messages: res.messages.length, links: records.length,
-    ...counts, reachedStart: res.reachedStart, unread: res.unread, timedOut: res.timedOut,
+    ...counts, stopped: res.stopped, loads: res.loads, unread: res.unread,
     from: times.length ? new Date(Math.min(...times)).toISOString() : null, to: times.length ? new Date(Math.max(...times)).toISOString() : null };
 }
+
+/* Why a grab stopped loading older messages, in words: whether what it brought covers the range. */
+const STOPPED = {
+  range: "That covers the range.",
+  start: "It reached the start of the chat.",
+  "no-loader": "Stopped early: the page's loader for older messages was not found; the site may have changed.",
+  "nothing-new": "Stopped early: a load of older messages brought nothing within 20 seconds. Grab again to go further.",
+  time: "Stopped early after 15 minutes. Grab again to go further.",
+  limit: "Stopped early at 2000 loads. Grab again to go further.",
+};
+const stoppedFailed = s => (/^failed: /.test(s || "") ? `Stopped early: the site refused to load more (${s.slice(8)}). Wait a while before grabbing again.` : "");
 
 function describeGrab(res) {
   if (!res.ok) return res.error;
   const span = res.from ? ` (${res.from.slice(0, 10)} to ${res.to.slice(0, 10)})` : "";
   const bits = [`${res.links} links in ${res.messages} messages${span}`, `${res.added} new`];
   if (res.updated) bits.push(`${res.updated} already held, now with this chat`);
-  if (res.timedOut) bits.push("stopped after 15 minutes; grab again to go further");
   if (res.unread) bits.push(`${res.unread} messages had no readable time`);
-  return `${res.chat}: ${bits.join(", ")}`;
+  return `${res.chat}: ${bits.join(", ")}. ${STOPPED[res.stopped] || stoppedFailed(res.stopped)}`;
 }
 
 /* --- messaging ------------------------------------------------------------------ */

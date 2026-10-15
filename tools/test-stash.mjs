@@ -871,6 +871,11 @@ await check("a chat grab: one record per link with every sender and the first se
   assert.equal(bg.isChatPage("https://x.com/i/chat/123-456"), true);
   assert.equal(bg.isChatPage("https://www.instagram.com/direct/t/1789/"), true);
   assert.equal(bg.isChatPage("https://x.com/home"), false);
+  assert.equal(bg.isChatPage("https://x.com/messages/1-2"), false, "the old DM pages are no chat the reader can read");
+  const said = s => bg.describeGrab({ ok: true, chat: "@friend", links: 2, messages: 9, added: 1, updated: 0, stopped: s });
+  assert.match(said("start"), /reached the start of the chat/);
+  assert.match(said("failed: RateLimited"), /Stopped early: the site refused to load more \(RateLimited\)/);
+  assert.match(said("nothing-new"), /Stopped early/);
 });
 
 await check("site icons: saved from tabs as they are stashed, as data when readable, else as their address", async () => {
