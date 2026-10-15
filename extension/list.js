@@ -195,7 +195,7 @@ function matches(link, term) {
   if ([...tagOut].some(hasTag)) return false;
   if (!term) return true;
   const cap = link.cap;
-  const hay = [link.url, link.title, labelOf(link), cap?.text, link.list?.note, cap?.screenshot, link.date, ...shownTags(link).tags,
+  const hay = [link.url, link.title, labelOf(link), cap?.text, link.note, cap?.screenshot, link.date, ...shownTags(link).tags,
     ...(cap?.links || []), ...(cap?.reply_links || []).map(l => l.href)].filter(Boolean).join(" ").toLowerCase();
   return hay.includes(term);
 }
@@ -529,7 +529,7 @@ function rowEl(link, ctx) {
   meta.append(...whereBadges(link, ctx));
   const container = ctx ? ctx.tab.container : link.copies.find(c => c.container)?.container;
   if (container) meta.append(el("span", { className: "badge", textContent: "Container", title: container }));
-  if (link.list?.note) meta.append(el("span", { className: "note", textContent: link.list.note }));
+  if (link.note) meta.append(el("span", { className: "note", textContent: link.note }));
   const chips = tagChips(link);
   if (chips) meta.append(chips);
   meta.append(tagButton(link, () => render()));
@@ -1274,7 +1274,7 @@ function cardEl(row, top) {
   if (agent) card.append(agent);
   const body = (cap.text || "").replace(/\s+/g, " ").trim();
   if (body && !(labelOf(link) || "").includes(body.slice(0, 40))) card.append(el("div", { className: "cm-body", textContent: body }));
-  const note = cap.note || link.list?.note;
+  const note = cap.note || link.note;
   if (note) card.append(el("div", { className: "cm-note", textContent: note }));
   const pics = [...(cap.shotThumb ? [cap.shotThumb] : []), ...(cap.images || []).slice(0, 3)];
   if (pics.length) card.append(el("div", { className: "cm-thumbs" }, ...pics.map(src => el("img", { src, loading: "lazy", alt: "" }))));

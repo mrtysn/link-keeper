@@ -1005,6 +1005,9 @@ await check("every way in makes a group: loose links grouped by day and source o
   assert.equal(links.find(l => l.url === "https://x.com/a/status/1").date.slice(0, 10), "2026-09-01", "a grouped link keeps its own date");
   assert.ok(!links.some(l => l.list && !l.copies.length), "no link is left in no stash");
   assert.deepEqual(plain(await browser.handle({ type: "grouping-status" })).groups, 3);
+  assert.deepEqual(store.items, [], "the grouped links' list entries are gone: they live in their groups now");
+  const dups = links.filter(l => l.copies.length + (l.list && !l.list.loose ? 1 : 0) > 1);
+  assert.deepEqual(dups.map(l => l.url), [], "and no grouped link counts as held twice");
 
   // A single add today joins today's group, made at the first add and moved up as it fills.
   await browser.handle({ type: "add", urls: ["https://new.example/1"] });
@@ -1012,6 +1015,8 @@ await check("every way in makes a group: loose links grouped by day and source o
   s = plain(await bg.getSessions());
   const today = s.find(x => x.group_key === `day:${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`);
   assert.deepEqual([s[0].id === today.id, today.tabs.map(x => x.url)], [true, ["https://new.example/2", "https://new.example/1"]], "today's group, newest at the top, no link twice");
+  assert.deepEqual(store.items, [], "an add writes no list entry");
+  assert.equal(plain(await browser.handle({ type: "add", urls: ["https://added.example/a"] })).added, 0, "a link already in a group is not added again");
   // A named batch is a group of its own.
   await browser.handle({ type: "add", urls: ["https://paste.example/1"], group: { name: "Pasted links · Oct 15, 2026", key: "batch:paste:1" } });
   assert.equal(plain(await bg.getSessions())[0].name, "Pasted links · Oct 15, 2026");
@@ -1021,6 +1026,7 @@ await check("every way in makes a group: loose links grouped by day and source o
   s = plain(await bg.getSessions());
   assert.ok(!s.some(x => /Instagram export|@m chat|Added · Aug/.test(x.name)), "the groups it made are gone");
   assert.ok(s.some(x => x.name === "Sep 20 tabs") && s.some(x => x.name === "Pasted links · Oct 15, 2026"), "and nothing else");
+  assert.deepEqual(store.items.map(i => i.url).sort(), ["https://added.example/a", "https://added.example/b"], "the list entries come back")
   assert.equal(plain(await browser.handle({ type: "undo-grouping" })).ok, false, "only once");
 });
 
@@ -1087,6 +1093,7 @@ await check("data patch: the opened marks, verdicts and statuses are stripped on
   store.captures = [{ url: "https://a.example/", text: "x", verdict: "keep", judged_at: "2026-10-01T00:00:00Z" }];
   store.stashMeta = { stashes: { s1: { created_at: "2026-10-01T00:00:00Z" } },
     tabs: { t1: { container: "firefox-container-1", seen_at: "2026-10-01T00:00:00Z", verdict: "drop", judged_at: "2026-10-01T00:00:00Z" } } };
+  store.dataPatches = { "2026-10-15-group-loose-links": { at: "x" } };   // grouping is its own case
   const bg = await load(browser);
   await bg.applyDataPatches();
   assert.deepEqual(store.dataPatches["2026-10-15-purge-opened-marks-and-verdicts"], { at: store.dataPatches["2026-10-15-purge-opened-marks-and-verdicts"].at, tabs: 1, captures: 1, items: 1 });

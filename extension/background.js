@@ -126,8 +126,30 @@ function dateOf(item) {
 }
 
 
-/* group: where the new links go — the day's group by default, a named batch's own, or null for none. */
+/* group: where the new links go — the day's group by default, a named batch's own. Since 5.64 every
+ * link sits in a group, so a link added this way gets no reading-list entry: its date and note ride
+ * on its tab. A link already held (in a group, or on the old list) is skipped; re-adding one on the
+ * old list with a date fills the date in, as before. null keeps the old list-only behaviour. */
 async function addItems(entries, note = "", group = dayGroup()) {
+  if (group) {
+    const items = await getItems();
+    const onList = new Map(items.map(i => [keyOf(i.url), i]));
+    const held = new Set((await getSessions()).flatMap(s => s.tabs.map(t => keyOf(t.url))));
+    const fresh = [];
+    let updated = 0, skipped = 0, listChanged = false;
+    for (const raw of entries) {
+      const { url, saved_at, title } = typeof raw === "string" ? { url: raw } : raw;
+      if (!url) continue;
+      const k = keyOf(url);
+      const old = onList.get(k);
+      if (old && saved_at && old.saved_at !== saved_at) { old.saved_at = saved_at; updated++; listChanged = true; continue; }
+      if (old || held.has(k) || fresh.some(f => keyOf(f.url) === k)) { skipped++; continue; }
+      fresh.push({ url, title, saved_at: saved_at || undefined, note: note || undefined });
+    }
+    if (listChanged) await setItems(items);
+    const res = fresh.length ? await addToGroup(fresh, group) : { added: 0 };
+    return { ok: true, added: res.added || 0, updated, skipped, total: items.length };
+  }
   const items = await getItems();
   const byId = new Map(items.map(i => [keyOf(i.url), i]));
   let added = 0, updated = 0, skipped = 0;
@@ -161,10 +183,6 @@ async function addItems(entries, note = "", group = dayGroup()) {
   }
 
   await setItems(items);
-  if (group && added) {
-    const fresh = items.slice(-added).map(i => ({ url: i.url, title: i.title, saved_at: i.saved_at }));
-    await addToGroup(fresh, group);
-  }
   return { ok: true, added, updated, skipped, total: items.length };
 }
 
@@ -624,7 +642,8 @@ async function queueActiveTab() {
 const ROOT_TITLE = "Link Keeper stashes";
 // saved_at: the link's own date (when a chat message was sent, a post was saved), kept per tab now
 // that every link sits in a group.
-const TAB_META = ["container", "saved_at"];
+// note: what was written when the link was added (a single add's note), now that adds go into groups.
+const TAB_META = ["container", "saved_at", "note"];
 const STASH_SETTINGS = { afterStash: "show", exclude: [] };
 /* The List page grouped by stash is where stashes are shown; sessions.html, the Stashed tabs page
  * before 5.14, only forwards there. The viewer pages themselves are never stashed: they are views,
@@ -758,7 +777,7 @@ function addToGroup(tabs, { name, group_key, ingested_at } = {}) {
   return groupQueue(async () => {
     const seen = new Set();
     const clean = tabs.filter(t => t?.url && !seen.has(keyOf(t.url)) && seen.add(keyOf(t.url)))
-      .map(t => ({ url: asBookmarked(t.url), ...(t.title && { title: String(t.title).slice(0, 500) }), ...(t.saved_at && { saved_at: t.saved_at }) }));
+      .map(t => ({ url: asBookmarked(t.url), ...(t.title && { title: String(t.title).slice(0, 500) }), ...(t.saved_at && { saved_at: t.saved_at }), ...(t.note && { note: String(t.note).slice(0, 2000) }) }));
     if (!clean.length) return { ok: true, added: 0 };
     const target = group_key ? (await getSessions()).find(s => s.group_key === group_key) : null;
     if (!target) {
@@ -772,7 +791,10 @@ function addToGroup(tabs, { name, group_key, ingested_at } = {}) {
     const made = [];
     for (const [i, x] of fresh.entries()) made.push([await browser.bookmarks.create({ parentId: target.id, index: i, title: x.title || x.url, url: x.url }), x]);
     await editMeta(m => {
-      for (const [b, x] of made) if (x.saved_at) m.tabs[b.id] = { ...(m.tabs[b.id] || {}), saved_at: x.saved_at };
+      for (const [b, x] of made) {
+        const extra = Object.fromEntries(["saved_at", "note"].filter(k => x[k]).map(k => [k, x[k]]));
+        if (Object.keys(extra).length) m.tabs[b.id] = { ...(m.tabs[b.id] || {}), ...extra };
+      }
       // The group moves up as it fills: it came in again just now.
       if (made.length && m.stashes[target.id]) m.stashes[target.id].ingested_at = new Date().toISOString();
     });
@@ -959,6 +981,7 @@ async function groupLooseLinks() {
     g.tabs.push({ url: l.url, title: l.title || l.cap?.title || undefined, saved_at: l.list.saved_at || c?.saved_at || undefined });
   }
   const made = [];
+  const grouped = new Set([...groups.values()].flatMap(g => g.tabs.map(t => keyOf(t.url))));
   try {
     for (const g of [...groups.values()].sort((a, b) => a.at.localeCompare(b.at))) {
       g.tabs.sort((a, b) => (b.saved_at || "").localeCompare(a.saved_at || ""));
@@ -970,7 +993,21 @@ async function groupLooseLinks() {
     for (const id of made) await removeStashFolder(id);
     throw e;
   }
-  return { groups: made.length, links: [...groups.values()].reduce((n, g) => n + g.tabs.length, 0), stashes: made };
+  // The links now live in their groups: their reading-list entries go, kept here for undo. A note
+  // on one moves onto its tab.
+  const items = await getItems();
+  const moved = items.filter(i => grouped.has(keyOf(i.url)));
+  const notes = new Map(moved.filter(i => i.note).map(i => [keyOf(i.url), i.note]));
+  if (notes.size) {
+    const sessions = await getSessions();
+    await editMeta(m => {
+      for (const s of sessions.filter(s => made.includes(s.id))) {
+        for (const t of s.tabs) if (notes.has(keyOf(t.url))) m.tabs[t.id] = { ...(m.tabs[t.id] || {}), note: notes.get(keyOf(t.url)) };
+      }
+    });
+  }
+  if (moved.length) await setItems(items.filter(i => !grouped.has(keyOf(i.url))));
+  return { groups: made.length, links: grouped.size, stashes: made, items: moved };
 }
 
 /* Takes the groups the conversion made back out: the links go back to being in no stash. Groups that
@@ -982,6 +1019,11 @@ async function undoGrouping() {
   const have = new Set((await getSessions()).map(s => s.id));
   let removed = 0;
   for (const id of rec.stashes) if (have.has(id)) { await removeStashFolder(id); removed++; }
+  // Their reading-list entries come back, except for links added to the list again since.
+  const items = await getItems();
+  const has = new Set(items.map(i => keyOf(i.url)));
+  const back = (rec.items || []).filter(i => !has.has(keyOf(i.url)));
+  if (back.length) await setItems([...items, ...back]);
   rec.undone = new Date().toISOString();
   await browser.storage.local.set({ dataPatches: done });
   return { ok: true, removed };

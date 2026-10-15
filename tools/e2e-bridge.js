@@ -123,8 +123,9 @@ await check("agents cannot send what acts on tabs", async () => {
 await check("the CLI reads and changes the live extension through the socket", async () => {
   await browser.storage.local.set({ folder: "cli-go" });
   await until("the CLI's run", async () => (await browser.storage.local.get("tagDefs")).tagDefs?.list?.some(t => t.name === "cli-done"), 90000);
-  const items = (await browser.storage.local.get("items")).items;
-  if (!items.some(i => i.url === "https://example.org/from-cli")) throw new Error("link-keeper add did not land");
+  // An add lands in today's group (5.64: every link sits in a group).
+  const held = (await getSessions()).find(s => s.group_key?.startsWith("day:") && s.tabs.some(t => t.url === "https://example.org/from-cli"));
+  if (!held) throw new Error("link-keeper add did not land in today's group");
   if ((await tagsOf("https://example.org/from-cli")).join() !== "cli") throw new Error(`tags ${await tagsOf("https://example.org/from-cli")}`);
 });
 
@@ -132,9 +133,9 @@ await check("wiped storage comes back from the latest backup by itself", async (
   await backupNow("agent");
   await browser.storage.local.clear();
   await restoreIfEmpty();
-  const got = await browser.storage.local.get(["captures", "items", "storageId", "restoredFrom"]);
+  const got = await browser.storage.local.get(["captures", "stashMeta", "storageId", "restoredFrom"]);
   if (got.captures?.[0]?.text !== "captured text") throw new Error("captures did not come back");
-  if (!got.items?.some(i => i.url === "https://example.org/from-cli")) throw new Error("the reading list did not come back");
+  if (!Object.values(got.stashMeta?.stashes || {}).some(m => m.group_key?.startsWith("day:"))) throw new Error("the groups' details did not come back");
   if (!got.storageId || !got.restoredFrom) throw new Error("not marked restored");
 });
 

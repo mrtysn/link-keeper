@@ -204,7 +204,8 @@ await kase("import takes OneTab's raw URLs — unicode, spaces, uppercase hosts 
 await kase("the joined dataset: one link per URL across stashes and the list, imports marked", async () => {
   const res = await importStashes([{ tabs: [{ url: "https://joint.example/a", title: "A" }, { url: "https://joint.example/b" }] }], "onetab");
   yes(res.ok, res.error);
-  await addItems([{ url: "https://joint.example/a", title: "A on the list" }]);
+  // A reading-list entry as data from before 5.64 holds it (adds now go into groups): null skips the group.
+  await addItems([{ url: "https://joint.example/a", title: "A on the list" }], "", null);
   let { links, stashes } = await getLinks();
   const a = links.filter(l => l.url.startsWith("https://joint.example/a"));
   eq(a.length, 1, "one row for a URL held in a stash and on the list");
@@ -231,7 +232,8 @@ await kase("Links, its detail pane and Cards load in Firefox with the bar, the s
   yes([...d.querySelectorAll(".group > h2 .n")].some(n => /\d+ tabs?/.test(n.textContent)), "each stash heading counts its tabs");
   eq(d.getElementById("groupby").value, "stash", "grouped by stash");
 
-  yes([...d.querySelectorAll(".group > h2")].some(h => h.textContent.startsWith("Not in a stash")), "links in no stash follow the stashes");
+  // Since 5.64 every link sits in a group: no section of links in no stash.
+  yes(![...d.querySelectorAll(".group > h2")].some(h => h.textContent.startsWith("Not in a stash")), "every link is in a group: no 'Not in a stash' section");
 
   // Explore's old address forwards to Links with the detail pane.
   const explore = await open("stash-cards.html", (d, v) => v.location.pathname === "/list.html" && hasGroups(d) && d.querySelector("#detail .dtitle"));
@@ -258,7 +260,7 @@ await kase("Duplicates: every copy of a link gets a checkbox, nothing is ticked,
     { name: "Dup two", tabs: [{ url: "https://dup.example/x", title: "X again" }] },
   ], "text");
   yes(res.ok, res.error);
-  await addItems([{ url: "https://dup.example/x" }]);
+  await addItems([{ url: "https://dup.example/x" }], "", null);   // an old list copy, as before 5.64
   await browser.storage.local.set({ viewSources: ["tabs", "import", "list"] });
   const { tab, view, doc: d } = await openPage("list.html?group=stash", d => hasRows(d) && d.getElementById("dups") && !d.getElementById("dups").hidden, "the Duplicates button");
   yes(!d.getElementById("dups").hidden, "the Duplicates button shows");
@@ -364,10 +366,11 @@ await kase("List's Import adds pasted links on their own, with their dates", asy
   d.querySelector('input[name="import-dest"][value="list"]').dispatchEvent(new view.Event("change"));
   yes(/2 web links, each on its own, in no stash, 1 with a date/.test(d.getElementById("import-msg").textContent), `preview: ${d.getElementById("import-msg").textContent}`);
   d.getElementById("import-go").click();
-  await until(async () => (await getItems()).length >= 2, "the pasted links to land on the list");
-  const items = await getItems();
-  eq(items.find(i => i.url === "https://dated.example/a")?.saved_at, "2024-03-05T00:00:00.000Z", "the date is kept");
-  yes(items.some(i => i.url === "https://dated.example/b"), "the undated one is added too");
+  // A paste is a group of its own, each link keeping its own date.
+  const pasted = await until(async () => (await getSessions()).find(s => /^Pasted links · /.test(s.name) && s.tabs.length >= 2), "the pasted links to land in their group");
+  eq(pasted.tabs.find(t => t.url === "https://dated.example/a")?.saved_at, "2024-03-05T00:00:00.000Z", "the date is kept");
+  yes(pasted.tabs.some(t => t.url === "https://dated.example/b"), "the undated one is added too");
+  yes(!(await getItems()).some(i => i.url.startsWith("https://dated.example/")), "and no reading-list entry is made");
   await browser.tabs.remove(tab.id);
 });
 
