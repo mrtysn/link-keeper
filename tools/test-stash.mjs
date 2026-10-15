@@ -919,7 +919,7 @@ await check("the popup's view buttons switch to an open viewer instead of openin
   assert.deepEqual([c.total, c.untagged, c.sources, c.stashes], [3, 2, { tabs: 2, import: 0, list: 2 }, 1]);
   store.viewSources = ["list"];
   c = plain(await browser.handle({ type: "link-counts" }));
-  assert.deepEqual([c.total, c.untagged], [2, 2], "counts follow the chosen sources");
+  assert.deepEqual([c.total, c.untagged], [3, 2], "counts take every link, whatever an old source choice says");
 });
 
 /* Stash folders as the 29 Sep import left them: written within ten seconds, in these sizes, plus

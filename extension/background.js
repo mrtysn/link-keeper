@@ -994,15 +994,14 @@ async function pageInfo(url) {
   return { link, stashes: held, tagUse };
 }
 
-/* What the popup shows on its view buttons, counted in the background so the popup never holds
- * the whole dataset: links per source, and how many in the chosen sources have no tags yet. */
+/* Counts for agents, taken in the background so no page holds the whole dataset: every link (the
+ * pile is one since 5.58, whatever a stored viewSources says), how many have no tags yet, and links
+ * per source. */
 async function linkCounts() {
   const { links, stashes } = await getLinks();
-  const chosen = new Set((await read("viewSources", null)) || LINK_SOURCES);
-  const shown = links.filter(l => l.sources.some(s => chosen.has(s)));
   const sources = { tabs: 0, import: 0, list: 0 };
   for (const l of links) for (const s of l.sources) sources[s]++;
-  return { total: shown.length, untagged: shown.filter(l => !l.tags.length).length, sources, stashes: stashes.length, chosen: [...chosen] };
+  return { total: links.length, untagged: links.filter(l => !l.tags.length).length, sources, stashes: stashes.length };
 }
 
 /* Pinned tabs, empty tabs, sites on the never-stash list and Link Keeper's own pages stay open.
