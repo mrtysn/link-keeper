@@ -464,6 +464,24 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.$eval("#queue", e => !e.hidden) && await p.$eval("#stash-tab", e => !e.hidden) && await p.$eval("#remove", e => e.hidden), "popup: and offers + List and Stash tab, no Remove");
   await p.close();
 }
+// On a chat page the popup offers to grab the chat's links, and the page part gives way.
+{
+  const p = await page("popup.html?tab=https://x.com/i/chat/1-2&chat=new");
+  await p.waitForSelector("#chat:not([hidden])");
+  ok(await p.$eval("#page", e => e.hidden), "chat: the popup hides the page part on a chat");
+  ok(/@friend/.test(await p.$eval("#chat-who", e => e.textContent)) && /Never grabbed/.test(await p.$eval("#chat-last", e => e.textContent)), "chat: it names the chat and says it was never grabbed");
+  await p.selectOption("#chat-mode", "last");
+  ok(await p.$eval("#chat-n", e => !e.hidden) && await p.$eval("#chat-since", e => e.hidden), "chat: The last messages asks how many");
+  await p.selectOption("#chat-mode", "since");
+  ok(await p.$eval("#chat-since", e => !e.hidden && /^\d{4}-01-01$/.test(e.value)), "chat: Since a date offers this year's first day");
+  await p.click("#chat-grab"); await p.waitForTimeout(300);
+  ok(/12 links in 140 messages/.test(await p.$eval("#msg", e => e.textContent)), "chat: Grab says what it brought in");
+  ok(!p.errs.length, "chat: no errors " + p.errs.join("; "));
+  await p.close();
+  const off = await page("popup.html?tab=new");
+  ok(await off.$eval("#chat", e => e.hidden) && await off.$eval("#page", e => !e.hidden), "chat: no chat section on an ordinary page");
+  await off.close();
+}
 // A capture that kept replies says how many on its Links row and in the detail pane.
 {
   const p = await page("list.html?group=newest");

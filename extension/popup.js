@@ -291,9 +291,11 @@ async function showChat() {
   const chat = await send({ type: "chat-info", tabId: tab.id }).catch(() => null);
   if (!chat) return;
   $("chat").hidden = false;
+  // The chat's own address is no link to keep: the page part gives way to the chat's.
+  $("page").hidden = true;
   $("chat-who").textContent = chat.thread?.handle || chat.thread?.name ? `· ${chat.thread.handle || chat.thread.name}` : `· ${chat.site}`;
   $("chat-last").textContent = chat.locked ? "Locked: enter your passcode on the page first."
-    : chat.last ? `Last grabbed ${new Date(chat.last.at).toLocaleString()}, up to the message of ${new Date(chat.last.newest).toLocaleString()}.`
+    : chat.last ? `Last grabbed ${shortWhen(chat.last.at)}, up to the message of ${shortWhen(chat.last.newest)}.`
     : "Never grabbed: Since the last grab takes the last 200 messages.";
   $("chat-grab").disabled = !!chat.locked;
   let saved = {};
@@ -303,6 +305,7 @@ async function showChat() {
   $("chat-since").value = saved.since || `${new Date().getFullYear()}-01-01`;
   chatFields();
 }
+const shortWhen = t => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 function chatFields() {
   $("chat-n").hidden = $("chat-mode").value !== "last";
   $("chat-since").hidden = $("chat-mode").value !== "since";

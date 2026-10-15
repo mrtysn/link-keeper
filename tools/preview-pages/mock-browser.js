@@ -141,6 +141,15 @@
           }
           case "sessions":
             return { sessions: structuredClone(stored().sessions) };
+          // ?chat on the popup: the tab is an x.com chat, grabbed once before (?chat=new: never; =locked).
+          case "chat-info": {
+            if (!params.has("chat")) return null;
+            const how = params.get("chat");
+            return { platform: "x", site: "X", thread: { id: "1-2", name: "Friend", handle: "@friend" }, locked: how === "locked", ready: how !== "locked",
+              key: "x:1-2", last: how === "new" || how === "locked" ? null : { newest: Date.parse("2026-10-10T18:00:00Z"), at: "2026-10-11T09:00:00Z", name: "@friend" } };
+          }
+          case "grab-chat":
+            return { ok: true, summary: "@friend: 12 links in 140 messages (2026-08-25 to 2026-10-15), 9 new, 3 already held, now with this chat" };
           case "link-counts": {
             const { links, stashes } = await window.browser.runtime.sendMessage({ type: "links" });
             const chosen = store.viewSources || ["tabs", "import", "list"];

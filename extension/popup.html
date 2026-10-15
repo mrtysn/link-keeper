@@ -123,6 +123,7 @@
   #chat input[type="number"] { width: 5.5rem; }
   #chat input[type="date"] { width: 9.5rem; }
   #chat .go { margin-top: 8px; width: 100%; }
+  #chat:has(~ #page[hidden]) { border-bottom: 0; padding-bottom: 0; }
 
   .msg { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; }
   .msg:has(#msg:empty) { margin-top: 0; }
