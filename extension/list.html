@@ -113,8 +113,13 @@
   .domains:empty { display: none; }
   .chip .src { margin: 0; }
 
-  #msg { margin: 12px 0 0; color: var(--dim); font-size: .875rem; }
-  #msg:empty { margin: 0; }
+  #msg {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 30; max-width: min(40rem, calc(100vw - 32px));
+    margin: 0; padding: 8px 14px; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow); font-size: .875rem;
+  }
+  #msg:empty { display: none; }
+  body.selecting #msg { bottom: 72px; }
 
   .panel { margin-top: 16px; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
   .panel h2 { margin: 0 0 4px; font-size: .9375rem; }
@@ -386,7 +391,6 @@
   #detail .dtitle.plain { font: 1.05rem/1.5 ui-monospace, Menlo, monospace; }
   #detail .durl { font: .8125rem/1.5 ui-monospace, Menlo, monospace; color: var(--dim); overflow-wrap: anywhere; user-select: all; }
   #detail .lk-bar { margin-top: 14px; }
-  #detail .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
   #detail button.link { min-height: 0; padding: 1px 9px; border: 0; border-radius: 999px; background: var(--chip); color: var(--accent); font-size: .75rem; }
   #detail section.box { margin-top: 22px; }
   #detail section.box > h3 { margin: 0 0 8px; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
@@ -400,7 +404,9 @@
   #detail .muted { color: var(--dim); font-size: .875rem; margin: 0; }
   #detail .tagrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 0 0; }
   #detail .tagrow-label { font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
-  #detail .tagrow .tagger { flex: 1 1 20rem; }
+  /* The tag field matches the buttons above it: their height, their border, a sensible width. */
+  #detail .tagrow .tagger { flex: 0 1 26rem; }
+  #detail .tagger input { min-height: 34px; padding: 6px 12px; background: var(--panel); border-color: var(--line); }
   #detail .pvbar label { display: inline-flex; align-items: center; gap: 6px; font-size: .875rem; cursor: pointer; }
   #detail .pvbar { display: flex; align-items: center; gap: 8px; }
   .pvseg { display: flex; gap: 4px; }

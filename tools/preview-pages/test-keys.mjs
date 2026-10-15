@@ -707,6 +707,27 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
+// The detail pane: a button pressed in it still lets it redraw (capture, Show only these)
+{
+  const p = await page("list.html");
+  for (let i = 0; i < 40; i++) {
+    if (/not captured/.test(await p.$eval("#detail .dhead", e => e.textContent)) && await p.$('#detail [data-cmd="read"]')) break;
+    await key(p, "s");
+  }
+  await p.click('#detail [data-cmd="read"]'); await p.waitForTimeout(600);
+  ok(!/not captured/.test(await p.$eval("#detail .dhead", e => e.textContent)), "pane: Capture redraws the pane as captured");
+  ok(/Captured/.test(await msg(p)) && await p.$eval("#msg", e => e.getBoundingClientRect().bottom <= innerHeight), `pane: and says so where it can be seen (${await msg(p)})`);
+  const all = await p.$$eval("#out ul.rows > li", l => l.length);
+  await p.locator("#detail .facts button.link", { hasText: /Show only these/ }).click(); await p.waitForTimeout(300);
+  const only = await p.$$eval("#out ul.rows > li", l => l.length);
+  ok(only < all, `pane: Show only these keeps one site (${all} → ${only})`);
+  ok(await p.$eval("#q", e => e.value) === "" && (await p.$$eval('#domains .chip[aria-pressed="true"]', l => l.length)) === 1, "pane: as a Sites chip, not text in the filter field");
+  await p.locator("#detail .facts button.link", { hasText: /Show every site/ }).click(); await p.waitForTimeout(300);
+  ok((await p.$$eval("#out ul.rows > li", l => l.length)) === all, "pane: Show every site brings them all back");
+  ok(p.errs.length === 0, `pane redraw: no errors ${p.errs.join()}`);
+  await p.close();
+}
+
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

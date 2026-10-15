@@ -73,8 +73,12 @@
     .meter i { transition: width .25s ease; }
   }
 
-  #msg { margin: 12px 0 0; color: var(--dim); font-size: .875rem; }
-  #msg:empty { margin: 0; }
+  #msg {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 30; max-width: min(40rem, calc(100vw - 32px));
+    margin: 0; padding: 8px 14px; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow, 0 8px 24px rgb(0 0 0 / .2)); font-size: .875rem;
+  }
+  #msg:empty { display: none; }
   .keys { margin: 12px 0 0; color: var(--dim); font-size: .8125rem; }
   kbd {
     padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;

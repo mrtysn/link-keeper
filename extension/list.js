@@ -122,7 +122,13 @@ function fitPanes() {
 window.addEventListener("scroll", fitPanes, { passive: true });
 window.addEventListener("resize", fitPanes);
 
-function say(text) { $("msg").textContent = text; }
+/* A message in a fixed spot at the foot of the window, gone after a while; the page is too long to put it below the list. */
+let sayTimer = null;
+function say(text) {
+  $("msg").textContent = text;
+  clearTimeout(sayTimer);
+  if (text) sayTimer = setTimeout(() => { $("msg").textContent = ""; }, 8000);
+}
 
 async function load() {
   const [d, { settings: st }, stored] = await Promise.all([loadLinks({ keepFiltered: true }), send({ type: "stash-settings" }), browser.storage.local.get(PREVIEW_KEY)]);
@@ -899,7 +905,7 @@ function renderDetail() {
   const i = cursorAt();
   const row = rowsOnPage[i];
   // A tag being typed in the pane survives the reload its own save sets off.
-  if (row && row.id === detailFor && box.contains(document.activeElement)) return;
+  if (row && row.id === detailFor && box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
   // The live page stays loaded while the same link is shown.
   const frame = $("pv-frame");
   const keep = frame && row && frame.dataset.url === row.target.link.url ? frame : null;
@@ -927,11 +933,6 @@ function renderDetail() {
   box.append(el("div", { className: "durl", textContent: url }));
   box.append(LinkActions.bar(row.target));
 
-  const badges = el("div", { className: "badges" });
-  if (tab?.container) badges.append(el("span", { className: "badge", textContent: "Container" }));
-  if (stash?.source === "import") badges.append(el("span", { className: "badge", textContent: "Imported" }));
-  if (kind === "other") badges.append(el("span", { className: "badge", textContent: "Opens as a stand-in" }));
-  if (badges.childElementCount) box.append(badges);
   // Tags edit in place; T jumps into the field, Enter on it empty moves to the next link. The rows
   // catch up on the next reload, so a filter such as Untagged does not pull the link away mid-edit.
   const tagrow = el("div", { className: "tagrow" }, el("span", { className: "tagrow-label", textContent: "Tags" }), tagEditor(link, () => {}));
@@ -941,7 +942,8 @@ function renderDetail() {
 }
 
 function knownBox(row) {
-  const { link, stash } = row.target;
+  const { link, stash, tab } = row.target;
+  const kind = kindOf(link.url);
   const box = el("section", { className: "box" }, el("h3", { textContent: "Page content" }));
   const c = link.cap;
   if (c?.text) box.append(el("div", { className: "captext" }, c.handle && el("span", { className: "who", textContent: `${c.handle} ` }), c.text));
@@ -959,7 +961,9 @@ function knownBox(row) {
 
   const facts = el("ul", { className: "facts" });
   if (c?.captured_at) facts.append(el("li", { textContent: `Captured ${whenOf(c.captured_at)}` }));
-  else if (isWeb(link.url)) facts.append(el("li", { textContent: "Not captured yet. Capture saves its text and images." }));
+  // What Open does differently for this link.
+  if (tab?.container) facts.append(el("li", { textContent: "Opens in its Firefox container, signed in as it was" }));
+  if (kind === "other") facts.append(el("li", { textContent: "Firefox will not let Link Keeper open this address: Open shows a page with it to copy into the address bar" }));
   const dm = dmOriginText(c);
   if (dm) facts.append(el("li", { textContent: `Direct message: ${dm}` }));
   if (c?.reply_count) facts.append(el("li", { textContent: `${c.reply_count} ${c.reply_count === 1 ? "reply" : "replies"} captured` }));
@@ -979,8 +983,15 @@ function knownBox(row) {
     const host = hostOf(link.url);
     const same = data.links.filter(l => l.key !== link.key && isWeb(l.url) && hostOf(l.url) === host).length;
     if (same) {
-      const b = el("button", { className: "link", textContent: `Show all ${same + 1}` });
-      b.onclick = () => { $("q").value = host; render(); };
+      // A site filter, the Sites row's own, so it shows as a selected chip there and clears as one.
+      const only = domainSel.size === 1 && domainSel.has(host);
+      const b = el("button", { className: "link", textContent: only ? "Show every site" : `Show only these ${same + 1}` });
+      b.onclick = () => {
+        domainSel.clear();
+        if (!only) domainSel.add(host);
+        render();
+        setCursor(cursorId);
+      };
       facts.append(el("li", {}, `${plural(same, "other link")} from ${host} `, b));
     }
   }

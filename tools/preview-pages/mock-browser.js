@@ -338,6 +338,12 @@
             stored().items.push(...back);
             return { ok: true, restored: back.length };
           }
+          // A capture of a page: a short made-up record, kept like the background keeps one.
+          case "capture-url": {
+            const record = { url: msg.url, title: `Captured ${msg.url}`, text: "Text read off the page.", links: [], captured_at: new Date().toISOString() };
+            stored().captures = [...stored().captures.filter(c => keyOf(c.url) !== keyOf(msg.url)), record];
+            return { ok: true, record };
+          }
           case "stash-counts":
             return { ok: true, counts: { auto: 6, window: 6, left: 2, right: 3, others: 5, "all-windows": 9 } };
           case "stash-settings":

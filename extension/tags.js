@@ -13,7 +13,12 @@ let data = { links: [], all: { links: [] }, sources: new Set() };
 let chosen = new URLSearchParams(location.search).get("tag") || null;
 let cursor = null;   // the key of the link the keys act on
 
-function say(text) { $("msg").textContent = text; }
+let sayTimer = null;
+function say(text) {
+  $("msg").textContent = text;
+  clearTimeout(sayTimer);
+  if (text) sayTimer = setTimeout(() => { $("msg").textContent = ""; }, 8000);
+}
 
 /* Every tag with its links on show, in three layers as the Links page's chips count them: the links
  * you gave it, and, among links with no tags of yours, those the tag model suggests it for and those
