@@ -1794,12 +1794,12 @@ function chatRecords(messages, thread, platform) {
       if (!rec) {
         rec = { url: l.url, kind: l.kind || "page", saved_at: at, via: "chat-grab", thread: [label], senders: [],
           captured_at: new Date().toISOString(), ...(l.text ? { text: l.text } : {}), ...(l.author ? { author: l.author } : {}),
-          ...(l.title ? { title: l.title } : {}) };
+          ...(l.title ? { title: l.title } : {}), ...(l.posted ? { posted: l.posted } : {}), ...(l.links?.length ? { links: l.links } : {}) };
         byKey.set(k, rec);
       }
       if (at && (!rec.saved_at || at < rec.saved_at)) rec.saved_at = at;
       if (m.sender && !rec.senders.includes(m.sender)) rec.senders.push(m.sender);
-      if (!rec.text && l.text) Object.assign(rec, { text: l.text, author: l.author || rec.author });
+      if (!rec.text && l.text) Object.assign(rec, { text: l.text, author: l.author || rec.author, ...(l.posted ? { posted: l.posted } : {}), ...(l.links?.length ? { links: l.links } : {}) });
     }
   }
   return [...byKey.values()];
@@ -1839,7 +1839,8 @@ async function grabChat(tabId, range) {
   const chat = await chatInfo(tabId).catch(e => ({ error: String(e.message || e) }));
   if (!chat) return { ok: false, error: "this tab is not a chat Link Keeper can read" };
   if (chat.error) return { ok: false, error: chat.error };
-  if (chat.locked) return { ok: false, error: "the chat is locked: enter your passcode on the page first" };
+  if (chat.notYet) return { ok: false, error: chat.notYet };
+  if (chat.locked) return { ok: false, error: "the chat's messages are not on the page: open the chat, enter your passcode if asked, and wait for it to load" };
   let r = { ...range };
   if (r.mode === "after") r = chat.last?.newest ? { mode: "after", after: chat.last.newest } : { mode: "last", n: CHAT_LAST_N };
   if (r.mode === "since") r.since = Date.parse(`${r.since}T00:00:00`);
@@ -1847,6 +1848,12 @@ async function grabChat(tabId, range) {
   if (r.mode === "last") r.n = Math.max(1, Math.min(100000, Number(r.n) || CHAT_LAST_N));
   const [{ result: res }] = await browser.scripting.executeScript({ target: { tabId }, func: range => window.LKChat.grab(range), args: [r] });
   if (!res?.ok) return { ok: false, error: res?.error || "the chat could not be read" };
+  // A link typed into a message may still be t.co's wrapper; follow it to the real address.
+  for (const m of res.messages) {
+    for (const l of m.links || []) {
+      if (/^https?:\/\/t\.co\//.test(l.url)) l.url = (await resolveLinks([{ href: l.url }]))[0]?.resolved || l.url;
+    }
+  }
   const records = chatRecords(res.messages, chat.thread, chat.platform);
   const counts = await importChatRecords(records);
   const times = res.messages.map(m => m.at).filter(Number.isFinite);

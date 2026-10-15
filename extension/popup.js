@@ -294,10 +294,10 @@ async function showChat() {
   // The chat's own address is no link to keep: the page part gives way to the chat's.
   $("page").hidden = true;
   $("chat-who").textContent = chat.thread?.handle || chat.thread?.name ? `· ${chat.thread.handle || chat.thread.name}` : `· ${chat.site}`;
-  $("chat-last").textContent = chat.locked ? "Locked: enter your passcode on the page first."
+  $("chat-last").textContent = chat.notYet ? `${chat.notYet}.` : chat.locked ? "Its messages are not on the page yet: enter your passcode if asked, and wait for the chat to load."
     : chat.last ? `Last grabbed ${shortWhen(chat.last.at)}, up to the message of ${shortWhen(chat.last.newest)}.`
     : "Never grabbed: Since the last grab takes the last 200 messages.";
-  $("chat-grab").disabled = !!chat.locked;
+  $("chat-grab").disabled = !!(chat.locked || chat.notYet);
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(CHAT_KEY) || "{}"); } catch (e) { /* not remembered */ }
   if (saved.mode) $("chat-mode").value = saved.mode;
