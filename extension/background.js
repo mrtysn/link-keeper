@@ -1642,6 +1642,11 @@ browser.commands.onCommand.addListener(async name => {
  * visiting it, which is the one thing the keyboard cannot do.
  */
 
+/* The chat pages chat-grab.js reads, as menu URL patterns and as a test on a tab's URL. */
+const CHAT_PAGES = ["*://x.com/i/chat/*", "*://x.com/messages/*", "*://twitter.com/messages/*", "*://www.instagram.com/direct/t/*"];
+const CHAT_PAGE_RE = /^https:\/\/((www\.)?(x|twitter)\.com\/(i\/chat|messages)\/|www\.instagram\.com\/direct\/t\/)/;
+const CHAT_LAST_N = 200;
+
 const MENU = [
   { id: "menu-keep", title: "Capture this page", contexts: ["page", "selection", "image"] },
   { id: "menu-shot", title: "Capture this page with a full-page screenshot", contexts: ["page", "selection", "image"] },
@@ -1654,7 +1659,21 @@ const MENU = [
   ...stashMenu("page", "Stash", ["page", "selection", "image"]),
   ...stashMenu("tab", "Stash to Link Keeper", ["tab"]),
   { id: "menu-queue-link", title: "Add this link to Link Keeper", contexts: ["link"] },
+  ...chatMenu(),
 ];
+
+/* On a chat page only: grab the links out of the chat (chat-grab.js). A date range is the popup's. */
+function chatMenu() {
+  const contexts = ["page", "link", "selection", "image"];
+  const documentUrlPatterns = CHAT_PAGES;
+  const item = (id, title) => ({ id: `chat:${id}`, parentId: "chat", title, contexts, documentUrlPatterns });
+  return [
+    { id: "chat", title: "Grab links from this chat", contexts, documentUrlPatterns },
+    item("after", "Since the last grab"),
+    item("last", `The last ${CHAT_LAST_N} messages`),
+    item("all", "The whole chat"),
+  ];
+}
 
 /* The same stash submenu on a page and on a tab in the tab strip, OneTab's range of scopes: on the
  * tab strip, "this tab" is the one right-clicked. The never-stash item is retitled for the site as
@@ -1701,6 +1720,12 @@ buildMenus();
 
 /* What a menu item does — the page and tab-strip menus alike. Named, so a test can press one. */
 async function onMenuClicked(info, tab) {
+  const chat = /^chat:(after|last|all)$/.exec(info.menuItemId);
+  if (chat) {
+    const mode = chat[1];
+    await notify(describeGrab(await grabChat(tab.id, mode === "last" ? { mode, n: CHAT_LAST_N } : { mode })));
+    return;
+  }
   const stash = /^stash:(page|tab):(.+)$/.exec(info.menuItemId);
   if (stash) {
     const scope = stash[2];
@@ -1735,6 +1760,116 @@ async function onMenuClicked(info, tab) {
   }
 }
 browser.menus.onClicked.addListener(onMenuClicked);
+
+/* --- links out of a chat -------------------------------------------------------------- */
+
+function isChatPage(url) { return CHAT_PAGE_RE.test(url || ""); }
+
+async function chatScript(tabId) {
+  await browser.scripting.executeScript({ target: { tabId }, files: ["chat-grab.js"] });
+}
+
+/* Which chat a tab shows, and when it was last grabbed; null when it is no chat. */
+async function chatInfo(tabId) {
+  const tab = await browser.tabs.get(tabId);
+  if (!isChatPage(tab.url)) return null;
+  await chatScript(tabId);
+  const [{ result }] = await browser.scripting.executeScript({ target: { tabId }, func: () => window.LKChat.info() });
+  if (!result) return null;
+  const key = result.thread?.id ? `${result.platform}:${result.thread.id}` : null;
+  return { ...result, key, last: key ? (await read("chatGrabs", {}))[key] || null : null };
+}
+
+/* The links in one grab's messages as capture records: one per link, every distinct sender, the
+ * earliest sending, and a shared post's author and text when the chat showed them. */
+function chatRecords(messages, thread, platform) {
+  const label = thread?.handle || thread?.name || `${platform} chat`;
+  const byKey = new Map();
+  for (const m of messages) {
+    for (const l of m.links || []) {
+      if (!l.url) continue;
+      const k = keyOf(l.url);
+      const at = Number.isFinite(m.at) ? new Date(m.at).toISOString() : null;
+      let rec = byKey.get(k);
+      if (!rec) {
+        rec = { url: l.url, kind: l.kind || "page", saved_at: at, via: "chat-grab", thread: [label], senders: [],
+          captured_at: new Date().toISOString(), ...(l.text ? { text: l.text } : {}), ...(l.author ? { author: l.author } : {}),
+          ...(l.title ? { title: l.title } : {}) };
+        byKey.set(k, rec);
+      }
+      if (at && (!rec.saved_at || at < rec.saved_at)) rec.saved_at = at;
+      if (m.sender && !rec.senders.includes(m.sender)) rec.senders.push(m.sender);
+      if (!rec.text && l.text) Object.assign(rec, { text: l.text, author: l.author || rec.author });
+    }
+  }
+  return [...byKey.values()];
+}
+
+/* Grabbed records into the captures: a new link is added; one already held gains this chat and its
+ * senders, and its text if it had none. A page read is never overwritten. */
+async function importChatRecords(records) {
+  const captures = await getCaptures();
+  const byKey = new Map(captures.map(c => [keyOf(c.url), c]));
+  let added = 0, updated = 0;
+  for (const rec of records) {
+    const have = byKey.get(keyOf(rec.url));
+    if (!have) {
+      captures.push(rec);
+      byKey.set(keyOf(rec.url), rec);
+      added++;
+      continue;
+    }
+    let changed = false;
+    for (const f of ["thread", "senders"]) {
+      const list = Array.isArray(have[f]) ? have[f] : have[f] ? [have[f]] : [];
+      const more = rec[f].filter(v => !list.includes(v));
+      if (more.length) { have[f] = [...list, ...more]; changed = true; }
+    }
+    if (!have.text && rec.text) { Object.assign(have, { text: rec.text, author: rec.author || have.author, kind: rec.kind }); changed = true; }
+    if (!have.saved_at && rec.saved_at) { have.saved_at = rec.saved_at; changed = true; }
+    if (changed) updated++;
+  }
+  await setCaptures(captures);
+  return { added, updated };
+}
+
+/* range: { mode: "after" } (since the last grab; the last CHAT_LAST_N the first time), { mode: "last", n },
+ * { mode: "since", since: "YYYY-MM-DD" } or { mode: "all" }. */
+async function grabChat(tabId, range) {
+  const chat = await chatInfo(tabId).catch(e => ({ error: String(e.message || e) }));
+  if (!chat) return { ok: false, error: "this tab is not a chat Link Keeper can read" };
+  if (chat.error) return { ok: false, error: chat.error };
+  if (chat.locked) return { ok: false, error: "the chat is locked: enter your passcode on the page first" };
+  let r = { ...range };
+  if (r.mode === "after") r = chat.last?.newest ? { mode: "after", after: chat.last.newest } : { mode: "last", n: CHAT_LAST_N };
+  if (r.mode === "since") r.since = Date.parse(`${r.since}T00:00:00`);
+  if (r.mode === "since" && !Number.isFinite(r.since)) return { ok: false, error: "that date could not be read" };
+  if (r.mode === "last") r.n = Math.max(1, Math.min(100000, Number(r.n) || CHAT_LAST_N));
+  const [{ result: res }] = await browser.scripting.executeScript({ target: { tabId }, func: range => window.LKChat.grab(range), args: [r] });
+  if (!res?.ok) return { ok: false, error: res?.error || "the chat could not be read" };
+  const records = chatRecords(res.messages, chat.thread, chat.platform);
+  const counts = await importChatRecords(records);
+  const times = res.messages.map(m => m.at).filter(Number.isFinite);
+  if (chat.key && times.length) {
+    const grabs = await read("chatGrabs", {});
+    const prev = grabs[chat.key]?.newest || 0;
+    grabs[chat.key] = { newest: Math.max(prev, ...times), at: new Date().toISOString(), name: chat.thread?.handle || chat.thread?.name || null };
+    await browser.storage.local.set({ chatGrabs: grabs });
+  }
+  return { ok: true, chat: chat.thread?.handle || chat.thread?.name || chat.site, messages: res.messages.length, links: records.length,
+    ...counts, reachedStart: res.reachedStart, unread: res.unread, timedOut: res.timedOut,
+    from: times.length ? new Date(Math.min(...times)).toISOString() : null, to: times.length ? new Date(Math.max(...times)).toISOString() : null };
+}
+
+function describeGrab(res) {
+  if (!res.ok) return res.error;
+  const span = res.from ? ` (${res.from.slice(0, 10)} to ${res.to.slice(0, 10)})` : "";
+  const bits = [`${res.links} links in ${res.messages} messages${span}`, `${res.added} new`];
+  if (res.updated) bits.push(`${res.updated} already held, now with this chat`);
+  if (res.timedOut) bits.push("stopped after 15 minutes; grab again to go further");
+  if (res.unread) bits.push(`${res.unread} messages had no readable time`);
+  return `${res.chat}: ${bits.join(", ")}`;
+}
 
 /* --- messaging ------------------------------------------------------------------ */
 
@@ -1842,6 +1977,16 @@ async function handleMessage(msg) {
 
     case "link-counts":
       return linkCounts();
+
+    case "chat-info":
+      return msg.tabId ? chatInfo(msg.tabId).catch(() => null) : null;
+
+    case "grab-chat": {
+      // A long chat takes minutes and the popup may be closed by then: the result is also a notification.
+      const res = await grabChat(msg.tabId, msg.range || { mode: "after" });
+      await notify(describeGrab(res));
+      return { ...res, summary: describeGrab(res) };
+    }
 
     case "open-sessions":
       await showSessions((await browser.windows.getLastFocused()).id);

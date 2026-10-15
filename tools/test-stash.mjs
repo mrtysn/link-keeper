@@ -846,6 +846,33 @@ await check("a DM link with no page read is not captured, keeps its origin and d
     "capturing it again keeps who sent it");
 });
 
+await check("a chat grab: one record per link with every sender and the first sending, merged into what is held", async () => {
+  const { browser, store } = makeBrowser([]);
+  const bg = await load(browser);
+  const t0 = Date.parse("2026-09-01T10:00:00Z");
+  const post = { url: "https://x.com/a/status/1", kind: "tweet", author: { name: "A", handle: "@a" }, text: "the post" };
+  const messages = [
+    { key: "m1", at: t0, mine: false, sender: "@friend", links: [post] },
+    { key: "m2", at: t0 + 60_000, mine: true, sender: "@me", links: [{ url: "https://x.com/a/status/1?s=20", kind: "tweet" }, { url: "https://example.com/p" }] },
+    { key: "m3", at: null, mine: false, sender: "@friend", links: [{ url: "https://example.com/p" }] },
+  ];
+  const recs = plain(bg.chatRecords(messages, { id: "1-2", name: "Friend", handle: "@friend" }, "x"));
+  assert.equal(recs.length, 2, "a link sent twice is one record");
+  const p = recs.find(r => r.url.startsWith("https://x.com/a/status/1"));
+  assert.deepEqual([p.senders, p.thread, p.text, p.saved_at.slice(0, 10), p.via], [["@friend", "@me"], ["@friend"], "the post", "2026-09-01", "chat-grab"]);
+  assert.equal(recs.find(r => r.url === "https://example.com/p").kind, "page");
+
+  store.captures = [{ url: "https://example.com/p", title: "Held", text: "read before", thread: ["@other"] }];
+  const res = await bg.importChatRecords(recs);
+  assert.deepEqual([res.added, res.updated], [1, 1], "a new link is added, a held one gains the chat");
+  const held = plain(store.captures.find(c => c.url === "https://example.com/p"));
+  assert.deepEqual([held.text, held.thread, held.senders], ["read before", ["@other", "@friend"], ["@me", "@friend"]], "a page read is kept; thread and senders join");
+  assert.equal((await bg.importChatRecords(recs)).updated, 0, "grabbing the same again changes nothing");
+  assert.equal(bg.isChatPage("https://x.com/i/chat/123-456"), true);
+  assert.equal(bg.isChatPage("https://www.instagram.com/direct/t/1789/"), true);
+  assert.equal(bg.isChatPage("https://x.com/home"), false);
+});
+
 await check("site icons: saved from tabs as they are stashed, as data when readable, else as their address", async () => {
   const tabs = makeTabs(4);
   tabs[2].favIconUrl = "data:image/png;base64,AAAA";

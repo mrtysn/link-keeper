@@ -282,6 +282,42 @@ for (const [menu, anchor] of [["stash-menu", "stash-more"], ["keep-menu", "keep-
   });
 }
 
+/* --- a chat: grab its links ----------------------------------------------------------- */
+
+/* Shown only on a chat page chat-grab.js can read. The range chosen last time is remembered. */
+const CHAT_KEY = "popupChatRange";
+async function showChat() {
+  if (!tab?.id) return;
+  const chat = await send({ type: "chat-info", tabId: tab.id }).catch(() => null);
+  if (!chat) return;
+  $("chat").hidden = false;
+  $("chat-who").textContent = chat.thread?.handle || chat.thread?.name ? `· ${chat.thread.handle || chat.thread.name}` : `· ${chat.site}`;
+  $("chat-last").textContent = chat.locked ? "Locked: enter your passcode on the page first."
+    : chat.last ? `Last grabbed ${new Date(chat.last.at).toLocaleString()}, up to the message of ${new Date(chat.last.newest).toLocaleString()}.`
+    : "Never grabbed: Since the last grab takes the last 200 messages.";
+  $("chat-grab").disabled = !!chat.locked;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(CHAT_KEY) || "{}"); } catch (e) { /* not remembered */ }
+  if (saved.mode) $("chat-mode").value = saved.mode;
+  if (saved.n) $("chat-n").value = saved.n;
+  $("chat-since").value = saved.since || `${new Date().getFullYear()}-01-01`;
+  chatFields();
+}
+function chatFields() {
+  $("chat-n").hidden = $("chat-mode").value !== "last";
+  $("chat-since").hidden = $("chat-mode").value !== "since";
+}
+$("chat-mode").onchange = chatFields;
+$("chat-grab").onclick = async () => {
+  const range = { mode: $("chat-mode").value, n: Number($("chat-n").value), since: $("chat-since").value };
+  try { localStorage.setItem(CHAT_KEY, JSON.stringify(range)); } catch (e) { /* not remembered */ }
+  $("chat-grab").disabled = true;
+  say("Grabbing: it scrolls the chat on the page. You can close this popup; a notification says when it is done.");
+  const res = await send({ type: "grab-chat", tabId: tab.id, range });
+  $("chat-grab").disabled = false;
+  say(res?.summary || res?.error || "the chat could not be read", res?.ok ? "ok" : "bad");
+};
+
 /* --- the page ------------------------------------------------------------------------ */
 
 $("open-links").onclick = async () => {
@@ -305,4 +341,4 @@ async function restoreUi() {
   }
 }
 
-load().then(restoreUi);
+load().then(restoreUi).then(showChat);
