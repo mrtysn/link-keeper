@@ -322,19 +322,23 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 // The live preview: off by default, this link only, or kept on
 {
   const p = await page("list.html?pane=1");
-  const mode = () => p.$eval(".pvseg [aria-pressed=true]", e => e.textContent);
+  // One button that cycles Off → This link → Kept on for every link.
+  const mode = () => p.$eval(".pvcycle .lbl", e => e.textContent);
   await key(p, "s"); await p.waitForTimeout(200);
   ok(await mode() === "Off", "preview: off when a link opens");
   await key(p, "p"); await p.waitForTimeout(300);
   ok(await mode() === "This link" && !!(await p.$("#pv-frame")), "preview: P shows this link's page");
   await key(p, "s"); await p.waitForTimeout(300);
   ok(await mode() === "Off" && !(await p.$("#pv-frame")), "preview: the next link opens without it");
-  await p.click('.pvseg button:nth-child(3)'); await p.waitForTimeout(300);
+  await p.click(".pvcycle"); await p.waitForTimeout(300);
+  ok(await mode() === "This link", "preview: one click on the button shows this link's page");
+  await p.click(".pvcycle"); await p.waitForTimeout(300);
   await key(p, "s"); await p.waitForTimeout(300);
-  ok(await mode() === "Keep on" && !!(await p.$("#pv-frame")), "preview: Keep on stays on from link to link");
+  ok(await mode() === "Kept on for every link" && !!(await p.$("#pv-frame")), "preview: a second click keeps it on from link to link");
   // The preview's storage lives in the page, so check what is stored rather than reloading.
   ok(await p.evaluate(async () => (await browser.storage.local.get("stashPreview")).stashPreview) === true, "preview: Keep on is remembered");
-  await p.click('.pvseg button:nth-child(1)'); await p.waitForTimeout(200);
+  await p.click(".pvcycle"); await p.waitForTimeout(200);
+  ok(await mode() === "Off", "preview: a third click turns it off");
   ok(!p.errs.length, "preview: no errors " + p.errs.join("; "));
   await p.close();
 }
@@ -625,14 +629,14 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 {
   const p = await page("list.html");
   const hidden = sel => p.$eval(sel, e => e.hidden);
-  ok(!(await hidden("#dups")), "duplicates: the button shows when a link is held twice");
+  ok(+(await p.$eval("#f-dups .n", e => e.textContent)) > 0, "duplicates: the switch counts links held twice");
   ok(!(await hidden("#trash")) && (await p.$eval("#trash", e => e.textContent)) === "Trash (0)", "trash: the button shows from the start, empty");
-  const label = await p.$eval("#dups", e => e.textContent);
-  await p.click("#dups"); await p.waitForTimeout(300);
-  ok(await p.$eval("#dups-h", e => e === document.activeElement), "duplicates: opening puts focus on the panel heading");
+  const label = await p.$eval("#f-dups .n", e => e.textContent);
+  await p.click("#f-dups"); await p.waitForTimeout(300);
+  ok(await p.$eval("#dups-h", e => e === document.activeElement), "duplicates: the switch opens the tools, focus on their heading");
+  ok(await p.$$eval(".rows > li .ttl", l => l.length) > 0 && await p.$eval("#f-dups", e => e.dataset.state) === "only", "duplicates: the list narrows to them");
   const cards = await p.$$eval("#dups-list .dup-card", l => l.length);
-  const m = label.match(/\((\d+)\)/);
-  ok(cards === Number(m[1]), `duplicates: one card per group (${cards}, ${label})`);
+  ok(cards === Number(label), `duplicates: one card per group (${cards}, ${label})`);
   ok(await p.$$eval("#dups-list .dup-card", l => l.every(c => c.getAttribute("role") === "group" && document.getElementById(c.getAttribute("aria-labelledby")))), "duplicates: each card is a named group");
   const names = await p.$$eval("#dups-list .dup-tools button", l => l.map(b => b.getAttribute("aria-label")));
   ok(names.length && new Set(names).size === names.length, "duplicates: every card's buttons name their link");
@@ -658,7 +662,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(trashLabel === `Trash (${n})`, `trash: the button counts what went in (${trashLabel})`);
   // Close hands focus back to the button; Escape does the same.
   await p.click("#dups-close"); await p.waitForTimeout(200);
-  ok(await p.$eval("#dups", e => e === document.activeElement || e.hidden), "duplicates: Close returns focus to its button");
+  ok(await p.$eval("#f-dups", e => e === document.activeElement && e.dataset.state === "0"), "duplicates: Close turns the switch off and returns focus to it");
   await p.click("#trash"); await p.waitForTimeout(300);
   ok(await p.$eval("#trash-h", e => e === document.activeElement), "trash: opening puts focus on the panel heading");
   const rows = await p.$$eval("#trash-list .dup-row", l => l.length);
@@ -668,7 +672,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!(await p.$eval("#trash-restore", e => e.disabled)), "trash: ticking a group enables Restore");
   await p.click("#trash-restore"); await p.waitForTimeout(600);
   ok(/Restored \d+ links? to/.test(await msg(p)), `trash: Restore says where (${await msg(p)})`);
-  ok((await p.$eval("#dups", e => e.hidden ? "(0)" : e.textContent)) !== "(0)", "trash: restored copies are duplicates again");
+  ok(+(await p.$eval("#f-dups .n", e => e.textContent)) > 0, "trash: restored copies are duplicates again");
   await key(p, "Escape");
   ok(await p.$eval("#trash-panel", e => e.hidden), "trash: Escape closes the panel");
   ok(p.errs.length === 0, `duplicates and trash: no errors ${p.errs.join()}`);
@@ -748,7 +752,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok((await p.$$eval("#out ul.rows > li", l => l.length)) === all, "pane: Show every site brings them all back");
   // The live preview is a third pane on the right, its edge draggable, × turning it off.
   ok(await p.$eval("#preview", e => e.hidden), "preview: no third pane until it is turned on");
-  await p.locator(".pvseg .chip", { hasText: "This link" }).click(); await p.waitForTimeout(300);
+  await p.click(".pvcycle"); await p.waitForTimeout(300);   // Off → This link
   ok(await p.$eval("#preview", e => !e.hidden && !!e.querySelector("#pv-frame")), "preview: This link opens the third pane with the page");
   const w0 = await p.$eval("#preview", e => e.getBoundingClientRect().width);
   const g = await p.$eval("#pv-grip", e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + 100]; });

@@ -132,7 +132,11 @@
     .domains .chip:not([aria-pressed="true"]):not(.excluded):hover { background: var(--chip); color: var(--ink); }
     .domains .chip:hover .src, .domains .chip:hover .tag { opacity: 1; }
   }
-  .domains .rowtoggle { min-height: 26px; padding: 2px 8px; border-color: transparent; background: none; color: var(--dim); font-size: .8125rem; }
+  .domains .rowtoggle { min-height: 26px; padding: 2px 8px; border-color: transparent; background: none; color: var(--dim); font-size: .8125rem; gap: 4px; }
+  /* Its chevron, at the text's size, turns up when the row is open. */
+  .rowtoggle .chev { display: inline-flex; transition: rotate 150ms; }
+  .rowtoggle[aria-expanded="true"] .chev { rotate: 180deg; }
+  @media (prefers-reduced-motion: reduce) { .rowtoggle .chev { transition: none; } }
   .domains:empty { display: none; }
   .chip .src { margin: 0; }
 
@@ -463,6 +467,13 @@
   }
   body.resizing { cursor: col-resize; user-select: none; }
   body.pane #out .group:first-child { margin-top: 8px; }
+  /* The rows beside the pane sit a step back; the one under the pointer and the selected one are full. */
+  body.pane #out ul.rows > li:not(.lk-cursor) .ttl, body.pane #out ul.rows > li:not(.lk-cursor) .ttl * { color: var(--dim); }
+  body.pane #out ul.rows > li:not(.lk-cursor) .src, body.pane #out ul.rows > li:not(.lk-cursor) .rd { opacity: .7; }
+  @media (hover: hover) {
+    body.pane #out ul.rows > li:hover .ttl, body.pane #out ul.rows > li:hover .ttl * { color: var(--ink); }
+    body.pane #out ul.rows > li:hover .src, body.pane #out ul.rows > li:hover .rd { opacity: 1; }
+  }
   /* The heading of the section you are in stays at the top of the list; the next one's waits at the
      bottom (list.js drawNextHead) until its own heading scrolls up into its place. */
   body.pane #out .group > h2 { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-top: 6px; }
@@ -564,6 +575,7 @@
       <button class="chip" id="f-captured" data-state="0"></button>
       <button class="chip" id="f-local" data-state="0"></button>
       <button class="chip" id="f-filtered" data-state="0"></button>
+      <button class="chip" id="f-dups" data-state="0"></button>
     </div>
     <label class="view"><span class="sr-only">Group by</span>
       <select id="groupby">

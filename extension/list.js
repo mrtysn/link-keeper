@@ -23,11 +23,13 @@ const GROUP_KEY = "listGroup";
  * Captured: any web page, only captured ones, only ones not captured yet. Local & browser: included,
  * only them, left out. Filtered out: left out of the pile (as the rules in Settings say), included,
  * only them. */
-const BAR = { captured: ["any", "only", "out"], local: ["in", "only", "out"], filtered: ["out", "in", "only"] };
+const BAR = { captured: ["any", "only", "out"], local: ["in", "only", "out"], filtered: ["out", "in", "only"], dups: ["any", "only", "out"] };
+// Links held in more than one place (duplicateSets), worked out on each render for the Duplicates switch.
+let dupKeys = new Set();
 
 let data = { links: [], stashes: [], all: { links: [], stashes: [] }, sources: new Set(), byKey: new Map() };
 let settings = { afterStash: "show", exclude: [] };
-const bar = { captured: "any", local: "in", filtered: "out" };
+const bar = { captured: "any", local: "in", filtered: "out", dups: "any" };
 const barOn = () => Object.keys(BAR).some(k => bar[k] !== BAR[k][0]);
 const domainSel = new Set();   // empty = every domain
 const tagSel = new Set();      // empty = every tag; UNTAGGED = links with no tag set by hand
@@ -188,6 +190,8 @@ function matches(link, term) {
   if (bar.captured === "out" && !(isWeb(link.url) && !link.cap)) return false;
   if (bar.local === "only" && isWeb(link.url)) return false;
   if (bar.local === "out" && !isWeb(link.url)) return false;
+  if (bar.dups === "only" && !dupKeys.has(link.key)) return false;
+  if (bar.dups === "out" && dupKeys.has(link.key)) return false;
   if (domainSel.size && !domainSel.has(siteOf(link.url))) return false;
   if (domainOut.has(siteOf(link.url))) return false;
   const hasTag = t => (t === UNTAGGED ? !link.tags.length : t === SUGGESTED ? hasSuggestions(link) : shownTags(link).tags.includes(t));
@@ -802,7 +806,10 @@ function markChip(b, id, only, except) {
 }
 
 function chipRow(box, label, expanded, flip, chips, selected, clear) {
-  const toggle = el("button", { className: "rowtoggle", textContent: `${label} ${expanded ? "▴" : "▾"}`,
+  const chev = el("span", { className: "chev" });
+  chev.innerHTML = '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const toggle = el("button", { className: "rowtoggle" }, label, chev);
+  Object.assign(toggle, {
     title: expanded ? "Show one line" : "Show them all" });
   toggle.setAttribute("aria-expanded", String(expanded));
   toggle.onclick = flip;
@@ -1008,6 +1015,8 @@ function drawBar(counts) {
       out: ["out", "Local & browser", counts.local, "Bring local files and browser pages back"] },
     filtered: { out: ["", "Filtered out", counts.filtered, "Include the filtered-out pages too"], in: ["in", "Filtered out", counts.filtered, "Show only the filtered-out pages"],
       only: ["only", "Filtered out", counts.filtered, "Leave the filtered-out pages out again"] },
+    dups: { any: ["", "Duplicates", counts.dups, "Show only links held in more than one place, with the tools to remove copies"],
+      only: ["only", "Duplicates", counts.dups, "Leave the duplicated links out"], out: ["out", "Duplicates", counts.dups, "Show every link again"] },
   };
   for (const k of Object.keys(BAR)) {
     const [state, label, n, next] = look[k][bar[k]];
@@ -1022,6 +1031,8 @@ function drawBar(counts) {
 function cycleBar(k) {
   const states = BAR[k];
   bar[k] = states[(states.indexOf(bar[k]) + 1) % states.length];
+  // Only duplicates: their removal tools open under the bar; leaving that state closes them.
+  if (k === "dups" && (bar.dups === "only") === $("dups-panel").hidden) openPanel("dups-panel");
 }
 
 function clearFilters() {
@@ -1107,6 +1118,7 @@ function renderRows() {
     filtered: data.filteredLinks.length,
     captured: data.links.filter(l => isWeb(l.url) && l.cap).length,
     untagged: data.links.filter(l => !l.tags.length).length,
+    dups: (dupKeys = new Set(duplicateSets().map(s => s.link.key))).size,
   };
   const stashBit = data.stashes.length ? ` · ${data.stashes.length === 1 ? "1 stash" : `${data.stashes.length} stashes`}` : "";
   $("sub").textContent = total
@@ -1461,16 +1473,16 @@ function knownBox(row) {
 function previewControls(link) {
   const box = el("section", { className: "box" }, el("h3", { textContent: "Live preview" }));
   const now = previewMode === "keep" ? "keep" : previewShowing(link) ? "this" : "off";
-  const seg = el("div", { className: "pvseg", role: "group" });
-  seg.setAttribute("aria-label", "Live preview");
-  for (const [mode, text, title] of [["off", "Off", "No preview"], ["this", "This link", "Show this link's page beside it; the next link opens without it (P)"],
-    ["keep", "Keep on", "Show every link's page beside it as you select it, until you turn it off"]]) {
-    const b = el("button", { type: "button", className: "chip small", textContent: text, title });
-    b.setAttribute("aria-pressed", String(mode === now));
-    b.onclick = () => setPreview(mode);
-    seg.append(b);
-  }
-  box.append(el("div", { className: "pvbar" }, seg, el("kbd", { textContent: "P" })),
+  // One button that cycles: off → this link → kept on for every link → off.
+  const look = { off: ["0", "Off", "this", "Show this link's page beside it; the next link opens without it"],
+    this: ["only", "This link", "keep", "Keep showing each link's page as you move between links"],
+    keep: ["in", "Kept on for every link", "off", "Turn the preview off"] };
+  const [state, text, next, title] = look[now];
+  const b = el("button", { type: "button", className: "chip small pvcycle", title: `${title} (click)` }, el("span", { className: "lbl", textContent: text }));
+  b.dataset.state = state;
+  b.setAttribute("aria-label", `Live preview: ${text}. ${title}`);
+  b.onclick = () => setPreview(next);
+  box.append(el("div", { className: "pvbar" }, b, el("kbd", { textContent: "P" })),
     el("p", { className: "pvnote", textContent: "The page loads in a third pane on the right, which you can widen or narrow by its edge." }));
   return box;
 }
@@ -1679,11 +1691,17 @@ function closePanel(panel, button) {
   openPanel(panel);
   $(button).focus();
 }
-for (const [panel, button] of [["dups-panel", "dups"], ["trash-panel", "trash"]]) {
+// Closing the duplicate tools also turns the Duplicates switch back off: they belong together.
+function closeDups() {
+  bar.dups = "any";
+  closePanel("dups-panel", "f-dups");
+  render();
+}
+for (const [panel, close] of [["dups-panel", closeDups], ["trash-panel", () => closePanel("trash-panel", "trash")]]) {
   $(panel).addEventListener("keydown", e => {
     if (e.key !== "Escape" || e.target.matches("input[type=text], textarea")) return;
     e.stopPropagation();
-    closePanel(panel, button);
+    close();
   });
 }
 $("settings").onclick = () => openPanel("settings-panel");
@@ -1767,8 +1785,8 @@ function tickEvery(keepOf) {
 
 function renderDuplicates() {
   const sets = dupSets = duplicateSets();
-  $("dups").hidden = !sets.length && $("dups-panel").hidden;
-  $("dups").textContent = `Duplicates (${sets.length})`;
+  // Opened by the Duplicates switch in the filter bar now; the old button stays hidden as the panel's anchor.
+  $("dups").hidden = true;
   if ($("dups-panel").hidden) return;
   // What was ticked stays ticked across a reload, as long as the copy is still there.
   const ids = new Set(sets.flatMap(s => s.copies.map(c => c.id)));
@@ -1869,7 +1887,7 @@ $("dups-remove").onclick = async () => {
   await load();
   $("dups-h").focus();
 };
-$("dups-close").onclick = () => closePanel("dups-panel", "dups");
+$("dups-close").onclick = closeDups;
 
 /* --- trash ----------------------------------------------------------------------------------
  * What was removed, newest removal first, one card per removal and a checkbox per link. Restoring
