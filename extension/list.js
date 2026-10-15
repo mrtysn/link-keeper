@@ -103,6 +103,9 @@ try { group = localStorage.getItem(GROUP_KEY) || "domain"; } catch (e) { /* stor
     try { localStorage.setItem(GROUP_KEY, asked); } catch (e) { /* not remembered */ }
   }
   if (params.get("stash")) { stashOnly = params.get("stash"); group = "stash"; }
+  // ?tags opens the tag row (the Tags page's old address forwards here); ?tag=<name> also picks it.
+  if (params.has("tags") || params.get("tag")) tagsExpanded = true;
+  if (params.get("tag")) tagSel.add(cleanTag(params.get("tag")));
   if ([...params.keys()].length) history.replaceState(null, "", location.pathname + location.hash);
   if (group === "flat") group = "newest";
   if (!GROUPS.includes(group)) group = "domain";
@@ -791,6 +794,7 @@ function renderTagChips() {
     b.onclick = () => { tagSel.has(id) ? tagSel.delete(id) : tagSel.add(id); render(); };
     return b;
   };
+  for (const t of tagSel) if (t !== UNTAGGED && !counts.has(t)) counts.set(t, 0);   // a picked tag stays in the row
   const hand = new Set(data.links.flatMap(l => l.tags));
   const chips = [];
   if (untagged) chips.push(chip(UNTAGGED, "Untagged", untagged));
@@ -798,6 +802,122 @@ function renderTagChips() {
   for (const [t, n] of ordered) chips.push(chip(t, t, n, tagChip(t, !hand.has(t), "Suggested, not on any link as a tag yet")));
   if (tagSel.has(UNTAGGED)) chips.sort((a, b) => (b.getAttribute("aria-pressed") === "true") - (a.getAttribute("aria-pressed") === "true"));
   chipRow(box, "Tags", tagsExpanded, () => { tagsExpanded = !tagsExpanded; renderTagChips(); }, chips, tagSel, () => { tagSel.clear(); render(); });
+}
+
+/* The tag bar, under the tag chips: a new tag, and with one tag picked, that tag's tools — its count
+ * in each layer (yours, the model's suggestions, the site's guesses), making it yours on the links it
+ * is only suggested for, rename, merge into another, colour and delete. Tags used to be their own page. */
+const HUES = [0, 25, 45, 90, 140, 170, 195, 215, 250, 280, 310, 335];
+function hueRow(current, onPick) {
+  const row = el("div", { className: "hues", role: "group" });
+  row.setAttribute("aria-label", "Colour");
+  const auto = el("button", { type: "button", className: "auto", title: "A colour chosen from its name" });
+  auto.setAttribute("aria-pressed", String(current == null));
+  auto.onclick = () => onPick(null);
+  row.append(auto);
+  for (const h of HUES) {
+    const b = el("button", { type: "button", title: `Hue ${h}` });
+    b.style.setProperty("--h", h);
+    b.setAttribute("aria-pressed", String(current === h));
+    b.onclick = () => onPick(h);
+    row.append(b);
+  }
+  return row;
+}
+
+function renderTagBar() {
+  const bar = $("tagbar");
+  bar.textContent = "";
+  const picked = [...tagSel].filter(t => t !== UNTAGGED);
+  const one = picked.length === 1 && tagSel.size === 1 ? picked[0] : null;
+  bar.hidden = !tagsExpanded && !one;
+  if (bar.hidden) return;
+
+  if (one) {
+    const layers = { own: [], suggested: [], site: [] };
+    for (const l of data.links) {
+      const s = shownTags(l);
+      if (s.tags.includes(one)) layers[s.from].push(l);
+    }
+    const others = [...new Set([...TAG_LIB.names, ...data.links.flatMap(l => shownTags(l).tags)])].filter(t => t !== one).sort();
+    const rename = el("button", { type: "button", className: "small", textContent: "Rename" });
+    rename.onclick = () => {
+      const input = el("input", { type: "text", value: one, className: "rename-tag" });
+      input.setAttribute("aria-label", `Rename ${one}`);
+      const done = async keep => {
+        if (!input.isConnected) return;
+        const to = input.value.toLowerCase().replace(/\s+/g, " ").trim();
+        if (!keep || !to || to === one) return render();
+        const merging = others.includes(to);
+        const res = await renameTagUndoably(one, to, merging, layers.own.length);
+        if (!res) return render();
+        if (!res.ok) return say(res.error || "Unable to rename it");
+        tagSel.clear(); tagSel.add(to);
+        say(`${merging ? "Merged" : "Renamed"} ${one} → ${to} on ${plural(res.links, "link")} · ⌘Z undoes it`);
+        await load();
+      };
+      input.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); });
+      input.addEventListener("blur", () => done(true));
+      rename.replaceWith(input);
+      input.focus();
+      input.select();
+    };
+    const merge = el("select", { title: "Give its links another tag instead, and delete this one" },
+      el("option", { value: "", textContent: "Merge into…" }), ...others.map(t => el("option", { value: t, textContent: t })));
+    merge.setAttribute("aria-label", `Merge ${one} into another tag`);
+    merge.onchange = async () => {
+      const to = merge.value;
+      if (!to) return;
+      const res = await renameTagUndoably(one, to, true, layers.own.length);
+      if (!res) { merge.value = ""; return; }
+      if (!res.ok) return say(res.error || "Unable to merge it");
+      tagSel.clear(); tagSel.add(to);
+      say(`Merged ${one} into ${to} on ${plural(res.links, "link")} · ⌘Z undoes it`);
+      await load();
+    };
+    const del = el("button", { type: "button", className: "small danger", textContent: "Delete" });
+    del.onclick = async () => {
+      const res = await deleteTagUndoably(one, layers.own.length);
+      if (!res) return;
+      if (!res.ok) return say(res.error || "Unable to delete it");
+      tagSel.clear();
+      say(`Deleted ${one}${res.links ? ` from ${plural(res.links, "link")}; the links stay` : ""} · ⌘Z puts it back`);
+      await load();
+    };
+    const colours = hueRow(TAG_LIB.hue.has(one) ? TAG_LIB.hue.get(one) : null, async h => {
+      const res = await send({ type: "recolor-tag", tag: one, hue: h });
+      if (!res?.ok) say(res?.error || "Unable to recolour it");
+      await load();
+    });
+    const loose = [...layers.suggested, ...layers.site];
+    const adopt = loose.length && el("button", { type: "button", className: "small",
+      textContent: `Make it yours on ${plural(loose.length, "link")}`,
+      title: `Give the ${loose.length} links it is only suggested or guessed for the tag ${one} as yours; their other suggestions stop showing` });
+    if (adopt) adopt.onclick = async () => {
+      const res = await send({ type: "tag-links", urls: loose.map(l => l.url), tags: [one] });
+      say(res?.ok ? `Tagged ${plural(res.tagged, "link")} ${one}` : res?.error || "Unable to tag them");
+      await load();
+    };
+    bar.append(el("div", { className: "tb-tag" }, tagChip(one),
+      el("span", { className: "tb-count", textContent: `${layers.own.length} yours · ${layers.suggested.length} suggested · ${layers.site.length} guessed from the site` }),
+      adopt || "", el("span", { className: "tb-tools" }, rename, merge, del)), colours);
+  }
+
+  // A new tag, made here (its colour picked once it is chosen) and then put on links with T.
+  const name = el("input", { type: "text", placeholder: "New tag…", className: "tb-new" });
+  name.setAttribute("aria-label", "New tag name");
+  const make = el("button", { type: "submit", className: "small", textContent: "Create" });
+  const form = el("form", { className: "tb-make" }, name, make);
+  form.addEventListener("keydown", e => { if (e.key !== "Escape") e.stopPropagation(); });
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const res = await send({ type: "create-tag", name: name.value, hue: null });
+    if (!res?.ok) return say(res?.error ? res.error[0].toUpperCase() + res.error.slice(1) : "Unable to make it");
+    tagSel.clear(); tagSel.add(res.tag);
+    say(`Made ${res.tag}. Press T on a link to add it.`);
+    await load();
+  };
+  bar.append(form);
 }
 
 function setFilter(which) {
@@ -842,6 +962,7 @@ function renderRows() {
   lastTick = null;
   renderDomainChips();
   renderTagChips();
+  renderTagBar();
   renderSettings();
   renderDuplicates();
   const term = $("q").value.trim().toLowerCase();
@@ -1079,8 +1200,8 @@ function renderTagManager() {
   if (!total.size) list.append(el("li", { className: "none", textContent: "None yet. Press T on a link to add one." }));
   for (const [t, all] of [...total.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
     const n = own.get(t) || 0;
-    const count = el("a", { className: "n", href: `tags.html?tag=${encodeURIComponent(t)}`, textContent: all,
-      title: `${t}: ${n} yours, ${all - n} suggested or guessed · open it in Tags` });
+    const count = el("a", { className: "n", href: `list.html?tag=${encodeURIComponent(t)}`, textContent: all,
+      title: `${t}: ${n} yours, ${all - n} suggested or guessed · show its links` });
     if (!n) { list.append(el("li", {}, tagChip(t, true, "Suggested or guessed; not on any link as your tag yet"), count)); continue; }
     const name = el("button", { className: "link", title: "Rename; a name already in use merges the two" }, tagChip(t));
     name.onclick = () => {

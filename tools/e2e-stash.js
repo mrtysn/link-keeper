@@ -225,7 +225,7 @@ await kase("Links, its detail pane and Cards load in Firefox with the bar, the s
   };
   const list = await open("list.html?group=stash", (d, v) => v.location.pathname === "/list.html" && hasGroups(d));
   const d = list.doc;
-  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["Links", "Cards", "Tags"], "viewers in the bar");
+  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["Links", "Cards"], "viewers in the bar");
   eq(d.querySelector('.app-pages a[aria-current="page"]').textContent, "Links", "Links is marked");
   eq(d.querySelectorAll(".app-sources").length, 0, "one pile: no source chips");
   yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
@@ -346,7 +346,7 @@ await kase("the popup: this page, Stash ▾ for the window, and the viewers as l
   const { tab, doc: d } = await openPage("popup.html", d => d.getElementById("where").textContent && d.querySelectorAll(".viewers [data-open]").length === 3, "the popup");
   // Opened as a tab, the popup's own page is the one it is on: a browser page.
   yes(/cannot be saved/.test(d.getElementById("where").textContent), `a browser page says so: ${d.getElementById("where").textContent}`);
-  eq([...d.querySelectorAll(".viewers [data-open]")].map(b => b.textContent), ["Links", "Cards", "Tags"], "the viewers as links");
+  eq([...d.querySelectorAll(".viewers [data-open]")].map(b => b.textContent), ["Links", "Cards"], "the viewers as links");
   eq([...d.querySelectorAll("#stash-menu [data-scope]")].map(b => b.dataset.scope), ["window", "left", "right", "others", "all-windows"], "the scopes sit behind the arrow");
   yes(d.getElementById("keep-shot") && d.getElementById("keep-note"), "Capture's arrow offers a screenshot and a note");
   eq(d.getElementById("next"), null, "no reading-list walker");

@@ -163,7 +163,7 @@ const Peek = (() => {
     return el("div", {},
       el("div", { className: "pk-head" }, chip, el("span", { textContent: `${plural(links.length, "link")} shown` })),
       links.length ? linkRows(links) : el("p", { className: "pk-note", textContent: "No link shown has this tag." }),
-      go(`tags.html?tag=${encodeURIComponent(tag)}`, "Open in Tags →"));
+      go(`list.html?tag=${encodeURIComponent(tag)}`, "Show its links →"));
   });
 
   kind("link", (key, d) => {

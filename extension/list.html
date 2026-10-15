@@ -161,6 +161,23 @@
     padding: 8px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
   }
   .selbar[hidden] { display: none; }
+  /* The tag bar: a new tag, and the picked tag's counts and tools. */
+  .tagbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .tagbar[hidden] { display: none; }
+  .tagbar .tb-tag { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .tagbar .tb-tag > .tag { font-size: .9375rem; padding: 2px 10px; }
+  .tagbar .tb-count { color: var(--dim); font-size: .8125rem; }
+  .tagbar .tb-tools { display: flex; gap: 6px; align-items: center; }
+  .tagbar .tb-tools select { min-height: 30px; padding: 2px 8px; font-size: .8125rem; }
+  .tagbar .tb-make { display: flex; gap: 6px; margin-left: auto; }
+  .tagbar .tb-new, .tagbar .rename-tag { min-height: 30px; padding: 4px 10px; font: inherit; font-size: .8125rem; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; width: 12rem; }
+  .hues { display: flex; flex-wrap: wrap; gap: 4px; }
+  .hues button {
+    width: 22px; min-height: 22px; height: 22px; padding: 0; border-radius: 999px;
+    background: hsl(var(--h) 65% 55%); border: 2px solid transparent;
+  }
+  .hues button.auto { background: conic-gradient(from 0deg, hsl(0 65% 60%), hsl(120 65% 55%), hsl(240 65% 65%), hsl(360 65% 60%)); }
+  .hues button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 2px var(--panel); }
   /* "Not captured" is the usual state, so a row says nothing; the detail pane and the Not captured filter do. */
   ul.rows .lk-unread { display: none; }
   /* A row's buttons show on the row under the pointer, the one the keys are on, or one holding focus;
@@ -550,7 +567,7 @@
       </fieldset>
       <fieldset>
         <legend>Tags</legend>
-        <p class="hint">The tags you set yourself, with how many links carry each. The chips above also show the tag model's suggestions and the site's guess for links you have not tagged. <a href="tags.html">Open the Tags page</a> to make, recolour or merge tags.</p>
+        <p class="hint">The tags you set yourself, with how many links carry each. The chips above also show the tag model's suggestions and the site's guess for links you have not tagged. Pick a tag in the Tags row above the list to rename, merge, recolour or delete it, or make a new one there.</p>
         <ul id="tag-list" class="exclude tag-list"></ul>
       </fieldset>
       <fieldset>
@@ -592,6 +609,7 @@
   <p id="msg" role="status"></p>
   <div class="domains" id="domains" role="group" aria-label="Domains; with none selected, all are shown"></div>
   <div class="domains" id="tagchips" role="group" aria-label="Tags; with none selected, all are shown"></div>
+  <div class="tagbar" id="tagbar" hidden></div>
   <!-- The rows, and beside them, with Side by side on, the selected link in full. -->
   <div class="panes" id="panes">
     <div id="out"></div>

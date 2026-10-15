@@ -1818,7 +1818,7 @@ async function handleMessage(msg) {
       return { ok: true };
 
     case "open-tags":
-      await showPage("tags.html", (await browser.windows.getLastFocused()).id);
+      await showPage("list.html", (await browser.windows.getLastFocused()).id, "?tags");
       return { ok: true };
 
     case "page-info":

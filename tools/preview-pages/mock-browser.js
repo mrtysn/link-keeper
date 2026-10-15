@@ -238,6 +238,7 @@
           case "rename-tag": case "delete-tag": {
             const from = msg.type === "rename-tag" ? msg.from : msg.tag, to = msg.to;
             const lib = library(), i = lib.findIndex(d => d.name === from);
+            const before = { links: structuredClone(mockTags), lib: structuredClone(lib) };
             if (msg.type === "delete-tag" || lib.some(d => d.name === to)) { if (i !== -1) lib.splice(i, 1); }
             else if (i !== -1) lib[i].name = to;
             let n = 0;
@@ -248,7 +249,14 @@
               if (!mockTags[k].length) delete mockTags[k];
             }
             await saveTags();
-            return { ok: true, links: n };
+            return { ok: true, links: n, before };
+          }
+          case "put-tags-back": {
+            for (const k of Object.keys(mockTags)) delete mockTags[k];
+            Object.assign(mockTags, msg.before.links);
+            library().splice(0, library().length, ...msg.before.lib);
+            await saveTags();
+            return { ok: true };
           }
           case "import-stashes": {
             // Writes one bookmark every 10 ms, as Firefox reports them, so the progress shows.

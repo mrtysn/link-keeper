@@ -10,7 +10,6 @@
   const PAGES = [
     ["list.html", "Links", "Every link, the selected one in full beside the list"],
     ["cards.html", "Cards", "Go through links one card at a time"],
-    ["tags.html", "Tags", "Every tag, each a collection: make, rename, merge and recolour them, and see their links"],
   ];
   const ALL = ["tabs", "import", "list"];
   const here = location.pathname.split("/").pop() || "list.html";

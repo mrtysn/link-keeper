@@ -146,7 +146,7 @@ Every link is one pile: a link you mean to get to, whatever context it came in. 
 was added **on its own** — shared from the phone, pulled from a chat, added with `Ctrl+Shift+U` or
 the CLI, or a page you captured — and then it is *not in a stash*. Where it came from is shown on the
 link (its stash, its date, the chat thread it was sent in), never as a separate list. Three
-**viewers** show the pile: **Links**, **Cards** and **Tags**. (The source chips that narrowed it to
+**viewers** show the pile: **Links** and **Cards**; tags live on Links (the Tags page folded into it in 5.59). (The source chips that narrowed it to
 stashed tabs, imports or a reading list went in 5.58, with Move to list and its `L` key.)
 
 A URL is one link wherever it is held (a trailing slash, `www.` and a plain `#anchor` do not make a different one; a
@@ -163,9 +163,11 @@ dashed: `code` (GitHub, GitLab…), `video`, `post`, `discussion`, `game`, `pape
 `local file`. Guesses are never saved; the first change in the editor makes the shown tags yours,
 and removing every tag brings the guess back.
 
-The **Tags page** counts a tag's links in all three layers: yours, the untagged links the model suggests
-it for, and those whose site suggests it; the tags on most links come first, and one on none of yours yet is dashed. A tag's page lists yours first, then each other
-layer under its own heading with **Tag all N**, which makes the tag yours on every one of them.
+Picking one tag in Links' **Tags** row opens the **tag bar** above the list: the tag's count in each layer —
+yours, the untagged links the model suggests it for, and those whose site suggests it — **Make it yours on
+N links** for the last two, **Rename**, **Merge into…**, its colour and **Delete** (⌘Z undoes a rename, merge or
+delete; a merge asks first). The bar also makes a **New tag**. `list.html?tag=<name>` opens Links on a tag,
+and the old Tags page's address forwards there.
 
 **Suggestions** from a local model take the guesses' place, dimmed the same way, until the link has
 tags of its own: a chip's hover says who suggested it and how sure — *Suggested by your tag model
@@ -209,11 +211,8 @@ removes a link's entry; the message is `set-agent-tags`, journaled so `undo` rev
 - A stash heading's **⋯ → Tag all tabs…** adds one tag to every tab in it.
 - List has a row of tag chips — any of them, or **Untagged** for the links with none of their own —
   and **Group by Tag**, where a link shows under each of its tags. Cards deals one tag at a time.
-- **Tags** in the top bar is the tag library, and a tag is a collection: every tag with its colour
-  and how many links on show carry it, and beside it the links of the chosen one, each with the
-  usual actions. Make a tag there with a name and a colour; rename, recolour, **Merge into…**
-  another, or delete one (two clicks; the links stay). `W` `S` walk the tag's links, `A` `D` choose
-  the previous or next tag. It starts with presets — *to-read, to-watch, to-try, reference, inspiration,
+- The tag library is the Tags row and tag bar on Links; a tag is a collection, its links the list
+  once it is picked. It starts with presets — *to-read, to-watch, to-try, reference, inspiration,
   work, personal, buy, dev, ai, design, news, video, shopping, music, games* — ahead of the tags
   already in use; a deleted preset stays deleted. The palette offers tags in the library's order.
 - **Settings → Tags** lists every tag with its count: click one to rename it (a name already in use
@@ -287,7 +286,7 @@ stopped run resumes where it stopped; the result, `{url: [tags]}`, is written to
 Links, Cards and Tags offer one set of actions on a link, drawn the same way and answering to
 the same keys. There are four things to do with a link: **tag** it (`T`, or `F` to accept what is suggested), **capture** it (save its text,
 images and links), **remove** it, or **skip** it for now. Under the one link Cards and the Links detail pane show,
-**Open**, **Tags**, **Capture** and **Remove** are buttons with their keys; on a row of List or Tags,
+**Open**, **Tags**, **Capture** and **Remove** are buttons with their keys; on a row of List,
 Tags, Capture and Remove show. Move, To list and removing the link's *other* copies sit under **⋯** —
 nothing acts on more than the copy in front of you unless you pick it there. The keys are laid out
 for a left hand on WASD: W S walk (walking on is skipping) and A D jump a group, as in a game. The

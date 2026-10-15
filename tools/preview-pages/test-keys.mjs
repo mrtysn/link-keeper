@@ -281,32 +281,23 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.$eval('#key-guide [data-cmd="preview"]', e => e.classList.contains("idle")), "guide: P is faint where it does nothing");
   await p.close();
 }
-// Tags: the library, a tag's links, and the editor's palette
+// Tags live on Links: the tag row, and the tag bar's new tag, counts and tools
 {
-  const p = await page("tags.html");
-  const names = () => p.$$eval("#lib li .t", l => l.map(e => e.textContent));
-  const ns = await p.$$eval("#lib li .n", l => l.map(e => +e.textContent));
-  const zero = (await names()).filter((n, i) => ns[i] === 0);
-  ok(ns.every((n, i) => !i || ns[i - 1] >= n) && zero.slice(0, 3).join() === "to-read,to-watch,to-try", "tags: most links first, ties in the library's order");
-  const chosen = () => p.$eval("#lib [aria-current] .t", e => e.textContent);
-  ok(await chosen() === "ai tools", "tags: opens on the first tag with links (" + await chosen() + ")");
-  ok(await p.$$eval("#coll ul.rows > li", l => l.length) > 0, "tags: the chosen tag's links show");
-  await key(p, "d"); ok(await chosen() !== "ai tools", "tags: D picks the next tag");
-  await key(p, "a"); ok(await chosen() === "ai tools", "tags: A picks the previous one");
-  const row = () => p.$eval("#coll .lk-cursor .ttl", e => e.textContent).catch(() => null);
-  const r0 = await row(); await key(p, "s");
-  ok(r0 && (await row()) !== r0, "tags: S walks the tag's links");
-  await p.fill("#new-name", "Read Later"); await p.click("#new-hues button:nth-child(3)"); await p.click("#maker button.primary");
-  await p.waitForTimeout(300);
-  ok(await chosen() === "read later", "tags: Create makes the tag and opens it (" + await chosen() + ")");
-  ok(await p.$eval("#lib [aria-current]", e => e.style.getPropertyValue("--h")) === "25", "tags: its colour is the one picked");
-  await p.click(".coll-head .hues button:nth-child(6)"); await p.waitForTimeout(300);
-  ok(await p.$eval("#lib [aria-current]", e => e.style.getPropertyValue("--h")) === "140", "tags: recolour");
-  await p.click(".coll-head .tools button:not(.danger)");
-  await p.fill(".coll-head input", "later"); await p.keyboard.press("Enter"); await p.waitForTimeout(300);
-  ok(await chosen() === "later" && !(await names()).includes("read later"), "tags: rename");
-  await p.click(".coll-head .danger"); await p.click(".coll-head .danger"); await p.waitForTimeout(300);
-  ok(!(await names()).includes("later"), "tags: Delete, clicked twice, removes it (" + await msg(p) + ")");
+  const p = await page("list.html?tags");
+  ok(!(await p.$eval("#tagbar", e => e.hidden)), "tags: ?tags opens the tag row and its bar");
+  await p.fill("#tagbar .tb-new", "Read Later"); await p.click("#tagbar .tb-make button"); await p.waitForTimeout(400);
+  const picked = () => p.$$eval('#tagbar .tb-tag > .tag', l => l.map(e => e.textContent));
+  ok((await picked()).some(t => t.startsWith("read later")), `tags: Create makes the tag and picks it (${await picked()})`);
+  await p.click("#tagbar .hues button:nth-child(6)"); await p.waitForTimeout(300);
+  ok(await p.$eval("#tagbar .tb-tag > .tag", e => e.style.getPropertyValue("--h")) === "140", "tags: recolour");
+  await p.locator("#tagbar .tb-tools button", { hasText: "Rename" }).click();
+  await p.fill("#tagbar .rename-tag", "later"); await p.keyboard.press("Enter"); await p.waitForTimeout(400);
+  ok((await picked()).some(t => t.startsWith("later")) && !(await picked()).some(t => t.startsWith("read later")), `tags: rename (${await picked()})`);
+  p.once("dialog", d => d.accept());
+  await p.click("#tagbar .tb-tools .danger"); await p.waitForTimeout(400);
+  ok(!(await picked()).length && /Deleted later/.test(await msg(p)), "tags: Delete removes it (" + await msg(p) + ")");
+  await key(p, "Meta+z"); await p.waitForTimeout(400);
+  ok(/Undone/.test(await msg(p)), "tags: ⌘Z puts a deleted tag back (" + await msg(p) + ")");
   ok(!p.errs.length, "tags: no errors " + p.errs.join("; "));
   await p.close();
 }
@@ -426,7 +417,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(/links? shown/.test(await peek() || ""), "peek: a site chip previews its links");
   await p.mouse.move(5, 5); await p.waitForTimeout(400);
   await p.hover('#tagchips [data-peek^="tag:"]'); await p.waitForTimeout(500);
-  ok(/Open in Tags/.test(await peek() || ""), "peek: a tag chip previews the tag");
+  ok(/Show its links/.test(await peek() || ""), "peek: a tag chip previews the tag");
   ok(!p.errs.length, "peek list: no errors " + p.errs.join("; "));
   await p.close();
 }
@@ -693,16 +684,15 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
-// Tags: a tag's suggested and guessed links show below yours, and Tag all makes them yours
+// A tag picked shows its counts in each layer, and makes it yours on the links it is only suggested for
 {
-  const p = await page("tags.html?tag=post");
-  const head = await p.$eval(".layer-head h3", e => e.textContent).catch(() => "");
-  ok(/Guessed from the site · \d+|Suggested by the tag model · \d+/.test(head), `tags: the other layers show under their heading (${head})`);
-  ok(await p.$eval('#lib li:first-child button .n', e => +e.textContent > 0), "tags: the list starts with the tags on most links, every layer counted");
-  const n = +(head.match(/(\d+)$/)?.[1] || 0);
-  await p.click(".layer-head button"); await p.waitForTimeout(500);
-  ok(new RegExp(`Tagged ${n} links? post`).test(await msg(p)), `tags: Tag all tags them (${await msg(p)})`);
-  ok(/^\d+ links?$/.test(await p.$eval(".coll-head .count", e => e.textContent)) && !/^0 /.test(await p.$eval(".coll-head .count", e => e.textContent)), "tags: they now count as yours");
+  const p = await page("list.html?tag=post");
+  const count = () => p.$eval("#tagbar .tb-count", e => e.textContent);
+  ok(/^0 yours · \d+ suggested · \d+ guessed from the site$/.test(await count()), `tags: ?tag=post picks it, its layers counted (${await count()})`);
+  const n = (await count()).match(/(\d+) suggested · (\d+) guessed/).slice(1).reduce((a, b) => a + +b, 0);
+  await p.locator("#tagbar button", { hasText: "Make it yours" }).click(); await p.waitForTimeout(500);
+  ok(new RegExp(`Tagged ${n} links? post`).test(await msg(p)), `tags: Make it yours tags them (${await msg(p)})`);
+  ok(new RegExp(`^${n} yours`).test(await count()), `tags: they now count as yours (${await count()})`);
   ok(p.errs.length === 0, `tags layers: no errors ${p.errs.join()}`);
   await p.close();
 }

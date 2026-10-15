@@ -12,7 +12,7 @@
 #   preview.zsh --captures file.jsonl    # default: $DATA_DIR/link-captures-all.jsonl
 #
 # Pages: frame.html shows three popup states side by side; popup.html, list.html, cards.html,
-# stash-cards.html and tags.html open alone.
+# stash-cards.html open alone; tags.html forwards to Links.
 # Query flags on either page:
 #   msg      restore a message, as if a capture just happened
 #   note     the popup's note field open, as after "Capture with a note…"
@@ -94,7 +94,6 @@ print "http://127.0.0.1:$port/list.html"
 print "http://127.0.0.1:$port/cards.html"
 print "http://127.0.0.1:$port/list.html?group=stash"
 print "http://127.0.0.1:$port/stash-cards.html"
-print "http://127.0.0.1:$port/tags.html"
 print "http://127.0.0.1:$port/standin.html?url=file:///tmp/x.html&title=Report&why=the+helper+is+not+installed"
 cd "$out"
 exec python3 -m http.server "$port" --bind 127.0.0.1
