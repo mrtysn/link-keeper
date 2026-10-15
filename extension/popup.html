@@ -35,7 +35,8 @@
   /* The strip: the app and its version, then what acts on the window (Stash) and opens the page. */
   header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
   header > * { flex: none; white-space: nowrap; }
-  header .ver { margin-right: auto; }
+  /* The name with its version under it, so the strip fits the popup with the stash counts in it. */
+  header .brand { flex: 0 1 auto; min-width: 0; margin-right: auto; display: flex; flex-direction: column; }
   header .split.small button { min-height: 28px; padding: 3px 9px; font-size: 12px; }
   header .split.small button.arrow { width: 22px; padding: 0; }
   header img { width: 20px; height: 20px; }
@@ -67,7 +68,7 @@
     border: 1px solid var(--field); border-radius: 8px; padding: 6px 9px;
   }
 
-  header .ver { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+  header .ver { color: var(--dim); font-size: 10.5px; line-height: 1.2; font-variant-numeric: tabular-nums; }
 
   /* --- the page you are on: what it is, where it is held, its tags, what to do with it --- */
   .pagehead { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 2px 10px; align-items: start; }
@@ -125,8 +126,7 @@
 <body>
   <header>
     <img src="icon.svg" alt="">
-    <h1>Link Keeper</h1>
-    <span class="ver" id="ver"></span>
+    <div class="brand"><h1>Link Keeper</h1><span class="ver" id="ver"></span></div>
     <!-- The strip's controls are about the window and the app, not the page below. -->
     <div class="split small">
       <button id="stash" title="Stash the selected tabs, or the whole window, and close them (&#8963;&#8679;S)">Stash this window</button>

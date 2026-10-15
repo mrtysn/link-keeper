@@ -93,11 +93,15 @@ const byUse = () => {
 };
 
 function render() {
-  const web = isWeb(tab?.url || "");
+  // Link Keeper's own pages show its icon; their address is the add-on's id, not a site.
+  const ownPage = (tab?.url || "").startsWith(browser.runtime.getURL(""));
+  const web = isWeb(tab?.url || "") && !ownPage;
   const link = info.link;
-  $("page-icon").replaceWith(Object.assign(srcIcon(tab?.url || "about:blank"), { id: "page-icon" }));
+  const icon = srcIcon(tab?.url || "about:blank");
+  if (ownPage) { icon.innerHTML = ""; icon.style.backgroundImage = 'url("icon.svg")'; }
+  $("page-icon").replaceWith(Object.assign(icon, { id: "page-icon" }));
   $("page-title").textContent = (link && labelOf(link)) || tab?.title || "This tab";
-  $("page-host").textContent = web ? hostOf(tab.url) : "a browser page";
+  $("page-host").textContent = web ? hostOf(tab.url) : ownPage ? "Link Keeper's page" : "a browser page";
 
   // Two lines: where it is held, and whether its text is captured.
   const where = $("where"), cap = $("captured");
@@ -105,7 +109,8 @@ function render() {
   cap.textContent = "";
   const held = copies();
   cap.hidden = !web;
-  if (!web) where.append("Browser pages cannot be saved; Stash still takes the tabs around it.");
+  if (!web) where.append(ownPage ? "Link Keeper's pages are not saved as links; Stash still takes the tabs around it."
+    : "Browser pages cannot be saved; Stash still takes the tabs around it.");
   else {
     // Each line: its label, then its values wrapping beside it rather than under it.
     const vals = el("span", { className: "vals" });
