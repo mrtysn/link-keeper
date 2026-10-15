@@ -1710,7 +1710,16 @@ $("groupby").onchange = () => {
 };
 for (const f of FILTERS) $(`f-${f}`).onclick = () => { setFilter(f); render(); };
 
-$("stash").onclick = () => act({ type: "stash" }, r => `Stashed ${plural(r.stashed, "tab")}${r.why ? ` · left open: ${r.why}` : ""}`);
+const stashed = r => `Stashed ${plural(r.stashed, "tab")}${r.why ? ` · left open: ${r.why}` : ""}`;
+$("stash").onclick = () => act({ type: "stash" }, stashed);
+{
+  // The popup's other scopes, here too; "this one" is this page's tab, which is never stashed.
+  const [trigger, menu] = popoverMenu("▾", "Stash only some tabs", [
+    ["window", "All tabs in this window"], ["left", "Tabs to the left"], ["right", "Tabs to the right"],
+    ["others", "All except this one"], ["all-windows", "Every window, one stash each"],
+  ].map(([scope, text]) => ({ text, run: () => act({ type: "stash", scope }, stashed) })), "primary arrow");
+  $("stash-split").append(trigger, menu);
+}
 
 
 function download(name, type, body) {
@@ -1729,7 +1738,7 @@ function download(name, type, body) {
         JSON.stringify({ exported_at: new Date().toISOString(), sessions }, null, 2));
       say(`Exported ${plural(sessions.length, "stash")} to Downloads`);
     } },
-    { text: "Reading list (JSONL)", title: "Every reading-list entry with its status and dates", run: async () => {
+    { text: "Reading list (JSONL)", title: "Every reading-list entry with its dates and note", run: async () => {
       const { items } = await send({ type: "export-list" });
       if (!items.length) return say("The reading list is empty");
       download("link-worklist.jsonl", "application/x-ndjson",

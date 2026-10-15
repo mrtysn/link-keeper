@@ -42,6 +42,10 @@
   .heading { margin-right: auto; }
   h1 { font-size: 1.5rem; line-height: 1.15; letter-spacing: -.02em; margin: 0 0 4px; }
   .sub { margin: 0; color: var(--dim); font-size: .875rem; font-variant-numeric: tabular-nums; }
+  /* Stash and its ▾ of other scopes, joined as one button. */
+  .split { display: inline-flex; }
+  .split > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .split > .arrow { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgb(255 255 255 / .35); padding: 0 10px; }
   .page-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   /* Every action but the primary one is quiet until pointed at. */
   .page-actions > button:not(.primary) { background: none; border-color: transparent; color: var(--dim); font-size: .8125rem; }
@@ -431,7 +435,7 @@
       <button id="import" aria-expanded="false" aria-controls="import-panel" title="Import stashes from OneTab, TidyTab, a Link Keeper export, CSV or any text with links, or capture JSONL for the reading list">Import</button>
       <span id="export-slot"></span>
       <button id="settings" aria-expanded="false" aria-controls="settings-panel" title="What happens after stashing and opening, and sites never to stash">Settings</button>
-      <button class="primary" id="stash" title="Stash the selected tabs, or every other tab in this window, and close them">Stash this window</button>
+      <span class="split" id="stash-split"><button class="primary" id="stash" title="Stash the selected tabs, or every other tab in this window, and close them">Stash this window</button></span>
     </div>
   </header>
 
