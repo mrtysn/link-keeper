@@ -343,8 +343,9 @@ await kase("Tags: the ✎ editor on a List row saves a tag for the URL, every pa
 
 await kase("the popup: this page, Stash ▾ for the window, and the viewers as links", async () => {
   const { tab, doc: d } = await openPage("popup.html", d => d.getElementById("where").textContent && d.getElementById("open-links"), "the popup");
-  // Opened as a tab, the popup's own page is the one it is on: a browser page.
-  yes(/cannot be saved/.test(d.getElementById("where").textContent), `a browser page says so: ${d.getElementById("where").textContent}`);
+  // Opened as a tab, the popup's own page is the one it is on: one of Link Keeper's own pages.
+  yes(/Link Keeper's pages are not saved/.test(d.getElementById("where").textContent) && d.getElementById("page-host").textContent === "Link Keeper's page",
+    `its own page says so: ${d.getElementById("where").textContent}`);
   yes(d.getElementById("open-links") && !d.querySelector(".viewers"), "one button opens the page; no viewer buttons");
   eq([...d.querySelectorAll("#stash-menu [data-scope]")].map(b => b.dataset.scope), ["window", "left", "right", "others", "all-windows"], "the scopes sit behind the arrow");
   yes(d.getElementById("keep-shot") && d.getElementById("keep-note"), "Capture's arrow offers a screenshot and a note");

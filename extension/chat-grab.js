@@ -68,7 +68,9 @@ window.LKChat = window.LKChat || (() => {
     failed() {
       const items = tryGet(() => X.state()?.chatItems);
       if (!tryGet(() => items?.didPullFail)) return null;
-      return str(tryGet(() => items.pullFailureReason?.name)) || str(tryGet(() => items.pullFailureReason)) || "x.com refused the load";
+      // The reason's shape was never seen on a real failure: keep it only if it reads as words.
+      const why = str(tryGet(() => items.pullFailureReason?.name)) || str(tryGet(() => items.pullFailureReason));
+      return why && !why.startsWith("[object") && why.length <= 60 ? why : "x.com refused the load";
     },
     // The page asks for older messages when its list reaches the top: a callback the list component
     // keeps in a hook, which sends ScrolledToTop. Found by what it sends, not by its hook's position.
@@ -278,26 +280,32 @@ window.LKChat = window.LKChat || (() => {
     };
 
     const started = Date.now();
-    let loads = 0, stopped = null;
+    let loads = 0, stopped = null, lastWasFailed = false;
     while (!stopped) {
       if (enough()) { stopped = "range"; break; }
-      const failed = tryGet(() => r.failed?.());
+      // A refusal counts only after this grab's own load: a flag left from an earlier failure must
+      // not stop every later grab before it tries.
+      const failed = loads && !lastWasFailed ? tryGet(() => r.failed?.()) : null;
       if (failed) { stopped = `failed: ${failed}`; break; }
       if (!r.hasOlder()) { stopped = "start"; break; }
       if (loads >= maxLoads) { stopped = "limit"; break; }
       if (Date.now() - started >= maxMs) { stopped = "time"; break; }
       if (loads) await sleep(pauseMs[0] + Math.random() * (pauseMs[1] - pauseMs[0]));
       const before = r.items().length;
+      // A flag already up before this load says nothing about it.
+      const failedNow = () => (wasFailed ? null : tryGet(() => r.failed?.()));
+      const wasFailed = !!tryGet(() => r.failed?.());
       if (!r.loadOlder()) { stopped = "no-loader"; break; }
       loads++;
       // Wait for the page to fetch and decrypt the next page of messages.
       const end = Date.now() + 20_000;
-      while (Date.now() < end && r.items().length === before && !tryGet(() => r.failed?.())) await sleep(250);
+      while (Date.now() < end && r.items().length === before && !failedNow()) await sleep(250);
       while (Date.now() < end && r.loading()) await sleep(250);
       if (r.items().length === before) {
-        const why = tryGet(() => r.failed?.());
+        const why = failedNow();
         stopped = why ? `failed: ${why}` : r.hasOlder() ? "nothing-new" : "start";
       }
+      lastWasFailed = wasFailed;
       messages = read();
     }
 

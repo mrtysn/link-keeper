@@ -48,15 +48,17 @@ const post = (handle, id, extra = {}) => ({
 const card = url => ({ urlToOpen: url, displayTitle: "A page", source: { urlToOpen: url } });
 
 /* The page: newest page of messages first loaded; each ScrolledToTop prepends the next older page. */
-function makePage({ pages, locked = false, path: pathname = "/i/chat/111-222", refuse = false, noLoader = false }) {
+function makePage({ pages, locked = false, path: pathname = "/i/chat/111-222", refuse = false, noLoader = false, staleFail = false, reason = { name: "RateLimited" } }) {
   const state = { chatItems: { items: null, hasOlderItems: pages.length > 1, isLoading: false }, toolbarState: {
     title: "Friend", otherParticipant: { user: { screenName: "friend", name: "Friend" } } } };
   let loaded = pages.length - 1;
   state.chatItems.items = pages[loaded].slice();
+  if (staleFail) Object.assign(state.chatItems, { didPullFail: true, pullFailureReason: { name: "Old" } });
   const component = { state: { state } };
   let calls = 0;
   const onTop = function () { void "ScrolledToTop"; calls++; setTimeout(() => {
-    if (refuse) { state.chatItems.didPullFail = true; state.chatItems.pullFailureReason = { name: "RateLimited" }; return; }
+    if (refuse) { state.chatItems.didPullFail = true; state.chatItems.pullFailureReason = reason; return; }
+    state.chatItems.didPullFail = false;
     if (loaded === 0) return;
     loaded--;
     state.chatItems.items = pages[loaded].concat(state.chatItems.items);
@@ -144,6 +146,17 @@ await check("a load the site refuses stops the grab and says why", async () => {
   const { LK, calls } = makePage({ pages, refuse: true });
   const res = await LK.grab({ mode: "all" }, FAST);
   assert.deepEqual([res.ok, res.stopped, calls(), res.messages.length], [true, "failed: RateLimited", 1, 4]);
+});
+
+await check("a failure flag left from before the grab does not stop it", async () => {
+  const { LK, calls } = makePage({ pages, staleFail: true });
+  const res = await LK.grab({ mode: "all" }, FAST);
+  assert.deepEqual([res.stopped, calls(), res.messages.length], ["start", 2, 12]);
+});
+
+await check("a refusal whose reason is no words reads as a plain refusal", async () => {
+  const { LK } = makePage({ pages, refuse: true, reason: { code: 7 } });
+  assert.equal((await LK.grab({ mode: "all" }, FAST)).stopped, "failed: x.com refused the load");
 });
 
 await check("no loader on the page: what is loaded, and an early stop named", async () => {

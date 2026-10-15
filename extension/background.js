@@ -1885,7 +1885,7 @@ function describeGrab(res) {
   const bits = [`${res.links} links in ${res.messages} messages${span}`, `${res.added} new`];
   if (res.updated) bits.push(`${res.updated} already held, now with this chat`);
   if (res.unread) bits.push(`${res.unread} messages had no readable time`);
-  return `${res.chat}: ${bits.join(", ")}. ${STOPPED[res.stopped] || stoppedFailed(res.stopped)}`;
+  return `${res.chat}: ${bits.join(", ")}.${[STOPPED[res.stopped] || stoppedFailed(res.stopped)].filter(Boolean).map(s => ` ${s}`).join("")}`;
 }
 
 /* --- messaging ------------------------------------------------------------------ */
