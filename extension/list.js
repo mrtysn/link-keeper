@@ -1121,6 +1121,8 @@ function renderTagManager() {
 
 function renderSettings() {
   renderTagManager();
+  const nf = data.filteredLinks.length;
+  $("filter-count").textContent = nf ? `${plural(nf, "link")} match the rules now.` : "no link matches the rules now.";
   for (const r of document.querySelectorAll('input[name="after-stash"]')) r.checked = r.value === settings.afterStash;
   const list = $("exclude-list");
   list.textContent = "";
