@@ -1,5 +1,10 @@
 # Handoff: write the X DM importer when the archive lands
 
+**Done on 2026-10-15.** `importers/x-archive.py`, wired into `tools/refresh.zsh` (`X_ARCHIVE_DIR`, `X_THREADS`,
+`X_ACCOUNT`) and checked by `tools/test-x-archive.py`; the README's "X direct messages" section describes it.
+The owner's archive sits in the gitignored `data/x-archive/`. What follows is the brief as written before the
+archive arrived; where it guessed at the layout, the importer's docstring has the real one.
+
 **The matter at hand.** Write the X (Twitter) DM importer in `/Users/mrtysn/dev/link-keeper`. It is not started. It waits on the owner's X data archive, requested on 2026-10-14 from X Settings, Your account, Download an archive of your data. X said it can take 24 hours or longer. The owner will give you the zip's path. Don't unpack it into the repo: it is personal data.
 
 **First, read the real archive.** Nothing in the repo shows its layout, so everything below is from memory. I recall DMs in `data/direct-messages.js` as `window.YTD.direct_message.part0 = [...]`, group DMs in `direct-messages-group.js`, and t.co-wrapped links with the real address in `urls[].expanded` (missing in older archives). Check that against the files, then write the test fixture from them with personal content replaced.
