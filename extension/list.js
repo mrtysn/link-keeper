@@ -1136,9 +1136,42 @@ $("sortby").onchange = () => {
   render();
 };
 
+/* Any group folds: a chevron at the head of its heading, pointing down when open and turned 90° to
+ * point right when folded. A folded group's rows are not drawn into the walk, so the keyboard skips
+ * them; which groups are folded is remembered per grouping. */
+const FOLD_KEY = "listFolded";
+let folded = (() => { try { return new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || "[]")); } catch (e) { return new Set(); } })();
+const foldId = g => `${group}:${g.dataset.key || ""}`;
+function foldGroups() {
+  for (const g of $("out").querySelectorAll(":scope > section.group")) {
+    const h2 = g.querySelector(":scope > h2");
+    if (!h2) continue;
+    const id = foldId(g);
+    const shut = folded.has(id);
+    g.classList.toggle("folded", shut);
+    const btn = el("button", { type: "button", className: "fold", title: shut ? "Show this group's links" : "Fold this group" });
+    btn.setAttribute("aria-expanded", String(!shut));
+    btn.innerHTML = '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    btn.onclick = e => {
+      e.stopPropagation();
+      folded.has(id) ? folded.delete(id) : folded.add(id);
+      try { localStorage.setItem(FOLD_KEY, JSON.stringify([...folded])); } catch (err) { /* not remembered */ }
+      render();
+    };
+    h2.prepend(btn);
+    if (shut) {
+      const gone = new Set(g.querySelectorAll("ul.rows > li"));
+      rowsOnPage = rowsOnPage.filter(r => !gone.has(r.li));
+      // A selected row folded away is no longer where the keyboard is: the next visible one takes over.
+      for (const li of gone) li.classList.remove("lk-cursor");
+    }
+  }
+}
+
 function render() {
   renderRows();
   sortGroups();
+  foldGroups();
   renderOnly();
   markHeads();
   // The chip rows and the tag bar above the panes change height as they draw: measure again after.

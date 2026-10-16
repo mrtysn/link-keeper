@@ -509,6 +509,28 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "sort: no errors " + p.errs.join("; "));
   await p.close();
 }
+// A group folds by its chevron: its rows hide, the keyboard skips them, and it is remembered.
+{
+  const p = await page("list.html?group=domain");
+  await p.evaluate(() => localStorage.removeItem("listFolded"));
+  const firstKey = await p.$eval("#out > section.group", s => s.dataset.key);
+  const n0 = await p.$$eval("#out ul.rows > li", l => l.filter(li => li.offsetParent).length);
+  await p.click("#out > section.group .fold"); await p.waitForTimeout(250);
+  ok(await p.$eval("#out > section.group", s => s.classList.contains("folded") && getComputedStyle(s.querySelector("ul.rows")).display === "none"), "fold: the chevron folds the group");
+  ok(await p.$eval("#out > section.group .fold", b => b.getAttribute("aria-expanded")) === "false", "fold: and says it is folded");
+  const n1 = await p.$$eval("#out ul.rows > li", l => l.filter(li => li.offsetParent).length);
+  ok(n1 < n0, `fold: its rows are gone from view (${n0} → ${n1})`);
+  await p.click("#out ul.rows > li:not(:is(.folded *)) .ttl").catch(() => {});
+  let into = false;
+  for (let i = 0; i < 8; i++) { await key(p, "w"); if (await p.$eval(".lk-cursor", e => !!e.closest(".folded")).catch(() => false)) into = true; }
+  ok(!into, "fold: the keyboard never walks into a folded group");
+  await p.reload(); await p.waitForTimeout(600);
+  ok(await p.$eval(`#out > section.group[data-key="${firstKey}"]`, s => s.classList.contains("folded")), "fold: remembered after a reload");
+  await p.click(`#out > section.group[data-key="${firstKey}"] .fold`); await p.waitForTimeout(250);
+  ok(await p.$eval(`#out > section.group[data-key="${firstKey}"]`, s => !s.classList.contains("folded")), "fold: the chevron opens it again");
+  ok(!p.errs.length, "fold: no errors " + p.errs.join("; "));
+  await p.close();
+}
 // The chat grab's panel on the page: running, then a failure shown as its own words with Copy and Close.
 {
   const p = await page("popup.html?tab=new");

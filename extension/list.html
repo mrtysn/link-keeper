@@ -478,6 +478,15 @@
   }
   body.resizing { cursor: col-resize; user-select: none; }
   body.pane #out .group:first-child { margin-top: 8px; }
+  /* A group folds by its chevron: down when open, turned to point right when folded. */
+  .group > h2 > .fold { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-height: 0;
+    margin: 0 -2px 0 -4px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--dim); }
+  .group > h2 > .fold svg { transition: rotate 150ms; }
+  .group.folded > h2 > .fold svg { rotate: -90deg; }
+  @media (prefers-reduced-motion: reduce) { .group > h2 > .fold svg { transition: none; } }
+  @media (hover: hover) { .group > h2 > .fold:hover { background: var(--chip); color: var(--ink); } }
+  .group.folded > ul.rows { display: none; }
+  .group.folded > h2 { margin-bottom: 0; }
   /* The key guide is reference, not content: beside the pane it docks under the list column, off the link. */
   body.pane .key-guide { right: auto; left: 16px; width: var(--side-w, 22rem); }
   body.pane #out { max-height: var(--list-h, var(--pane-h, calc(100vh - 72px))); }
