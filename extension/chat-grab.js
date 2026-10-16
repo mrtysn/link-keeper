@@ -471,5 +471,9 @@ window.LKChat = window.LKChat || (() => {
     },
   };
 
-  return { info, grab, start, poll, control, finish, READERS };
+  // What the panel shows, read-only, for tests: its root is closed to the page and to them.
+  const panelState = () => (Panel.root ? { line: Panel.root.querySelector(".line")?.textContent || "", msg: Panel.root.querySelector(".msg")?.textContent || "",
+    msgClass: Panel.root.querySelector(".msg")?.className || "", buttons: [...Panel.root.querySelectorAll(".acts button")].map(b => b.textContent) } : null);
+
+  return { info, grab, start, poll, control, finish, panelState, READERS };
 })();

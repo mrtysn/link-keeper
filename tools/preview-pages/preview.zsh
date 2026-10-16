@@ -84,6 +84,8 @@ ln -sf "$ext/nav.js" "$out/nav.js"
 ln -sf "$ext/nav.css" "$out/nav.css"
 ln -sf "$ext/icon.svg" "$out/icon.svg"
 ln -sf "$ext/stash-import.js" "$out/stash-import.js"
+# The chat grab's panel, drawn on a chat page: test-keys loads it into a page to check its states.
+ln -sf "$ext/chat-grab.js" "$out/chat-grab.js"
 ln -sf "$here/mock-browser.js" "$out/mock-browser.js"
 ln -sf "$here/frame.html" "$out/frame.html"
 python3 "$here/make-mock.py" "$captures" "$out/mock-data.js"

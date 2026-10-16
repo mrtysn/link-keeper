@@ -123,7 +123,7 @@ const LinkActions = (() => {
       if (copy) {
         const res = await send({ type: "delete-stash", id: copy.stash.id, ids: [copy.tab.id] });
         if (!res?.ok) return fail(res, "Unable to remove it");
-        return { ok: true, say: `Removed from ${stashName(copy.stash)}; in the Trash for 30 days`, undo: { label: "Remove", run: async () => {
+        return { ok: true, say: `Removed from ${stashName(copy.stash)}; in the Trash for 30 days · ⌘Z puts it back`, undo: { label: "Remove", run: async () => {
           const back = await putBack(copy);
           if (back?.ok && res.trashed?.length) await send({ type: "trash-delete", ids: res.trashed });
           return back;
@@ -132,7 +132,7 @@ const LinkActions = (() => {
       if (!t.link.list || t.link.list.loose) return { ok: false, say: "Nothing to remove it from" };
       const res = await send({ type: "remove", urls: [t.link.url] });
       if (!res?.ok) return fail(res, "Unable to remove it");
-      return { ok: true, say: "Removed; in the Trash for 30 days", undo: { label: "Remove", run: async () => {
+      return { ok: true, say: "Removed; in the Trash for 30 days · ⌘Z puts it back", undo: { label: "Remove", run: async () => {
         const back = await send({ type: "restore-items", items: res.items || [] });
         if (back?.ok && res.trashed?.length) await send({ type: "trash-delete", ids: res.trashed });
         return back;

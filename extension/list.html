@@ -98,6 +98,14 @@
      is plain; narrowing to it is outlined with a tick; leaving it out is struck through with a cross.
      The same look marks a Sites or Tags chip that is picked (✓) or excluded (✕). */
   .filters.tri { display: flex; flex-wrap: nowrap; gap: 2px; }
+  /* Three dots on a three-state control, its state filled (list.js stateDots). On the many site and
+     tag chips they show only on hover, focus or when the chip is on, so the rows stay quiet. */
+  .tri-dots { display: inline-flex; gap: 2px; margin-left: 5px; vertical-align: middle; }
+  .tri-dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .25; }
+  .tri-dots i.on { opacity: 1; }
+  .domains .chip .tri-dots, .filters.tri .chip[data-state="0"] .tri-dots { display: none; }
+  .domains .chip:is([aria-pressed="true"], .excluded, :focus-visible) .tri-dots, .filters.tri .chip:focus-visible .tri-dots { display: inline-flex; }
+  @media (hover: hover) { .domains .chip:hover .tri-dots, .filters.tri .chip:hover .tri-dots { display: inline-flex; } }
   /* Off, the switches and the Group by menu sit back like the chip rows: no fill or outline until
      hovered; a switch that is on gets its outline and mark (below). */
   .filters.tri .chip[data-state="0"] { background: none; border-color: transparent; color: var(--dim); }
@@ -467,6 +475,9 @@
   }
   body.resizing { cursor: col-resize; user-select: none; }
   body.pane #out .group:first-child { margin-top: 8px; }
+  /* The key guide is reference, not content: beside the pane it docks under the list column, off the link. */
+  body.pane .key-guide { right: auto; left: 16px; width: var(--side-w, 22rem); }
+  body.pane #out { max-height: var(--list-h, var(--pane-h, calc(100vh - 72px))); }
   /* The rows beside the pane sit a step back; the one under the pointer and the selected one are full. */
   body.pane #out ul.rows > li:not(.lk-cursor) .ttl, body.pane #out ul.rows > li:not(.lk-cursor) .ttl * { color: var(--dim); }
   body.pane #out ul.rows > li:not(.lk-cursor) .src, body.pane #out ul.rows > li:not(.lk-cursor) .rd { opacity: .7; }

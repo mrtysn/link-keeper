@@ -144,7 +144,11 @@ function fitPanes() {
   if (!pane || !panes) return document.body.style.removeProperty("--pane-h");
   const top = Math.max(64, panes.getBoundingClientRect().top);
   document.body.style.setProperty("--pane-h", `${Math.max(160, window.innerHeight - top - 8)}px`);
+  // The key guide docks under the list column: the list ends above it rather than under it.
+  const kg = document.getElementById("key-guide");
+  document.body.style.setProperty("--list-h", `${Math.max(120, window.innerHeight - top - 8 - (kg ? kg.offsetHeight + 12 : 0))}px`);
 }
+new MutationObserver(() => fitPanes()).observe(document.body, { childList: true });
 window.addEventListener("scroll", fitPanes, { passive: true });
 window.addEventListener("resize", fitPanes);
 
@@ -793,6 +797,15 @@ function bucketsOf(visible) {
  * toolbar. */
 /* A row of chips under a toggle that shows it whole or as one line. Selected chips come first, so
  * they stay in sight on the collapsed line; Clear sits beside the toggle for the same reason. */
+/* Three small dots on a three-state control, the current state's filled: what a click cycles through,
+ * so the next state is never a surprise. */
+function stateDots(at, n = 3) {
+  const d = el("span", { className: "tri-dots" });
+  d.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < n; i++) d.append(el("i", { className: i === at ? "on" : "" }));
+  return d;
+}
+
 /* A Sites or Tags chip cycles: off → only it → everything except it → off. */
 function cycleChip(id, only, except) {
   if (only.has(id)) { only.delete(id); except.add(id); }
@@ -802,7 +815,9 @@ function cycleChip(id, only, except) {
 function markChip(b, id, only, except) {
   b.setAttribute("aria-pressed", String(only.has(id)));
   b.classList.toggle("excluded", except.has(id));
-  b.title = only.has(id) ? "Showing only these; click to show everything except them" : except.has(id) ? "Left out; click to clear" : "Click to show only these";
+  b.title = only.has(id) ? "Showing only these · next click: everything except them" : except.has(id) ? "Left out · next click: clear" : "Next click: show only these";
+  b.querySelector(".tri-dots")?.remove();
+  b.append(stateDots(only.has(id) ? 1 : except.has(id) ? 2 : 0));
 }
 
 function chipRow(box, label, expanded, flip, chips, selected, clear) {
@@ -1023,8 +1038,8 @@ function drawBar(counts) {
     const b = $(`f-${k}`);
     b.dataset.state = state || "0";
     b.setAttribute("aria-pressed", String(!!state));
-    b.title = next;
-    b.replaceChildren(el("span", { className: "lbl", textContent: label }), " ", el("span", { className: "n", textContent: n }));
+    b.title = `Next click: ${next.charAt(0).toLowerCase()}${next.slice(1)}`;
+    b.replaceChildren(el("span", { className: "lbl", textContent: label }), " ", el("span", { className: "n", textContent: n }), stateDots(BAR[k].indexOf(bar[k])));
   }
 }
 
@@ -1478,7 +1493,8 @@ function previewControls(link) {
     this: ["only", "This link", "keep", "Keep showing each link's page as you move between links"],
     keep: ["in", "Kept on for every link", "off", "Turn the preview off"] };
   const [state, text, next, title] = look[now];
-  const b = el("button", { type: "button", className: "chip small pvcycle", title: `${title} (click)` }, el("span", { className: "lbl", textContent: text }));
+  const b = el("button", { type: "button", className: "chip small pvcycle", title: `Next click: ${title.charAt(0).toLowerCase()}${title.slice(1)}` },
+    el("span", { className: "lbl", textContent: text }), stateDots(["off", "this", "keep"].indexOf(now)));
   b.dataset.state = state;
   b.setAttribute("aria-label", `Live preview: ${text}. ${title}`);
   b.onclick = () => setPreview(next);

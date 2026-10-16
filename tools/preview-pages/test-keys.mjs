@@ -488,6 +488,25 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.$eval("#queue", e => !e.hidden) && await p.$eval("#stash-tab", e => !e.hidden) && await p.$eval("#remove", e => e.hidden), "popup: and offers + List and Stash tab, no Remove");
   await p.close();
 }
+// The chat grab's panel on the page: running, then a failure shown as its own words with Copy and Close.
+{
+  const p = await page("popup.html?tab=new");
+  await p.addScriptTag({ url: "chat-grab.js" });
+  await p.evaluate(() => {
+    const X = LKChat.READERS.x;
+    Object.assign(X, { match: () => true, ready: () => true, thread: () => ({ handle: "@friend" }), hasOlder: () => true, loading: () => false, failed: () => null,
+      items: () => [{ id: "m1", created: { epochSeconds: 1790000000, nanosecondsOfSecond: 0 }, senderInfo: { user: { screenName: "friend" } }, attachment: { urlToOpen: "https://example.com/" } }],
+      loadOlder: () => { throw new Error("the page's loader is gone"); } });
+    LKChat.start({ mode: "all" }, { pauseMs: [0, 0] });
+  });
+  await p.waitForFunction(() => LKChat.poll().done, null, { timeout: 5000 });
+  const st = await p.evaluate(() => LKChat.panelState());
+  ok(/the grab broke: the page's loader is gone/.test(st.msg) && /err/.test(st.msgClass), `chat panel: an error shows in its own words (${st.msg})`);
+  ok(st.buttons.join() === "Copy,Close", `chat panel: with Copy and Close (${st.buttons})`);
+  await p.screenshot({ path: new URL("out/panel-error.png", import.meta.url).pathname }).catch(() => {});   // for a look at it
+  ok(!p.errs.length, "chat panel: no errors " + p.errs.join("; "));
+  await p.close();
+}
 // On a chat page the popup offers to grab the chat's links, and the page part gives way.
 {
   const p = await page("popup.html?tab=https://x.com/i/chat/1-2&chat=new");
