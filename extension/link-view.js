@@ -37,7 +37,8 @@ const renamed = s => s.name && s.name !== whenOf(s.created_at);
 const isTextPost = cap => !!(cap?.text && (!cap.title || /^@?\S+ on X$|^X post$/.test(cap.title)));
 function labelOf(link) {
   const cap = link.cap;
-  if (!cap) return link.title || null;
+  // Not captured: its tab's title, else its preview's (a link that was a bare address gets a name).
+  if (!cap) return link.title || link.preview?.title || null;
   const body = (cap.text || "").replace(/\s+/g, " ").trim();
   if (isTextPost(cap)) return (cap.handle ? `${cap.handle}: ` : "") + body;
   if (cap.handle && cap.title && !cap.title.includes(cap.handle)) return `${cap.handle}: ${cap.title}`;

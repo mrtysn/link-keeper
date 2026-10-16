@@ -201,6 +201,23 @@ await kase("import takes OneTab's raw URLs — unicode, spaces, uppercase hosts 
     "https://www.google.com/search?udm=2&q=EGEBY%20%20jysk#vhid=P1", "https://example.com/a%20b", "https://xn--bcher-kva.de/x"], "as Firefox stores them");
 });
 
+await kase("previews: a page's tags are read, and its picture kept as a small thumbnail", async () => {
+  const html = `<html><head><title>Plain title</title><meta property="og:title" content="The OG title">
+    <meta name="twitter:description" content="What it is about"><meta property="og:image" content="/pic.png"></head><body>x</body></html>`;
+  const tags = previewTags(html, "https://site.example/a/page");
+  eq([tags.title, tags.text, tags.src], ["The OG title", "What it is about", "https://site.example/pic.png"], "og: first, the picture made absolute");
+  eq(previewTags("<title> Only a title </title>", "https://site.example/").title, "Only a title", "a page with no preview tags falls back to its title");
+  // A 1200×800 picture, as a data: URL, comes back a JPEG at most 320 wide.
+  const c = new OffscreenCanvas(1200, 800); c.getContext("2d").fillRect(0, 0, 1200, 800);
+  const blob = await c.convertToBlob({ type: "image/png" });
+  const src = await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); });
+  const thumb = await thumbOf(src);
+  yes(/^data:image\/jpeg;base64,/.test(thumb || ""), "a JPEG thumbnail");
+  const bmp = await createImageBitmap(await (await fetch(thumb)).blob());
+  eq([bmp.width, bmp.height], [320, 200], "320 wide, its height capped at 200");
+  yes(thumb.length < 40000, `small (${thumb.length} characters)`);
+});
+
 await kase("the joined dataset: one link per URL across stashes and the list, imports marked", async () => {
   const res = await importStashes([{ tabs: [{ url: "https://joint.example/a", title: "A" }, { url: "https://joint.example/b" }] }], "onetab");
   yes(res.ok, res.error);
@@ -328,7 +345,7 @@ await kase("Tags: the ✎ editor on a List row saves a tag for the URL, every pa
 
   d.getElementById("groupby").value = "tag";
   d.getElementById("groupby").dispatchEvent(new view.Event("change"));
-  const headsOf = () => [...d.querySelectorAll(".group > h2 span:first-child")].map(s => s.textContent);
+  const headsOf = () => [...d.querySelectorAll(".group > h2 > .name")].map(s => s.textContent);
   await until(() => headsOf().includes("jam tools") && headsOf().includes("code"), "Group by Tag to draw a section per tag");
   const heads = headsOf();
   yes(heads.includes("jam tools") && heads.includes("code"), "Group by Tag has a section per tag");

@@ -141,7 +141,7 @@ function capView(c, thumbs = {}) {
 
 /* items and captures as stored, sessions as getSessions gives them, currentKey the reading list's
  * current entry. Returns { links, stashes }, stashes in their own order with each tab's link key. */
-function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {}, suggestions = {}, agentTags = {} }) {
+function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {}, suggestions = {}, agentTags = {}, previews = {} }) {
   const capBy = new Map();
   for (const c of captures) {
     if (c.source_url) capBy.set(keyOf(c.source_url), c);
@@ -203,6 +203,9 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     link.date = link.list?.saved_at || link.sentAt || link.list?.added_at || stashed;
     // A note written when it was added: on its list entry, or since 5.64 on its tab.
     link.note = link.list?.note || link.note || null;
+    // Its preview, as a chat app shows under a link (background.js, previews): a picture and a line.
+    const p = previews[link.key];
+    link.preview = p && !p.none ? { title: p.title || null, text: p.text || null, image: p.image || null } : null;
     delete link.sentAt;
     link.tags = (tags[link.key] || []).slice();
     link.suggested = link.tags.length ? [] : suggestionsFor(suggestions, link.key);

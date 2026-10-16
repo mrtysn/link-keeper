@@ -298,6 +298,13 @@
     margin-top: 2px; color: var(--prose); font-size: .875rem; overflow-wrap: anywhere;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   }
+  /* A link's saved preview picture under its line; Compact hides it with the rest of the row's body. */
+  .rowthumb { display: block; max-width: 160px; max-height: 90px; margin-top: 6px; border-radius: 6px; object-fit: cover; }
+  /* The detail pane's preview of a link not captured: its picture beside its title and line. */
+  #detail .pvcard { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+  #detail .pvcard img { width: 160px; max-height: 120px; object-fit: cover; border-radius: 8px; flex: none; }
+  #detail .pvcard b { display: block; margin-bottom: 4px; }
+  #detail .pvcard p { margin: 0; color: var(--prose); }
   .meta {
     display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px;
     color: var(--dim); font-size: .8125rem;
@@ -722,6 +729,12 @@
         <p class="hint"><b>One rule per line</b>, the address without https://. A rule matches that page only, never the pages under it: <code>reddit.com</code> is Reddit's front page, not a post. <code>*</code> stands for anything: <code>mail.google.com/mail/u/*/#inbox</code> is the inbox of any account, not an email in it. Right-click a page → <i>Filter out this page</i> adds its rule.</p>
         <textarea id="filter-rules" rows="7" spellcheck="false" aria-label="Pages to filter out, one per line"></textarea>
         <div class="row"><button type="button" class="small" id="filter-save">Save and apply</button> <span id="filter-msg" class="hint" role="status"></span></div>
+      </fieldset>
+      <fieldset id="preview-set">
+        <legend>Previews</legend>
+        <p class="hint">A picture and a line for each link, as a chat app shows under one. A captured link's comes from its capture; any other link's from its page, read once and kept, so it lasts where a picture's address expires. New links get theirs as they come in.</p>
+        <p class="hint" id="preview-status">…</p>
+        <div class="row"><button type="button" class="small" id="preview-go">Make previews</button> <button type="button" class="small" id="preview-stop" hidden>Stop</button></div>
       </fieldset>
       <fieldset id="grouping-set" hidden>
         <legend>Groups</legend>

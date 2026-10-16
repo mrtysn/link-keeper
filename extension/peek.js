@@ -170,14 +170,14 @@ const Peek = (() => {
     const link = d.byKey.get(key);
     if (!link) return null;
     const cap = link.cap;
-    const text = (cap?.text || "").replace(/\s+/g, " ").trim();
+    const text = (cap?.text || link.preview?.text || "").replace(/\s+/g, " ").trim();
     const where = [link.list && !link.copies.length ? "Not in a stash" : null,
       ...link.copies.map(c => stashOf(d, c.stash)).filter(Boolean).map(stashName)].filter(Boolean);
     const state = el("div", { className: "pk-badges" }, ...[readBadge(link)].filter(Boolean),
       ...(link.tags || []).map(t => tagChip(t)));
     return el("div", {},
       head(linkTitle(link), kindOf(link.url) === "web" ? hostOf(link.url) : shortUrl(link.url)),
-      cap?.shotThumb ? el("img", { className: "pk-shot", src: cap.shotThumb, alt: "" }) : null,
+      cap?.shotThumb || link.preview?.image ? el("img", { className: "pk-shot", src: cap?.shotThumb || link.preview.image, alt: "" }) : null,
       // A post's title is its text already; say it once.
       text && !linkTitle(link).replace(/\s+/g, " ").includes(text.slice(0, 40)) ? el("p", { className: "pk-text", textContent: text.length > 320 ? `${text.slice(0, 320)}…` : text }) : null,
       state.childElementCount ? state : null,

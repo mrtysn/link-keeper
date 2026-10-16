@@ -210,7 +210,11 @@
                 if (i % 2 === 0) agentTags[keyOf(u)] = { at: "2026-10-14T00:00:00Z", by: "haiku", tags: i % 4 === 0 ? ["ai tools", "tutorial", "rust"] : ["tutorial", "game dev"] };
               });
             }
-            return joinLinks({ items, captures, sessions, tags: mockTags, suggestions, agentTags,
+            // Previews for the links never captured, as the background keeps them: a drawn picture, a title and a line.
+            const pic = (h, c) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="hsl(${h} 45% 45%)"/><circle cx="${c}" cy="90" r="46" fill="hsl(${h} 60% 75%)"/></svg>`);
+            const previews = params.has("nopreviews") ? {} : Object.fromEntries(items.filter(i => !captures.some(c => keyOf(c.url) === keyOf(i.url)))
+              .map((i, n) => [keyOf(i.url), { title: `Preview title of ${new URL(i.url).hostname}`, text: "What the page says it is about, from its preview tags, cut to one line or two.", image: pic(n * 47 % 360, 80 + n * 30 % 160) }]));
+            return joinLinks({ items, captures, sessions, tags: mockTags, suggestions, agentTags, previews,
               currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
           }
           // Filtered out, as the background keeps it: rules on a page's address, tagging what matches.

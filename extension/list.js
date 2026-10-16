@@ -512,7 +512,11 @@ function rowEl(link, ctx) {
   const text = squash(cap?.text);
   if (text && !isTextPost(cap) && !squash(labelOf(link)).includes(text.slice(0, 60))) {
     main.append(el("div", { className: "body", textContent: cap.text }));
+  } else if (!text && link.preview?.text && !squash(labelOf(link)).includes(squash(link.preview.text).slice(0, 60))) {
+    // Not captured: its preview's line says what it is (Compact hides it, as it hides the body).
+    main.append(el("div", { className: "body", textContent: link.preview.text }));
   }
+  if (link.preview?.image) main.append(el("img", { className: "rowthumb", src: link.preview.image, alt: "", loading: "lazy" }));
 
   const kind = kindOf(link.url);
   const meta = el("div", { className: "meta" });
@@ -713,7 +717,7 @@ function stashHeading(stash, shown) {
 function section(title, count, rows, extraClass = "", sub = "") {
   const s = el("section", { className: `group${extraClass}` });
   s.dataset.key = title || "";
-  if (title) s.append(el("h2", {}, el("span", { textContent: title }), ...(sub ? [el("span", { className: "when", textContent: sub })] : []), el("span", { className: "n", textContent: count })));
+  if (title) s.append(el("h2", {}, el("span", { className: "name", textContent: title }), ...(sub ? [el("span", { className: "when", textContent: sub })] : []), el("span", { className: "n", textContent: count })));
   s.append(el("ul", { className: "rows" }, ...rows));
   return s;
 }
@@ -1097,7 +1101,7 @@ function drawNextHead() {
   if (!found) return;
   found.dataset.nextTarget = "1";
   const h = found.querySelector(":scope > h2");
-  const name = h.querySelector(".name")?.textContent || h.firstChild?.textContent || "";
+  const name = h.querySelector(".name")?.textContent || "";
   next.replaceChildren(el("span", { className: "name", textContent: name.trim() }), el("span", { className: "n", textContent: h.querySelector(".n")?.textContent || "" }));
   next.title = `Next: ${name.trim()}`;
 }
@@ -1365,11 +1369,12 @@ function cardEl(row, top) {
   if (suggestions) card.append(suggestions);
   const agent = agentRow(link);
   if (agent) card.append(agent);
-  const body = (cap.text || "").replace(/\s+/g, " ").trim();
+  const body = (cap.text || link.preview?.text || "").replace(/\s+/g, " ").trim();
   if (body && !(labelOf(link) || "").includes(body.slice(0, 40))) card.append(el("div", { className: "cm-body", textContent: body }));
   const note = cap.note || link.note;
   if (note) card.append(el("div", { className: "cm-note", textContent: note }));
-  const pics = [...(cap.shotThumb ? [cap.shotThumb] : []), ...(cap.images || []).slice(0, 3)];
+  // The saved preview picture first: it lasts where a captured image's address may have expired.
+  const pics = [...(link.preview?.image ? [link.preview.image] : []), ...(cap.shotThumb ? [cap.shotThumb] : []), ...(cap.images || []).slice(0, link.preview?.image ? 2 : 3)];
   if (pics.length) card.append(el("div", { className: "cm-thumbs" }, ...pics.map(src => el("img", { src, loading: "lazy", alt: "" }))));
   const also = link.copies.filter(c => c.stash !== row.target.stash?.id).map(c => stashById(c.stash)).filter(Boolean);
   if (also.length) card.append(el("div", { className: "cm-ctx", textContent: `Also in ${plural(also.length, "other stash")}: ${also.slice(0, 2).map(stashName).join(", ")}${also.length > 2 ? ", …" : ""}` }));
@@ -1496,6 +1501,12 @@ function knownBox(row) {
   const kind = kindOf(link.url);
   const box = el("section", { className: "box" }, el("h3", { textContent: "Page content" }));
   const c = link.cap;
+  // Not captured, but with a preview: its picture and line, as a chat app shows under a link.
+  const pv = link.preview;
+  if (!c?.text && pv && (pv.image || pv.text)) {
+    box.append(el("div", { className: "pvcard" }, pv.image ? el("img", { src: pv.image, alt: "" }) : "",
+      el("div", {}, pv.title && pv.title !== labelOf(link) ? el("b", { textContent: pv.title }) : "", pv.text ? el("p", { textContent: pv.text }) : "")));
+  }
   if (c?.text) box.append(el("div", { className: "captext" }, c.handle && el("span", { className: "who", textContent: `${c.handle} ` }), c.text));
   else if (c?.title && c.title !== labelOf(link)) box.append(el("p", { className: "muted", textContent: c.title }));
   if (c?.images?.length) {
@@ -1694,6 +1705,32 @@ $("filter-save").onclick = async () => {
 };
 
 /* Backups: what the bridge last wrote, and the files to restore from. */
+/* Previews for the links held before they existed: Settings says how many, and makes them one page at a
+ * time (background.js previewBacklog), asking first for leave to read pages when it is not given. */
+let previewTimer2 = null;
+async function loadPreviews() {
+  clearTimeout(previewTimer2);
+  const c = await send({ type: "preview-counts" });
+  if (!c) return;
+  const run = c.run && !c.run.finished ? c.run : null;
+  $("preview-status").textContent = run
+    ? `Making previews: ${run.done} of ${run.total} done, ${run.made} made, ${run.none} with none, ${run.failed} could not be read. One page every few seconds.`
+    : `${c.made} of ${c.links} links have a preview; ${c.missing} have none yet${c.none ? ` and ${c.none} offer none` : ""}.`;
+  $("preview-go").hidden = !!run;
+  $("preview-go").disabled = !c.missing;
+  $("preview-go").textContent = `Make previews for ${plural(c.missing, "link")}`;
+  $("preview-stop").hidden = !run;
+  if (run) previewTimer2 = setTimeout(loadPreviews, 1500);
+  else if (c.run?.finished) load();
+}
+$("preview-go").onclick = async () => {
+  // Pages not captured are read once each; that needs leave to read any site, asked from this click.
+  if (!(await browser.permissions.contains(ALL_SITES))) await browser.permissions.request(ALL_SITES).catch(() => false);
+  await send({ type: "preview-backlog" });
+  loadPreviews();
+};
+$("preview-stop").onclick = async () => { await send({ type: "preview-stop" }); setTimeout(loadPreviews, 300); };
+
 /* Every way in makes a group since 5.64; the links that were in no stash were grouped once. Settings
  * says so, and can take those groups back out. */
 async function loadGrouping() {
@@ -1759,7 +1796,7 @@ $("exclude-form").onsubmit = e => {
 function openPanel(which) {
   for (const id of ["settings-panel", "import-panel", "dups-panel", "trash-panel"]) $(id).hidden = id !== which || !$(id).hidden;
   $("settings").setAttribute("aria-expanded", String(!$("settings-panel").hidden));
-  if (!$("settings-panel").hidden) { loadFilterRules(); loadBackups(); loadGrouping(); }
+  if (!$("settings-panel").hidden) { loadFilterRules(); loadBackups(); loadGrouping(); loadPreviews(); }
   if (!$("import-panel").hidden) watchRefresh();
   $("import").setAttribute("aria-expanded", String(!$("import-panel").hidden));
   $("dups").setAttribute("aria-expanded", String(!$("dups-panel").hidden));

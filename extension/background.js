@@ -773,7 +773,13 @@ const dayLabel = (d = new Date()) => d.toLocaleDateString("en-US", { month: "sho
 const dayGroup = () => ({ name: `Added ${dayLabel()}`, group_key: `day:${dayOf()}` });
 
 const groupQueue = serial();
-function addToGroup(tabs, { name, group_key, ingested_at } = {}) {
+function addToGroup(tabs, opts = {}) {
+  const done = addToGroupNow(tabs, opts);
+  // Each new link gets its preview as it comes in, after the group is written and without holding it up.
+  done.then(res => { if (res?.added && !opts.noPreview) previewNew(tabs.map(t => t?.url).filter(Boolean)).catch(() => {}); });
+  return done;
+}
+function addToGroupNow(tabs, { name, group_key, ingested_at } = {}) {
   return groupQueue(async () => {
     const seen = new Set();
     const clean = tabs.filter(t => t?.url && !seen.has(keyOf(t.url)) && seen.add(keyOf(t.url)))
@@ -1594,10 +1600,147 @@ allowPreviewFrames().catch(e => console.error("preview frames:", e));
 
 /* Every source joined into one dataset for the pages; joinLinks in links.js does the joining. */
 async function getLinks() {
-  const [items, captures, sessions, thumbs, current, tags, suggestions, agentTags] =
+  const [items, captures, sessions, thumbs, current, tags, suggestions, agentTags, previews] =
     [await getItems(), await getCaptures(), await getSessions(), await read("thumbs", {}), await getCurrent(), await read("linkTags", {}),
-      await read("tagSuggestions", {}), await read("agentTags", {})];
-  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags, suggestions, agentTags });
+      await read("tagSuggestions", {}), await read("agentTags", {}), await read("previews", {})];
+  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags, suggestions, agentTags, previews });
+}
+
+/* --- previews -------------------------------------------------------------------
+ * A picture and a line for every link, as a chat app shows under a link: previews: { [link key]:
+ * { title, text, image (a small JPEG data URL), src, at } } or { none: true, at } when the page has
+ * none. Made once and kept, so a picture whose address expires (x.com, Instagram) still shows.
+ *
+ * From what is held first — a capture's title, text and first picture — and otherwise from the page's
+ * preview tags (og:/twitter: title, description, image), fetched once under Link Keeper's own name.
+ * New links get theirs as they come in; the ones held before ask for theirs from Settings, which says
+ * how many and can be stopped. Pages are fetched one at a time, a few seconds apart. */
+const PREVIEW_W = 320, PREVIEW_H = 200, PREVIEW_PAUSE = [1500, 3000];
+const previewQueue = serial();
+let previewRun = null;   // { total, done, made, none, failed, stop }
+
+function metaOf(doc, ...names) {
+  for (const n of names) {
+    const v = doc.querySelector(`meta[property="${n}"], meta[name="${n}"]`)?.getAttribute("content");
+    if (v && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+async function thumbOf(src) {
+  try {
+    const res = await fetch(src, { credentials: "omit" });
+    const blob = res.ok ? await res.blob() : null;
+    if (!blob || !blob.type.startsWith("image/") || blob.size > 8e6) return null;
+    const bmp = await createImageBitmap(blob);
+    const scale = Math.min(1, PREVIEW_W / bmp.width);
+    const w = Math.max(1, Math.round(bmp.width * scale)), h = Math.max(1, Math.min(PREVIEW_H, Math.round(bmp.height * scale)));
+    const c = new OffscreenCanvas(w, h);
+    // Wider than tall pictures are kept whole; a tall one keeps its top, as chat previews do.
+    c.getContext("2d").drawImage(bmp, 0, 0, bmp.width, Math.min(bmp.height, h / scale), 0, 0, w, h);
+    const out = await c.convertToBlob({ type: "image/jpeg", quality: 0.7 });
+    return await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => bad(r.error); r.readAsDataURL(out); });
+  } catch (e) {
+    return null;
+  }
+}
+
+/* One link's preview: from its capture when it has one, else from its page. null when the page could
+ * not be read at all (try again later); { none: true } when it was read and offers nothing. */
+async function makePreview(url, cap) {
+  const at = new Date().toISOString();
+  const imgOf = c => (c?.images || []).map(i => (typeof i === "string" ? i : i?.src || i?.url)).find(s => /^https?:/.test(s || "") && !/\.(mp4|webm|m3u8)(\?|$)/.test(s));
+  if (cap && (cap.title || cap.text)) {
+    const src = imgOf(cap);
+    return { title: cap.title || null, text: (cap.text || "").replace(/\s+/g, " ").slice(0, 240) || null, image: src ? await thumbOf(src) : null, src: src || null, at, from: "capture" };
+  }
+  if (!/^https?:/.test(url)) return { none: true, at };
+  let html;
+  try {
+    const res = await fetch(url, { credentials: "omit", headers: { Accept: "text/html" } });
+    if (!res.ok || !/html/.test(res.headers.get("content-type") || "")) return { none: true, at, status: res.status };
+    html = (await res.text()).slice(0, 600_000);
+  } catch (e) {
+    return null;
+  }
+  const tags = previewTags(html, url);
+  if (!tags.title && !tags.text && !tags.src) return { none: true, at };
+  return { ...tags, image: tags.src ? await thumbOf(tags.src) : null, at, from: "page" };
+}
+
+/* A page's preview tags: og: and twitter: title, description and picture (made absolute), else its
+ * <title>. Named so a test can read a page without fetching it. */
+function previewTags(html, url) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const title = metaOf(doc, "og:title", "twitter:title") || doc.querySelector("title")?.textContent?.trim() || null;
+  const text = metaOf(doc, "og:description", "twitter:description", "description");
+  let src = metaOf(doc, "og:image", "og:image:url", "twitter:image", "twitter:image:src");
+  if (src) try { src = new URL(src, url).href; } catch (e) { src = null; }
+  return { title, text: text ? text.slice(0, 240) : null, src: src || null };
+}
+
+async function savePreview(key, p) {
+  if (!p) return;
+  await previewQueue(async () => {
+    const all = await read("previews", {});
+    all[key] = p;
+    await browser.storage.local.set({ previews: all });
+  });
+}
+
+async function hasAllSites() {
+  try { return await browser.permissions.contains({ origins: ["*://*/*"] }); } catch (e) { return false; }
+}
+
+/* New links get a preview as they come in: the links given, those not made yet. */
+async function previewNew(urls) {
+  const have = await read("previews", {});
+  const caps = new Map((await getCaptures()).map(c => [keyOf(c.url), c]));
+  const canFetch = await hasAllSites();
+  for (const url of urls) {
+    const k = keyOf(url);
+    if (have[k]) continue;
+    const cap = caps.get(k);
+    if (!cap?.title && !cap?.text && !canFetch) continue;   // nothing held and no leave to fetch
+    await savePreview(k, await makePreview(url, cap));
+    if (!cap) await new Promise(r => setTimeout(r, PREVIEW_PAUSE[0]));
+  }
+}
+
+/* The links held before previews existed, from Settings: one at a time, paced, stoppable. */
+async function previewBacklog() {
+  if (previewRun && !previewRun.finished) return { ok: false, error: "already making previews" };
+  const { links } = await getLinks();
+  const have = await read("previews", {});
+  const caps = new Map((await getCaptures()).map(c => [keyOf(c.url), c]));
+  const todo = links.filter(l => !have[l.key] && (/^https?:/.test(l.url)));
+  previewRun = { total: todo.length, done: 0, made: 0, none: 0, failed: 0, fetched: 0, stop: false, finished: false, started: new Date().toISOString() };
+  const run = previewRun;
+  (async () => {
+    const canFetch = await hasAllSites();
+    for (const l of todo) {
+      if (run.stop) break;
+      const cap = caps.get(l.key);
+      const fromPage = !(cap?.title || cap?.text);
+      if (fromPage && !canFetch) { run.done++; continue; }
+      if (fromPage && run.fetched) await new Promise(r => setTimeout(r, PREVIEW_PAUSE[0] + Math.random() * (PREVIEW_PAUSE[1] - PREVIEW_PAUSE[0])));
+      if (run.stop) break;
+      const p = await makePreview(l.url, cap);
+      if (fromPage) run.fetched++;
+      await savePreview(l.key, p);
+      run.done++;
+      if (!p) run.failed++; else if (p.none) run.none++; else run.made++;
+    }
+    run.finished = true;
+  })();
+  return { ok: true, total: run.total };
+}
+async function previewCounts() {
+  const { links } = await getLinks();
+  const have = await read("previews", {});
+  const web = links.filter(l => /^https?:/.test(l.url));
+  return { links: web.length, made: web.filter(l => have[l.key] && !have[l.key].none).length, none: web.filter(l => have[l.key]?.none).length,
+    missing: web.filter(l => !have[l.key]).length, canFetch: await hasAllSites(), run: previewRun && { ...previewRun } };
 }
 
 /* --- tags ------------------------------------------------------------------------
@@ -2210,6 +2353,21 @@ async function handleMessage(msg) {
       return hostCall("refresh-start", { offline: !!msg.offline }).catch(e => ({ ok: false, error: String(e.message || e) }));
     case "refresh-status":
       return hostCall("refresh-status").catch(e => ({ ok: false, error: String(e.message || e) }));
+
+    case "preview-counts":
+      return previewCounts();
+    case "preview-backlog":
+      return previewBacklog();
+    case "preview-stop":
+      if (previewRun) previewRun.stop = true;
+      return { ok: true };
+    case "preview-one": {
+      // Settings or a page asks again for one link (its preview made afresh).
+      const caps = new Map((await getCaptures()).map(c => [keyOf(c.url), c]));
+      const p = await makePreview(msg.url, caps.get(keyOf(msg.url)));
+      await savePreview(keyOf(msg.url), p);
+      return { ok: !!p, preview: p };
+    }
 
     case "grouping-status": {
       const rec = (await read("dataPatches", {}))[GROUP_PATCH];

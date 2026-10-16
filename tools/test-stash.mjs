@@ -1030,6 +1030,27 @@ await check("every way in makes a group: loose links grouped by day and source o
   assert.equal(plain(await browser.handle({ type: "undo-grouping" })).ok, false, "only once");
 });
 
+await check("previews: a captured link's comes from its capture, is kept, and reaches the link; a bare one waits for leave to fetch", async () => {
+  const { browser, store } = makeBrowser([]);
+  const bg = await load(browser);
+  store.captures = [{ url: "https://x.com/a/status/1", title: "@a on X", text: "a post   about\nthings", images: [] }];
+  const p = plain(await bg.makePreview("https://x.com/a/status/1", store.captures[0]));
+  assert.deepEqual([p.title, p.text, p.image, p.from], ["@a on X", "a post about things", null, "capture"]);
+  await bg.savePreview(bg.keyOf("https://x.com/a/status/1"), p);
+  const links = plain(await browser.handle({ type: "links" })).links;
+  assert.deepEqual(links.find(l => l.url === "https://x.com/a/status/1").preview, { title: "@a on X", text: "a post about things", image: null });
+  store.previews[bg.keyOf("https://none.example/")] = { none: true, at: "x" };
+  store.items = [{ url: "https://none.example/" }, { url: "https://bare.example/" }];
+  const c = plain(await browser.handle({ type: "preview-counts" }));
+  assert.deepEqual([c.made, c.none, c.missing], [1, 1, 1], "made, offers none, not made yet");
+  assert.equal(plain(await browser.handle({ type: "links" })).links.find(l => l.url === "https://none.example/").preview, null, "a page that offers none has no preview");
+  // No leave to read pages in this browser: a new bare link is left for later, nothing fetched.
+  let fetched = 0;
+  bg.fetch = async () => { fetched++; throw new Error("no network in a test"); };
+  await bg.previewNew(["https://bare.example/"]);
+  assert.deepEqual([fetched, !!store.previews[bg.keyOf("https://bare.example/")]], [0, false]);
+});
+
 /* Stash folders as the 29 Sep import left them: written within ten seconds, in these sizes, plus
  * a stash of open tabs from the day before and one from the day after. */
 async function sep29(browser, bm, bg, sizes = [80, 87, 40, 23, 296, 7, 2, 12]) {
