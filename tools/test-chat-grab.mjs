@@ -303,6 +303,13 @@ await check("Instagram: every message from the store, older pages loaded, with t
   assert.deepEqual(by("mid.$2").links.map(l => l.url), ["https://example.com/page"], "a typed link, unwrapped from l.instagram.com");
 });
 
+await check("Instagram: a thread's label is the export's folder name, accents folded as Instagram does", () => {
+  const { LK } = makeInstagram({ pages: igPages });
+  const cases = [["Atahan Özdemir", "atahanozdemir_1"], ["Ege Güçlü Asan", "egegucluasan_1"], ["Bengi Barış", "bengibaris_1"], ["Cansu İnce", "cansuince_1"],
+    ["Buğra", "bugra_1"], ["Gökçe Tamer 🦄 🌼", "gokcetamer_1"], ["mind_design", "mind_design_1"], ["🍁", "1"], ["Murat Karademir", "muratkarademir_1"]];
+  for (const [name, want] of cases) assert.equal(LK.exportSlug(name, "1"), want, name);
+});
+
 await check("Instagram: the last N take only what is loaded", async () => {
   const { LK, calls } = makeInstagram({ pages: igPages });
   const res = await LK.grab({ mode: "last", n: 2 }, FAST);

@@ -203,7 +203,7 @@ window.LKChat = window.LKChat || (() => {
       // The export names a thread <name>_<thread_fbid> (instagram.py); the same label here lets
       // Group by chat put grabbed and exported links together.
       const fbid = str(tryGet(() => thread.thread_fbid)) || str(tryGet(() => thread.id));
-      const slug = name && fbid ? `${name.toLowerCase().replace(/[^a-z0-9]/g, "")}_${fbid}` : null;
+      const slug = name && fbid ? exportSlug(name, fbid) : null;
       return { id: str(tryGet(() => thread.thread_key)) || location.pathname.split("/")[3] || null, name, handle: username ? `@${username}` : null, label: slug };
     },
     hasOlder: () => !!tryGet(() => INSTAGRAM.triggers()?.memoizedProps?.hasMoreAbove),
@@ -246,6 +246,16 @@ window.LKChat = window.LKChat || (() => {
         sender: str(tryGet(() => sender?.name)) || str(tryGet(() => INSTAGRAM.ref(src, sender?.user_dict)?.full_name)), links: dedupe(links) };
     },
   };
+
+  /* The folder name Instagram's export gives a thread: its title folded to plain letters — accents
+   * dropped (ö → o), a few letters spelled out (ı → i, ß → ss), anything else but a–z, 0–9 and _
+   * removed — then _ and the thread's fbid; a title with nothing left is the fbid alone. Checked
+   * against 281 threads of a real export, 280 equal (a Devanagari name is romanised by Instagram). */
+  const SPELL = { "ı": "i", "ł": "l", "ø": "o", "đ": "d", "ß": "ss", "æ": "ae", "œ": "oe", "þ": "th", "ð": "d" };
+  function exportSlug(name, fbid) {
+    const base = name.toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "").replace(/[ıłøđßæœþð]/g, ch => SPELL[ch]).replace(/[^a-z0-9_]/g, "");
+    return base ? `${base}_${fbid}` : String(fbid);
+  }
 
   const READERS = { x: X, instagram: INSTAGRAM };
 
@@ -475,5 +485,5 @@ window.LKChat = window.LKChat || (() => {
   const panelState = () => (Panel.root ? { line: Panel.root.querySelector(".line")?.textContent || "", msg: Panel.root.querySelector(".msg")?.textContent || "",
     msgClass: Panel.root.querySelector(".msg")?.className || "", buttons: [...Panel.root.querySelectorAll(".acts button")].map(b => b.textContent) } : null);
 
-  return { info, grab, start, poll, control, finish, panelState, READERS };
+  return { info, grab, start, poll, control, finish, panelState, exportSlug, READERS };
 })();
