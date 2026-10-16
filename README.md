@@ -649,6 +649,12 @@ in `X_ACCOUNT` (see `config.local.sh.example`). Its links go through the enriche
 under `--offline` the bare records alone bring them in. `tools/test-x-archive.py` checks the importer
 against a made-up archive.
 
+The archive cannot read X Chat, X's end-to-end encrypted DMs: it keeps them only as ciphertext in
+`data/message-event.js`. A conversation that moved there looks complete when it is not. So
+`--list-threads` adds a column counting each conversation's encrypted messages (and lists one that exists
+only as X Chat), and a refresh prints a line for each named thread that has some, with its chat page:
+grab those from the page with Link Keeper's popup.
+
 When an export will not do, `docs/browser-agent-dm-run.md` is the brief for a Chrome-agent run over named DM threads:
 the approval, request count and stop rules it needs first, and the records it returns, which the refresh
 merges from `link-captures-extra.jsonl`.

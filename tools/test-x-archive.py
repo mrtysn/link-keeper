@@ -78,6 +78,11 @@ def build_archive(path: Path, with_dms: bool = True) -> None:
                 {"conversationNameUpdate": {"initiatingUserId": ALICE, "name": "book club", "createdAt": "2026-01-01T00:00:01.000Z"}},
                 msg(ALICE, None, "2026-04-01T10:00:00.000Z", PAGE_GROUP)]}},
         ])
+        # X Chat: end-to-end encrypted messages the archive keeps only as ciphertext, two with Alice and
+        # one in a conversation that exists only as X Chat.
+        enc = lambda cid: {"messageEvent": {"conversationId": cid, "senderId": ALICE, "detail": {"messageCreateEvent": {"contents": "CIPHERTEXT"}}}}
+        files["data/message-event.js"] = script("message_event", [enc(f"{ME}:{ALICE}"), enc(f"{ME}:{ALICE}"), enc(f"{ME}:400"),
+            {"messageEvent": {"conversationId": f"{ME}:{ALICE}", "detail": {"markConversationReadEvent": {}}}}])
     with zipfile.ZipFile(path, "w") as z:
         for name, body in files.items():
             z.writestr(name, body)
@@ -121,7 +126,7 @@ def main() -> None:
 
         listed = [line.split("\t") for line in run(a, "--list-threads").stdout.splitlines()]
         check("--list-threads lists every thread with links, most first, ties by id",
-              [r[1] for r in listed] == [WITH_ALICE, SELF, WITH_STRANGER, GROUP], str(listed))
+              [r[1] for r in listed] == [WITH_ALICE, SELF, WITH_STRANGER, GROUP, f"{ME}-400"], str(listed))
         check("...naming a known person by handle, with a profile link",
               listed[0][2] == f"@alice  https://x.com/i/user/{ALICE}", listed[0][2])
         check("...an unknown one by id", listed[2][2].startswith(f"user {STRANGER}"), listed[2][2])
@@ -164,6 +169,14 @@ def main() -> None:
         check("attach-dm-origin puts the origin back on an enriched record",
               (back.get("account"), back.get("thread"), back.get("senders")) == ("main", ["yourself", "@alice"], ["@me", "@alice"]),
               res.stdout or res.stderr)
+
+        listed = {r.split("\t")[1]: r.split("\t") for r in run(a, "--list-threads").stdout.splitlines()}
+        check("--list-threads counts a conversation's encrypted X Chat messages", listed[WITH_ALICE][3:] == ["+2 encrypted X Chat messages"], str(listed[WITH_ALICE]))
+        check("...and lists one that exists only as X Chat", listed.get(f"{ME}-400", [""])[0] == "0" and listed[f"{ME}-400"][3] == "+1 encrypted X Chat message", str(listed.get(f"{ME}-400")))
+        warn = run(a, "--json", "--thread", WITH_ALICE).stderr
+        check("--json warns once for a named thread with encrypted messages, with where to grab them",
+              warn.count("encrypted X Chat") == 1 and "2 encrypted X Chat messages with @alice" in warn and f"x.com/i/chat/{WITH_ALICE}" in warn, warn)
+        check("...and not for threads it was not asked to read", "user 400" not in warn)
 
         stats = run(a, "--stats", "--thread", WITH_ALICE).stdout
         check("--stats counts links, tweets and threads", stats.startswith("3 links (2 tweets, 1 other) from 2 threads"), stats)

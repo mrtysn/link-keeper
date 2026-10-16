@@ -222,6 +222,20 @@ def record(url: str, date: str, account: str | None, threads: list[str], senders
     }
 
 
+def encrypted_counts(ar: Archive) -> dict[str, int]:
+    """Conversation id ("<id>-<id>") -> how many X Chat messages it holds that the archive keeps only as
+    ciphertext (data/message-event.js). X Chat is end-to-end encrypted: the archive cannot read them, and
+    a conversation that moved there looks complete here when it is not. Link Keeper's chat grab reads
+    them from the chat page."""
+    out: dict[str, int] = {}
+    for row in ar.load("message-event.js"):
+        ev = row.get("messageEvent", {})
+        if "messageCreateEvent" in (ev.get("detail") or {}):
+            cid = str(ev.get("conversationId", "")).replace(":", "-")
+            out[cid] = out.get(cid, 0) + 1
+    return out
+
+
 def origin(account: str | None, threads: list[str] | None, senders: list[str] | None) -> dict:
     out: dict = {}
     if account:
@@ -245,12 +259,17 @@ def main() -> None:
 
     people = People(ar)
     convs = conversations(ar)
+    encrypted = encrypted_counts(ar)
 
     if args.list_threads:
+        # Links readable here, the id, who; a fourth column counts the X Chat messages the archive holds
+        # only encrypted. A conversation that exists only as X Chat is listed too, with 0 readable links.
         rows = []
+        seen = set()
         for c in convs:
             n = sum(1 for m in c["messages"] for _ in message_links(m))
-            if not n:
+            seen.add(c["id"])
+            if not n and not encrypted.get(c["id"]):
                 continue
             if c["group"]:
                 who = f"group: {label(c, people)}"
@@ -258,9 +277,23 @@ def main() -> None:
                 others = [i for i in c["id"].split("-") if i != people.me]
                 who = "yourself" if not others else f"{people.name(others[0])}  https://x.com/i/user/{others[0]}"
             rows.append((n, c["id"], who))
+        for cid in encrypted:
+            if cid not in seen:
+                others = [i for i in cid.split("-") if i != people.me]
+                rows.append((0, cid, "yourself" if not others else f"{people.name(others[0])}  https://x.com/i/user/{others[0]}"))
         for n, cid, who in sorted(rows, key=lambda r: (-r[0], r[1])):
-            print(f"{n}\t{cid}\t{who}")
+            enc = encrypted.get(cid)
+            print(f"{n}\t{cid}\t{who}" + (f"\t+{enc} encrypted X Chat message{'s' if enc != 1 else ''}" if enc else ""))
         return
+
+    # A named thread with encrypted X Chat messages is only partly read: say so, once (with --json,
+    # which refresh runs once per archive), and where to get the rest.
+    if args.json:
+        for conv, given in chosen_threads(convs, args.thread, people.me):
+            enc = encrypted.get(conv["id"])
+            if enc:
+                print(f"! {enc} encrypted X Chat message{'s' if enc != 1 else ''} with {label(conv, people, given)} are not in the archive's readable DMs: "
+                      f"grab them from the chat page, https://x.com/i/chat/{conv['id']} (Link Keeper's popup there)", file=sys.stderr)
 
     rows: dict[str, dict] = {}
     for url, date, thread, sender in gather(convs, args.thread, people):
