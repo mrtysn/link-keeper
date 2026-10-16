@@ -29,6 +29,7 @@ import os
 import re
 import socket
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -195,6 +196,72 @@ def journal_drop(entry_id: str) -> dict:
     return {"ok": True}
 
 
+# --- refresh -------------------------------------------------------------------------------------
+# Links' "Refresh from exports" button: tools/refresh.zsh, run detached so it outlives this helper, with
+# the PATH an app started outside a shell lacks (asdf's shims, Homebrew). Only that script runs, and
+# --offline is the one choice the page makes. Its output goes to the log the Link Refresh app used;
+# each run starts with a "--- refresh" line and ends with "--- exit <code>".
+REFRESH_LOG = Path.home() / "Library/Logs/link-refresh.log"
+
+
+def refresh_pid_file() -> Path:
+    return state_dir() / "refresh.json"
+
+
+# The run this helper started: it must be reaped (poll) or it lingers as a zombie that kill(pid, 0)
+# still finds, and the button would wait forever. A run from an earlier helper is not our child, so
+# for that one kill(pid, 0) is the test.
+_refresh_proc = None
+
+
+def refresh_running() -> dict | None:
+    try:
+        run = json.loads(refresh_pid_file().read_text())
+        pid = int(run["pid"])
+        if _refresh_proc is not None and _refresh_proc.pid == pid:
+            return run if _refresh_proc.poll() is None else None
+        os.kill(pid, 0)
+        return run
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def refresh_start(offline: bool) -> dict:
+    global _refresh_proc
+    if refresh_running():
+        return {"ok": False, "error": "a refresh is already running"}
+    script = REPO / "tools" / "refresh.zsh"
+    if not script.exists():
+        return {"ok": False, "error": f"no refresh script at {script}"}
+    REFRESH_LOG.parent.mkdir(parents=True, exist_ok=True)
+    started = dt.datetime.now().isoformat(timespec="seconds")
+    flags = "--no-open" + (" --offline" if offline else "")
+    with REFRESH_LOG.open("a") as log:
+        log.write(f"--- refresh {started}{' (offline)' if offline else ''}\n")
+    env = dict(os.environ, PATH=f"{Path.home()}/.asdf/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")
+    proc = subprocess.Popen(
+        ["/bin/zsh", "-c", f'"$0" {flags}; print -- "--- exit $?"', str(script)],
+        stdin=subprocess.DEVNULL, stdout=REFRESH_LOG.open("a"), stderr=subprocess.STDOUT,
+        cwd=str(REPO), env=env, start_new_session=True)
+    _refresh_proc = proc
+    refresh_pid_file().parent.mkdir(parents=True, exist_ok=True)
+    refresh_pid_file().write_text(json.dumps({"pid": proc.pid, "started": started, "offline": offline}))
+    return {"ok": True, "pid": proc.pid, "started": started}
+
+
+def refresh_status() -> dict:
+    """Whether a refresh runs, and the last run's lines so far (its exit code once it ended)."""
+    run = refresh_running()
+    lines: list = []
+    if REFRESH_LOG.exists():
+        text = REFRESH_LOG.read_text(errors="replace").splitlines()[-400:]
+        start = max((i for i, l in enumerate(text) if l.startswith("--- refresh ")), default=None)
+        lines = text[start:] if start is not None else []
+    code = next((l[len("--- exit "):] for l in reversed(lines) if l.startswith("--- exit ")), None)
+    return {"ok": True, "running": bool(run), "started": run["started"] if run else None,
+            "lines": lines[-40:], "exit": int(code) if code and code.isdigit() else None}
+
+
 HOST_OPS = {
     "backup": lambda m: write_backup(m.get("data") or {}, m.get("reason") or "change"),
     "list-backups": lambda m: list_backups(),
@@ -203,6 +270,8 @@ HOST_OPS = {
     "journal-last": lambda m: journal_last(),
     "journal-list": lambda m: journal_list(),
     "journal-drop": lambda m: journal_drop(m.get("entry_id") or ""),
+    "refresh-start": lambda m: refresh_start(bool(m.get("offline"))),
+    "refresh-status": lambda m: refresh_status(),
 }
 
 

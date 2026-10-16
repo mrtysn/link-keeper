@@ -2205,6 +2205,12 @@ async function handleMessage(msg) {
     case "link-counts":
       return linkCounts();
 
+    // Links' "Refresh from exports": tools/refresh.zsh, started and watched by the helper on this Mac.
+    case "refresh-start":
+      return hostCall("refresh-start", { offline: !!msg.offline }).catch(e => ({ ok: false, error: String(e.message || e) }));
+    case "refresh-status":
+      return hostCall("refresh-status").catch(e => ({ ok: false, error: String(e.message || e) }));
+
     case "grouping-status": {
       const rec = (await read("dataPatches", {}))[GROUP_PATCH];
       return rec ? { at: rec.at, groups: rec.groups || 0, links: rec.links || 0, undone: rec.undone || null, skipped: rec.skipped || null } : null;

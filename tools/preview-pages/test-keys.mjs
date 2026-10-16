@@ -531,6 +531,24 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "fold: no errors " + p.errs.join("; "));
   await p.close();
 }
+// Refresh from exports, in the Import panel: what the helper reports, while it runs and after.
+{
+  const p = await page("list.html?refresh=running");
+  await p.click("#import"); await p.waitForTimeout(400);
+  ok(await p.$eval("#refresh-go", b => b.disabled) && /Refreshing since/.test(await p.$eval("#refresh-msg", e => e.textContent)), "refresh: running shows as running, the button waits");
+  ok(/2\/8  everything else/.test(await p.$eval("#refresh-log", e => e.textContent)), "refresh: its latest lines show");
+  ok(!(await p.$eval("#import-panel", e => e.hidden)), "refresh: the panel stays open while it is watched");
+  await p.close();
+  const done = await page("list.html?refresh=done");
+  await done.click("#import"); await done.waitForTimeout(400);
+  ok(!(await done.$eval("#refresh-go", b => b.disabled)) && /finished/.test(await done.$eval("#refresh-msg", e => e.textContent)), "refresh: a finished run says so, and the button is back");
+  await done.close();
+  const bad = await page("list.html?refresh=failed");
+  await bad.click("#import"); await bad.waitForTimeout(400);
+  ok(/failed \(exit 1\)/.test(await bad.$eval("#refresh-msg", e => e.textContent)) && /could not reach node01/.test(await bad.$eval("#refresh-log", e => e.textContent)), "refresh: a failed run shows its exit and last lines");
+  ok(!bad.errs.length, "refresh: no errors " + bad.errs.join("; "));
+  await bad.close();
+}
 // The chat grab's panel on the page: running, then a failure shown as its own words with Copy and Close.
 {
   const p = await page("popup.html?tab=new");

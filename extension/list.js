@@ -1760,6 +1760,7 @@ function openPanel(which) {
   for (const id of ["settings-panel", "import-panel", "dups-panel", "trash-panel"]) $(id).hidden = id !== which || !$(id).hidden;
   $("settings").setAttribute("aria-expanded", String(!$("settings-panel").hidden));
   if (!$("settings-panel").hidden) { loadFilterRules(); loadBackups(); loadGrouping(); }
+  if (!$("import-panel").hidden) watchRefresh();
   $("import").setAttribute("aria-expanded", String(!$("import-panel").hidden));
   $("dups").setAttribute("aria-expanded", String(!$("dups-panel").hidden));
   if (!$("import-panel").hidden) $("import-text").focus();
@@ -2253,6 +2254,34 @@ $("import-go").onclick = async () => {
 
 /* If a refresh is waiting on loopback, take it now. Import is idempotent, so doing this on every
  * visit costs nothing and means the only step after a rebuild is opening this page. */
+/* Refresh from exports: the helper runs tools/refresh.zsh; this page shows its last lines while it runs
+ * and collects its hand-over when it serves one (takePendingRefresh, quiet when nothing waits). */
+let refreshTimer = null;
+async function watchRefresh() {
+  clearTimeout(refreshTimer);
+  const st = await send({ type: "refresh-status" });
+  if (!st?.ok) { $("refresh-msg").textContent = `Refresh is not available: ${st?.error || "the helper did not answer"}.`; $("refresh-go").disabled = false; return; }
+  const lines = (st.lines || []).filter(l => l.trim());
+  $("refresh-log").hidden = !lines.length;
+  $("refresh-log").textContent = lines.slice(-12).join("\n");
+  $("refresh-log").scrollTop = $("refresh-log").scrollHeight;
+  $("refresh-go").disabled = st.running;
+  await takePendingRefresh();
+  if (st.running) {
+    $("refresh-msg").textContent = `Refreshing since ${new Date(st.started).toLocaleTimeString()}…`;
+    refreshTimer = setTimeout(watchRefresh, 2000);
+  } else if (lines.length) {
+    $("refresh-msg").textContent = st.exit === 0 ? "The last refresh finished." : st.exit == null ? "The last refresh stopped without finishing." : `The last refresh failed (exit ${st.exit}); its last lines are below.`;
+  }
+}
+$("refresh-go").onclick = async () => {
+  $("refresh-go").disabled = true;
+  const res = await send({ type: "refresh-start", offline: $("refresh-offline").checked });
+  if (!res?.ok) { $("refresh-go").disabled = false; $("refresh-msg").textContent = res?.error || "The refresh did not start."; return; }
+  $("refresh-msg").textContent = "Refreshing…";
+  refreshTimer = setTimeout(watchRefresh, 800);
+};
+
 /* A batch brought in from this page is one group, named for what it is and the day: "Pasted links ·
  * Oct 15, 2026". Its key keeps one batch's several calls (a refresh's captures and queue) together. */
 const batchGroup = label => ({ name: `${label} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`, key: `batch:${label}:${Date.now()}` });
@@ -2284,7 +2313,7 @@ async function takePendingRefresh() {
     const out = await send({ type: "add", urls: queue, group: handover });
     bits.push(`${queue.length} needing a browser: ${out.added} queued${out.skipped ? `, ${out.skipped} already there` : ""}`);
   }
-  openPanel("import-panel");
+  if ($("import-panel").hidden) openPanel("import-panel");   // opens it; a call on an open panel would close it
   $("import-msg").className = "ok";
   $("import-msg").textContent = `From the last refresh: ${bits.join("; ")}`;
   load();
