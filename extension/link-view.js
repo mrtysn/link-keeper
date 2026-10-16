@@ -13,9 +13,13 @@ const el = (tag, props = {}, ...children) => {
 
 const shortUrl = url => String(url).replace(/^https?:\/\/(www\.)?/, "");
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : /(s|sh|ch|x)$/.test(word) ? "es" : "s"}`;
+// One formatter each, made once: toLocaleString builds a new one per call, which at 2000 rows is
+// most of a render's date work.
+const WHEN_FMT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+const DAY_FMT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 function whenOf(iso) {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return Number.isNaN(d.getTime()) ? "" : WHEN_FMT.format(d);
 }
 
 /* Mirrors reopenRoute in background.js: what reopening this URL will actually do. */
@@ -51,7 +55,7 @@ function dmOriginText(o) {
   return [o.account && `account ${o.account}`, o.thread?.length && `thread ${o.thread.join(", ")}`,
     o.senders?.length && `sent by ${o.senders.join(", ")}`].filter(Boolean).join(" · ");
 }
-const dayOf = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { dateStyle: "medium" }); };
+const dayOf = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : DAY_FMT.format(d); };
 function readBadge(link) {
   const at = readAt(link);
   if (at) return el("span", { className: "lk-read", textContent: "captured", title: `Captured ${whenOf(at)}: its text, images and links are saved` });
