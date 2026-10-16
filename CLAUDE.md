@@ -23,18 +23,18 @@ release, not a release per change.
 ## Before a release
 
 Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tools/test-stash.mjs`, `tools/test-extractors.zsh` (for the extractors or a capture), `tools/test-instagram-export.py` and
-`tools/test-refresh-instagram-accounts.zsh` (for the Instagram importer, `attach-dm-origin.py` or the refresh), `tools/test-x-archive.py` (for the X archive importer), `node tools/test-chat-grab.mjs` (for grabbing links from a chat page),
+`tools/test-refresh-instagram-accounts.zsh` (for the Instagram importer, `attach-dm-origin.py` or the refresh), `tools/test-x-archive.py` (for the X archive importer), `node tools/test-chat-grab.mjs` (for grabbing links from a chat page), `tools/test-bridge-refresh.py` (for the helper's refresh),
 `node tools/test-bridge.mjs`, for stashing or the live preview `tools/run-in-headless-firefox.zsh
 --extension extension tools/e2e-stash.js` and `tools/preview-frames/test-preview-frames.zsh`, and
 for the bridge or storage `tools/test-bridge-firefox.zsh`.
 
-## The Link Refresh app
+## The refresh
 
-`mac/` holds a project-lifecycle `mac-app` manifest (the repo root is not one: it is the extension
-and its tools). Rebuild and reinstall `~/Applications/Link Refresh.app` with
-`project-lifecycle -C mac install`; `-C mac test` runs `tools/refresh.zsh --help` only, never the
-refresh itself. `mac/write-launcher.zsh` writes the launcher into the gitignored `mac/.build/`.
-Reinstall after changing the launcher or moving `tools/refresh.zsh`.
+Links' Import panel runs `tools/refresh.zsh` through the helper (`native/link-keeper-bridge.py`,
+`refresh-start` / `refresh-status`), which replaced the Link Refresh Mac app in 5.65. Never run a full
+refresh on your own initiative: it reaches the phone inbox over ssh and fetches every new link; use
+`tools/refresh.zsh --offline`. `tools/test-bridge-refresh.py` checks the helper's side against a
+stand-in script.
 
 ## Reading the owner's links
 
