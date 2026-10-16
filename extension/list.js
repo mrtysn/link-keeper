@@ -1104,8 +1104,41 @@ function drawNextHead() {
 let nextHeadFrame = 0;
 $("out").addEventListener("scroll", () => { cancelAnimationFrame(nextHeadFrame); nextHeadFrame = requestAnimationFrame(drawNextHead); }, { passive: true });
 
+/* The groups' order, for every grouping: by date — a stash's when it came in, any other group's
+ * newest link — either way, or by how many links each holds. A catch-all group ("Not in a stash",
+ * "Not from a chat", "Untagged") stays last. Rows keep their order inside a group; the keyboard walks
+ * them in the new page order. */
+const SORT_KEY = "listGroupSort";
+let groupSort = (() => { try { return localStorage.getItem(SORT_KEY) || "newest"; } catch (e) { return "newest"; } })();
+const CATCH_ALL = new Set(["Not in a stash", NO_CHAT, "Untagged"]);
+function sortGroups() {
+  const out = $("out");
+  const groups = [...out.querySelectorAll(":scope > section.group")];
+  if (groups.length < 2) return;
+  const linkOf = new Map(rowsOnPage.map(r => [r.li, r.target.link]));
+  const facts = new Map(groups.map(g => {
+    const lis = [...g.querySelectorAll("ul.rows > li")];
+    const stash = data.stashes.find(s => s.id === g.dataset.key);
+    const dates = lis.map(li => linkOf.get(li)?.date).filter(Boolean).sort();
+    return [g, { n: lis.length, at: stash?.ingested_at || stash?.created_at || dates.at(-1) || "", last: CATCH_ALL.has(g.dataset.key) || g.classList.contains("list-group") }];
+  }));
+  const by = { newest: (a, b) => b.at.localeCompare(a.at), oldest: (a, b) => a.at.localeCompare(b.at), most: (a, b) => b.n - a.n, fewest: (a, b) => a.n - b.n }[groupSort];
+  const order = [...groups].sort((x, y) => { const a = facts.get(x), b = facts.get(y); return (a.last - b.last) || by(a, b); });
+  const anchor = groups[0].previousSibling;
+  out.insertBefore(el("span"), anchor ? anchor.nextSibling : out.firstChild).replaceWith(...order);
+  // The keyboard walks the page: put the rows in their new order.
+  rowsOnPage.sort((a, b) => (a.li.compareDocumentPosition(b.li) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+}
+$("sortby").value = groupSort;
+$("sortby").onchange = () => {
+  groupSort = $("sortby").value;
+  try { localStorage.setItem(SORT_KEY, groupSort); } catch (e) { /* not remembered */ }
+  render();
+};
+
 function render() {
   renderRows();
+  sortGroups();
   renderOnly();
   markHeads();
   // The chip rows and the tag bar above the panes change height as they draw: measure again after.

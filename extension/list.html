@@ -82,7 +82,7 @@
     padding: 12px 0; background: var(--bg); border-bottom: 1px solid var(--line);
   }
   #q {
-    flex: 1 1 18rem; min-width: min(14rem, 100%); min-height: 34px; padding: 6px 12px; font: inherit; font-size: .9375rem;
+    flex: 1 1 12rem; min-width: min(11rem, 100%); min-height: 34px; padding: 6px 12px; font: inherit; font-size: .9375rem;
     color: var(--ink); background: var(--panel); border: 1px solid var(--field); border-radius: 8px;
   }
   .seg { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -109,10 +109,10 @@
   /* Off, the switches and the Group by menu sit back like the chip rows: no fill or outline until
      hovered; a switch that is on gets its outline and mark (below). */
   .filters.tri .chip[data-state="0"] { background: none; border-color: transparent; color: var(--dim); }
-  #groupby { background: none; border-color: transparent; color: var(--dim); }
+  #groupby, #sortby { background: none; border-color: transparent; color: var(--dim); }
   @media (hover: hover) {
     .filters.tri .chip[data-state="0"]:hover { background: var(--chip); color: var(--ink); }
-    #groupby:hover { background: var(--chip); color: var(--ink); border-color: transparent; }
+    #groupby:hover, #sortby:hover { background: var(--chip); color: var(--ink); border-color: transparent; }
   }
   .chip[data-state="only"], .chip[data-state="in"] { background: var(--chip); border-color: var(--accent); color: var(--ink); font-weight: 600; }
   .chip[data-state="only"]::before { content: "✓"; color: var(--accent); font-weight: 700; }
@@ -598,6 +598,14 @@
         <option value="month">By month</option>
         <option value="newest">Newest first</option>
         <option value="oldest">Oldest first</option>
+      </select>
+    </label>
+    <label class="view"><span class="sr-only">Sort the groups</span>
+      <select id="sortby" title="The order of the groups">
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="most">Most links</option>
+        <option value="fewest">Fewest links</option>
       </select>
     </label>
     <div class="seg viewtoggles" role="group" aria-label="View">

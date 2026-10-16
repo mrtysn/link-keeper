@@ -488,6 +488,27 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.$eval("#queue", e => !e.hidden) && await p.$eval("#stash-tab", e => !e.hidden) && await p.$eval("#remove", e => e.hidden), "popup: and offers + List and Stash tab, no Remove");
   await p.close();
 }
+// The groups' order: newest or oldest first by date, or most or fewest links; a catch-all stays last.
+{
+  const p = await page("list.html?group=domain");
+  const heads = () => p.$$eval("#out > section.group", l => l.map(s => [s.dataset.key, s.querySelectorAll("ul.rows > li").length]));
+  const sortBy = async v => { await p.selectOption("#sortby", v); await p.waitForTimeout(250); return heads(); };
+  const most = await sortBy("most");
+  ok(most.every((h, i) => !i || most[i - 1][1] >= h[1]), `sort: Most links puts the biggest group first (${most.map(h => h[1])})`);
+  const fewest = await sortBy("fewest");
+  ok(fewest.every((h, i) => !i || fewest[i - 1][1] <= h[1]), `sort: Fewest links puts the smallest first (${fewest.map(h => h[1])})`);
+  const newest = (await sortBy("newest")).map(h => h[0]), oldest = (await sortBy("oldest")).map(h => h[0]);
+  ok(newest.join() !== oldest.join() && newest[0] === oldest.at(-1), "sort: Oldest first turns Newest first around");
+  // The next row down the page is where 2 (skip ↓) goes, across a group boundary too.
+  const nextOnPage = () => p.evaluate(() => { const lis = [...document.querySelectorAll("#out ul.rows > li")]; const i = lis.findIndex(li => li.classList.contains("lk-cursor")); return lis[i + 1]?.textContent; });
+  await p.click("#out ul.rows > li .ttl"); await p.waitForTimeout(150);   // from the page's first row
+  let walked = true;
+  for (let i = 0; i < 6; i++) { const want = await nextOnPage(); await key(p, "2"); if (await p.$eval(".lk-cursor", e => e.textContent) !== want) walked = false; }
+  ok(walked, "sort: the keyboard walks the rows in their new page order");
+  await p.selectOption("#sortby", "newest");
+  ok(!p.errs.length, "sort: no errors " + p.errs.join("; "));
+  await p.close();
+}
 // The chat grab's panel on the page: running, then a failure shown as its own words with Copy and Close.
 {
   const p = await page("popup.html?tab=new");
