@@ -2090,7 +2090,8 @@ const stoppedFailed = s => (/^failed: /.test(s || "") ? `Stopped early: the site
 
 function describeGrab(res) {
   if (!res.ok) return res.error;
-  const span = res.from ? ` (${res.from.slice(0, 10)} to ${res.to.slice(0, 10)})` : "";
+  // Your own calendar's days, not UTC's: a grab since midnight here must not read as the day before.
+  const span = res.from ? ` (${dayOf(new Date(res.from))} to ${dayOf(new Date(res.to))})` : "";
   const bits = [`${res.links} links in ${res.messages} messages${span}`, `${res.added} new`];
   if (res.updated) bits.push(`${res.updated} already held, now with this chat`);
   if (res.unread) bits.push(`${res.unread} messages had no readable time`);
