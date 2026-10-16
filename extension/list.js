@@ -1772,14 +1772,22 @@ let dupSync = [];           // one function per card on show, to redraw its boxe
  * look like one link held dozens of times. */
 const exactUrl = url => String(url).replace(/\/+$/, "");
 
+/* Worked out once per data load: a filter or chip click cannot change which links are held twice, and
+ * at 2000 links the scan took 300 ms. Lookup tables replace a search of every stash per copy. */
+let dupCache = null;
 function duplicateSets() {
+  if (dupCache && dupCache.data === data) return dupCache.sets;
+  const stashes = new Map(data.all.stashes.map(s => [s.id, s]));
+  const shown = new Set(data.stashes.map(s => s.id));
+  const tabAt = new Map(data.all.stashes.flatMap(s => s.tabs.map((t, i) => [t.id, i])));
   const out = [];
   for (const link of data.links) {
     const buckets = new Map();   // exact address -> its copies
     const add = (url, copy) => buckets.set(exactUrl(url), [...(buckets.get(exactUrl(url)) || []), { ...copy, url }]);
-    for (const c of link.copies.filter(c => visibleStash(c.stash))) {
-      const stash = stashById(c.stash);
-      const at = stash.tabs.findIndex(t => t.id === c.tab);
+    for (const c of link.copies.filter(c => shown.has(c.stash))) {
+      const stash = stashes.get(c.stash);
+      const at = tabAt.get(c.tab) ?? -1;
+      if (at === -1) continue;
       const label = stashName(stash);
       const kind = stash.source === "import" ? "imported" : "stashed";
       add(stash.tabs[at].url, { id: `tab:${c.tab}`, stash, tab: c.tab, at: Date.parse(stash.created_at) || 0,
@@ -1801,7 +1809,9 @@ function duplicateSets() {
       out.push({ link: { ...link, url, title: copies.find(c => c.title)?.title || (same ? link.title : null), cap: same ? link.cap : null }, copies });
     }
   }
-  return out.sort((a, b) => b.copies.length - a.copies.length || (labelOf(a.link) || a.link.url).localeCompare(labelOf(b.link) || b.link.url));
+  const sets = out.sort((a, b) => b.copies.length - a.copies.length || (labelOf(a.link) || a.link.url).localeCompare(labelOf(b.link) || b.link.url));
+  dupCache = { data, sets };
+  return sets;
 }
 
 // Rows past COLLAPSE_AFTER show only the first SHOWN_WHEN_COLLAPSED until "more" is pressed.

@@ -4,6 +4,15 @@
 (() => {
   const M = window.MOCK;
   const params = new URLSearchParams(location.search);
+  // ?scale=N pads the sample to N links, spread over 150 made-up sites, to measure the pages at the
+  // owner's size (about 2000) rather than the sample's 40.
+  if (params.has("scale")) {
+    const want = Number(params.get("scale")) || 2000, base = M.dump.items.slice();
+    for (let i = M.dump.items.length; i < want; i++) {
+      const r = base[i % base.length];
+      M.dump.items.push({ ...r, url: `https://site${i % 150}.example/${i}`, current: false, cap: r.cap && { ...r.cap } });
+    }
+  }
 
   const storageListeners = new Set();
   // Tags set by hand, keyed like the link; a few to start with so the chips and filters show.
