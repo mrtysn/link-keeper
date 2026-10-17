@@ -325,7 +325,7 @@ def serve_client(conn: socket.socket) -> None:
         conn.sendall(json.dumps(result, ensure_ascii=False).encode() + b"\n")
 
 
-def serve_socket(path: Path) -> None:
+def bind_socket(path: Path) -> socket.socket:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(path.parent, 0o700)
     if path.exists() or path.is_symlink():
@@ -338,9 +338,29 @@ def serve_socket(path: Path) -> None:
         os.umask(old)
     SOCK_INODE["ino"] = os.stat(path).st_ino
     server.listen(8)
+    server.settimeout(SOCK_CHECK_S)
+    return server
+
+
+def serve_socket(path: Path) -> None:
+    """Serves the shell's requests for as long as Firefox runs this helper. A socket file that goes
+    missing meanwhile (a second helper that started and quit takes its own with it, or a cleanup of
+    the state folder) is made again, so `link-keeper` never falls back to a stale backup while
+    Firefox is open. One another helper has put in its place is left to that helper."""
+    server = bind_socket(path)
     while True:
-        conn, _ = server.accept()
+        try:
+            conn, _ = server.accept()
+        except socket.timeout:
+            if not (path.exists() or path.is_symlink()):
+                server.close()
+                server = bind_socket(path)
+            continue
+        conn.settimeout(None)
         threading.Thread(target=serve_client, args=(conn,), daemon=True).start()
+
+
+SOCK_CHECK_S = 5
 
 
 def main() -> None:
