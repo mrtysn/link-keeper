@@ -146,6 +146,8 @@ const LinkActions = (() => {
     if (!t?.link || busy) return null;
     busy = true;
     try {
+      // What the page shows at once, before the change is written and the page reloads.
+      page.before?.(cmd, t, opts);
       const res = await ACTIONS[cmd](t, opts);
       if (res?.undo) undos.push({ ...res.undo, cmd, target: t, mark: opts.mark });
       if (res?.say) page.say(res.say);

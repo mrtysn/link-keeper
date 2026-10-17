@@ -373,6 +373,7 @@
   /* drag and drop */
   ul.rows.stash > li[draggable="true"] { cursor: grab; }
   ul.rows.stash > li.dragging { opacity: .5; }
+  ul.rows > li.leaving { opacity: .35; pointer-events: none; transition: opacity .1s; }
   ul.rows.stash > li.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
   ul.rows.stash > li.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
   ul.rows.stash.drop-end { box-shadow: 0 2px 0 var(--accent); }

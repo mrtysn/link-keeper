@@ -33,7 +33,15 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!(await p.$("#out .lk-verdict")), "pane: no ✓ or ✕ marks");
   while (!(await cur()).includes("Companion")) await key(p, "2");
   const rows0 = await p.$$eval("#out ul.rows > li", l => l.length);
+  await p.evaluate(() => {
+    window.seenLeaving = [];
+    new MutationObserver(ms => { for (const m of ms) if (m.target.classList?.contains("leaving")) window.seenLeaving.push(m.target.textContent);
+      else if (m.target.matches?.('button[data-cmd="remove"]') && m.target.textContent === "Removing…") window.seenLeaving.push("button"); })
+      .observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class", "disabled"] });
+  });
   await key(p, "q");
+  const seen = await p.evaluate(() => window.seenLeaving);
+  ok(seen.some(t => t.includes("Companion")) && seen.includes("button"), `pane: Q dims its row and the button says Removing… at once (${seen.length})`);
   ok(/Removed from/.test(await msg(p)), "pane: Q removes this copy (" + await msg(p) + ")");
   ok(!(await cur()).includes("Companion") && await p.$$eval("#out ul.rows > li", l => l.length) === rows0 - 1, "pane: and moves on");
   await key(p, "Meta+z");

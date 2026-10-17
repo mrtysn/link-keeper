@@ -427,8 +427,17 @@ LinkActions.setup({
   tags: (t, anchor) => (cardMode ? anchoredPopover($("detail").querySelector(".cm-card.top .cm-head") || anchor, tagEditor(t.link, () => load()))
     : $("detail").querySelector(".tagger input")?.focus()),
   tagNext: () => { walk(1); onRow("tags")(); },
+  // A removal shows at once: its row dims and the Remove button says so, until the reload redraws them.
+  before(cmd, target, opts) {
+    if (cmd !== "remove") return;
+    const stash = opts.fromList ? null : target.stash || LinkActions.copyOf?.(target)?.stash || null;
+    for (const r of rowsOnPage) {
+      if (r.target.link.key === target.link.key && (r.target.stash?.id || null) === (stash?.id || null)) r.li.classList.add("leaving");
+    }
+    for (const b of $("detail").querySelectorAll('.lk-bar > button[data-cmd="remove"]')) { b.textContent = "Removing…"; b.disabled = true; }
+  },
   async after(cmd, target, res) {
-    if (res.ok === false) return;
+    if (res.ok === false) { if (cmd === "remove") render(); return; }
     // In card mode, accepting a card's suggested tags deals the next card, as removing does.
     const leaves = ["move", "remove", ...(cardMode ? ["accept"] : [])].includes(cmd);
     const i = cursorAt();
