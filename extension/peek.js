@@ -171,15 +171,19 @@ const Peek = (() => {
     if (!link) return null;
     const cap = link.cap;
     const text = (cap?.text || link.preview?.text || "").replace(/\s+/g, " ").trim();
+    const title = headingOf(link) || shortUrl(link.url);
+    const pic = cap?.shotThumb || link.preview?.image || (cap?.images || []).find(s => /^(https?:|data:image\/)/.test(s || "")) || null;
+    const said = text && !title.replace(/\s+/g, " ").includes(text.slice(0, 40));
     const where = [link.list && !link.copies.length ? "Not in a stash" : null,
       ...link.copies.map(c => stashOf(d, c.stash)).filter(Boolean).map(stashName)].filter(Boolean);
     const state = el("div", { className: "pk-badges" }, ...[readBadge(link)].filter(Boolean),
       ...(link.tags || []).map(t => tagChip(t)));
     return el("div", {},
-      head(linkTitle(link), kindOf(link.url) === "web" ? hostOf(link.url) : shortUrl(link.url)),
-      cap?.shotThumb || link.preview?.image ? el("img", { className: "pk-shot", src: cap?.shotThumb || link.preview.image, alt: "" }) : null,
-      // A post's title is its text already; say it once.
-      text && !linkTitle(link).replace(/\s+/g, " ").includes(text.slice(0, 40)) ? el("p", { className: "pk-text", textContent: text.length > 320 ? `${text.slice(0, 320)}…` : text }) : null,
+      head(title, kindOf(link.url) === "web" ? hostOf(link.url) : shortUrl(link.url)),
+      // Two lines of what it says, its picture small beside them, as a chat app shows under a link.
+      said || pic ? el("div", { className: `pk-body${pic ? " pic" : ""}` },
+        said ? el("p", { className: "pk-text", textContent: text.slice(0, 320) }) : el("span"),
+        pic ? el("img", { className: "pk-pic", src: pic, alt: "", loading: "lazy" }) : null) : null,
       state.childElementCount ? state : null,
       agentRow(link),
       dmOriginText(link.origin) ? el("p", { className: "pk-note", textContent: `Direct message: ${dmOriginText(link.origin)}` }) : null,

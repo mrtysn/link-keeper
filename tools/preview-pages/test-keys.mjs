@@ -21,6 +21,13 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
 {
   const p = await page("list.html?group=stash&pane=1");
   const cur = () => p.$eval(".lk-cursor .ttl", e => e.textContent);
+  // A captured post: its author as the heading, its text once below, the capture's day on its chip.
+  ok(await p.$eval("#detail .dtitle", e => e.textContent) === "@lksmlabc on X", "pane: a post's heading is its author, not its text");
+  ok(!(await p.$("#detail .captext .who")), "pane: and the text below does not repeat the author");
+  ok(/^captured [A-Z][a-z]+ \d+/.test(await p.$eval("#detail .when .lk-read", e => e.textContent)), "pane: the captured chip carries its day");
+  await (await p.$$("#out ul.rows > li"))[0].hover({ position: { x: 150, y: 10 } }); await p.waitForTimeout(1200);
+  ok(await p.$eval(".pk-body.pic", e => !!e.querySelector(".pk-text") && !!e.querySelector("img.pk-pic")).catch(() => false), "hover card: two lines of the post and its picture");
+  await p.mouse.move(1200, 850); await p.waitForTimeout(400);
   const a = await cur(); await key(p, "2"); const b2 = await cur();
   ok(a !== b2, "pane: 2 walks the sidebar");
   await key(p, "1"); ok(await cur() === a, "pane: 1 walks back");
