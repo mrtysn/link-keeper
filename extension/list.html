@@ -498,9 +498,7 @@
   @media (hover: hover) { .group > h2 > .fold:hover { background: var(--chip); color: var(--ink); } }
   .group.folded > ul.rows { display: none; }
   .group.folded > h2 { margin-bottom: 0; }
-  /* The key guide is reference, not content: beside the pane it docks under the list column, off the link. */
-  body.pane .key-guide { right: auto; left: 16px; width: var(--side-w, 22rem); }
-  body.pane #out { max-height: var(--list-h, var(--pane-h, calc(100vh - 72px))); }
+  body.pane #out { max-height: var(--pane-h, calc(100vh - 72px)); }
   /* The rows beside the pane sit a step back; the one under the pointer and the selected one are full. */
   body.pane #out ul.rows > li:not(.lk-cursor) .ttl, body.pane #out ul.rows > li:not(.lk-cursor) .ttl * { color: var(--dim); }
   body.pane #out ul.rows > li:not(.lk-cursor) .src, body.pane #out ul.rows > li:not(.lk-cursor) .rd { opacity: .7; }

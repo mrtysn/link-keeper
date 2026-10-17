@@ -144,9 +144,6 @@ function fitPanes() {
   if (!pane || !panes) return document.body.style.removeProperty("--pane-h");
   const top = Math.max(64, panes.getBoundingClientRect().top);
   document.body.style.setProperty("--pane-h", `${Math.max(160, window.innerHeight - top - 8)}px`);
-  // The key guide docks under the list column: the list ends above it rather than under it.
-  const kg = document.getElementById("key-guide");
-  document.body.style.setProperty("--list-h", `${Math.max(120, window.innerHeight - top - 8 - (kg ? kg.offsetHeight + 12 : 0))}px`);
 }
 new MutationObserver(() => fitPanes()).observe(document.body, { childList: true });
 window.addEventListener("scroll", fitPanes, { passive: true });
