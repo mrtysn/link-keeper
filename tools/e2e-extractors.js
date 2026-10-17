@@ -236,3 +236,17 @@ await check("...the same from the reels feed", async () => {
 await check("...and nothing while the tags still name another post", async () => {
   eq(await igPage("/reel/SomeOtherReel/"), null, "a stale page");
 });
+
+await check("a capture made on a page says so on the page: a toast that reads captured, or failed with the reason", async () => {
+  const tab = await loaded(`http://127.0.0.1:${PORT}/blog/rewrote-build`, "h1");
+  const state = async () => (await browser.scripting.executeScript({ target: { tabId: tab.id },
+    func: () => document.getElementById("link-keeper-toast")?.dataset.state || null }))[0].result;
+  try {
+    await confirmCapture(await captureActive());
+    eq(await state(), "captured", "after a capture");
+    await confirmCapture({ ok: false, error: "could not read that page" });
+    eq(await state(), "failed", "after a failed one, replacing the first");
+  } finally {
+    await browser.tabs.remove(tab.id);
+  }
+});

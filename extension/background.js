@@ -2016,7 +2016,7 @@ async function toggleExcluded(host) {
 }
 
 browser.commands.onCommand.addListener(async name => {
-  if (name === "capture-page") await notify(describe(await captureActive()));
+  if (name === "capture-page") await confirmCapture(await captureActive());
   else if (name === "stash-tabs") {
     await notifyStash(await stashTabs());
   } else if (name === "stash-this-tab") {
@@ -2129,8 +2129,8 @@ async function onMenuClicked(info, tab) {
     return;
   }
   switch (info.menuItemId) {
-    case "menu-keep": await notify(describe(await captureActive())); break;
-    case "menu-shot": await notify(describe(await captureActive("", true))); break;
+    case "menu-keep": await confirmCapture(await captureActive()); break;
+    case "menu-shot": await confirmCapture(await captureActive("", true)); break;
     case "menu-filter": {
       const res = await filterOutPage(tab?.url || "");
       await notify(res.ok ? `${res.rule} is filtered out` : res.error);
@@ -2308,6 +2308,58 @@ const STOPPED = {
   limit: "Stopped early at 2000 loads. Grab again to go further.",
 };
 const stoppedFailed = s => (/^failed: /.test(s || "") ? `Stopped early: the site refused to load more (${s.slice(8)}). Wait a while before grabbing again.` : "");
+
+/* What a capture kept, in a few words: "text · 3 links · 1 picture · 12 replies · screenshot". */
+function keptParts(r) {
+  const n = (count, one, many) => (count ? `${count} ${count === 1 ? one : many}` : null);
+  return [r.text ? "text" : "no text", n(r.links?.length, "link", "links"), n(r.images?.length, "picture", "pictures"),
+    n(r.replies?.length, "reply", "replies"), r.screenshot ? `screenshot${r.screenshot.truncated ? " (cut short)" : ""}` : null,
+    r.screenshot_error ? "screenshot failed" : null].filter(Boolean).join(" · ");
+}
+
+/* A capture made on a page (its shortcut or the page's menu) says so on that page: a card in its
+ * bottom-right corner for a few seconds. Where the page cannot take one, a notification instead. */
+async function confirmCapture(res) {
+  const r = res?.record;
+  const card = res?.ok
+    ? { ok: true, head: "Captured", line: r ? summarise(r) : "", detail: r ? keptParts(r) : "" }
+    : { ok: false, head: "Not captured", line: res?.error || "unknown error", detail: "" };
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    await browser.scripting.executeScript({ target: { tabId: tab.id }, func: showToast, args: [card] });
+  } catch (e) {
+    await notify(describe(res));
+  }
+}
+
+/* Runs in the page. Its own closed shadow root, so the page's styles cannot reach it; a click closes it. */
+function showToast({ ok, head, line, detail }) {
+  document.getElementById("link-keeper-toast")?.remove();
+  const host = document.createElement("div");
+  host.id = "link-keeper-toast";
+  host.dataset.state = ok ? "captured" : "failed";
+  const root = host.attachShadow({ mode: "closed" });
+  root.innerHTML = `<style>
+    .card { position: fixed; right: 20px; bottom: 20px; z-index: 2147483647; max-width: 340px; padding: 10px 14px;
+      font: 13px/1.4 -apple-system, system-ui, sans-serif; color: #e8e8ee; background: #1d1d24; border: 1px solid #34343f;
+      border-left: 3px solid ${ok ? "#5ec27a" : "#e0655b"}; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.35);
+      cursor: pointer; animation: in .16s ease-out; transition: opacity .25s; }
+    @media (prefers-color-scheme: light) { .card { color: #1d1d24; background: #fff; border-color: #ddd; border-left-color: ${ok ? "#3fa35c" : "#d04a40"}; } .detail { color: #666; } }
+    @keyframes in { from { opacity: 0; transform: translateY(6px); } }
+    b { display: block; font-size: 12px; color: ${ok ? "#5ec27a" : "#e0655b"}; }
+    .line { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+    .detail { margin-top: 2px; font-size: 12px; color: #9a9aa8; }
+  </style><div class="card" role="status"><b></b><div class="line"></div><div class="detail"></div></div>`;
+  const card = root.querySelector(".card");
+  root.querySelector("b").textContent = `Link Keeper · ${head}`;
+  root.querySelector(".line").textContent = line;
+  root.querySelector(".detail").textContent = detail;
+  if (!detail) root.querySelector(".detail").remove();
+  const close = () => { card.style.opacity = "0"; setTimeout(() => host.remove(), 260); };
+  card.addEventListener("click", close);
+  setTimeout(close, ok ? 3500 : 6000);
+  document.documentElement.append(host);
+}
 
 function describeGrab(res) {
   if (!res.ok) return res.error;
