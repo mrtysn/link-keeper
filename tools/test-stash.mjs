@@ -109,7 +109,7 @@ function makeBrowser(tabs, { helper = "installed", bookmarks: bmOpts = {} } = {}
   const browser = {
     storage: {
       local: {
-        get: async key => ({ [key]: structuredClone(store[key]) }),
+        get: async key => structuredClone(key === null ? store : Object.fromEntries([].concat(key).filter(k => k in store).map(k => [k, store[k]]))),
         set: async obj => { Object.assign(store, structuredClone(obj)); },
         remove: async keys => { for (const k of [].concat(keys)) delete store[k]; },
       },
@@ -1066,6 +1066,27 @@ await check("previews: a picture is stored apart from its preview, so reading ev
   assert.deepEqual([old.store.previews.a.image, old.store["pvimg:a"], old.store.previews.b.image, old.store["pvimg:b"], old.store.previews.c],
     [true, "data:image/jpeg;base64,BBBB", null, undefined, { none: true, at: "x" }]);
   assert.equal(old.store.dataPatches["2026-10-17-preview-pictures-apart"].moved, 1);
+});
+
+await check("an Instagram post keys the same under every address it is saved by, and what was stored under the old keys moves once", async () => {
+  const { browser, store } = makeBrowser([]);
+  const bg = await load(browser);
+  const spellings = ["https://www.instagram.com/reel/DedGyALCUWi/", "https://www.instagram.com/reels/DedGyALCUWi/",
+    "https://www.instagram.com/gittrend.io/reel/DedGyALCUWi/", "https://www.instagram.com/p/DedGyALCUWi/?igsh=abc", "https://instagram.com/tv/DedGyALCUWi"];
+  assert.deepEqual([...new Set(spellings.map(bg.keyOf))], ["ig:DedGyALCUWi"]);
+  assert.equal(bg.keyOf("https://www.instagram.com/gittrend.io/"), "instagram.com/gittrend.io", "a profile keeps its address");
+  store.linkTags = { "instagram.com/reel/AAA": ["a"], "instagram.com/p/AAA?igsh=x": ["b", "a"], "x.com/whatever": ["c"] };
+  store.previews = { "instagram.com/reels/BBB": { title: "old", image: true, at: "1" }, "ig:BBB": { title: "kept", at: "2" } };
+  store["pvimg:instagram.com/reel/CCC"] = "data:image/jpeg;base64,CCCC";
+  store.previews["instagram.com/reel/CCC"] = { title: "c", image: true, at: "3" };
+  store.dataPatches = Object.fromEntries(["2026-09-29-mark-onetab-import", "2026-10-07-capture-is-not-keep", "2026-10-07-filter-own-linkedin",
+    "2026-10-15-purge-opened-marks-and-verdicts", "2026-10-15-drop-badged-x-icon", "2026-10-15-group-loose-links", "2026-10-17-preview-pictures-apart"].map(id => [id, { at: "x" }]));
+  await bg.applyDataPatches();
+  assert.deepEqual(store.linkTags, { "x.com/whatever": ["c"], "ig:AAA": ["a", "b"] }, "tags join under the new key");
+  assert.deepEqual(Object.keys(store.previews).sort(), ["ig:BBB", "ig:CCC"]);
+  assert.equal(store.previews["ig:BBB"].title, "kept", "an entry already under the new key wins");
+  assert.deepEqual([store["pvimg:ig:CCC"], "pvimg:instagram.com/reel/CCC" in store], ["data:image/jpeg;base64,CCCC", false], "the picture moves too");
+  assert.deepEqual(store.dataPatches["2026-10-17-instagram-one-key"].linkTags, 2);
 });
 
 /* Stash folders as the 29 Sep import left them: written within ten seconds, in these sizes, plus

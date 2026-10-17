@@ -25,7 +25,8 @@
 const LINK_SOURCES = ["tabs", "import", "list"];
 
 /* Same normalisation on both sides of a comparison: x.com/i/status/<id> and
- * x.com/<handle>/status/<id> are the same post, and a trailing slash is never meaningful. A
+ * x.com/<handle>/status/<id> are the same post, as are an Instagram post's /p/, /reel/, /reels/ and
+ * /<handle>/reel/ addresses with or without a share suffix (?igsh=), and a trailing slash is never meaningful. A
  * #fragment that is a route (it holds a "/": Gmail's #inbox/<message id>) names a page of its own and
  * stays; a plain anchor (#section) or a text fragment (#:~:text=) is the same page and goes. */
 const routeFragment = hash => (/^#.*\//.test(hash) && !hash.startsWith("#:~:") ? hash : "");
@@ -35,6 +36,8 @@ function keyOf(url) {
     const host = u.hostname.toLowerCase().replace(/^www\./, "");
     const status = u.pathname.match(/\/status\/(\d+)/);
     if (/^(x|twitter)\.com$/.test(host) && status) return `status:${status[1]}`;
+    const ig = host === "instagram.com" && u.pathname.match(/^\/(?:[\w.]+\/)?(?:p|reels?|tv)\/([\w-]+)/);
+    if (ig) return `ig:${ig[1]}`;
     return host + u.pathname.replace(/\/$/, "") + u.search + routeFragment(u.hash);
   } catch (e) {
     return String(url);

@@ -982,6 +982,40 @@ const DATA_PATCHES = [
       return { moved: Object.keys(pics).length };
     },
   },
+  {
+    // An Instagram post keys as ig:<id> since 5.66, whichever of its addresses was saved; what was
+    // stored under the old keys moves to the new one. Tags join; for the rest the entry already there wins.
+    id: "2026-10-17-instagram-one-key",
+    async run() {
+      const moved = {};
+      const rekey = k => (k.startsWith("instagram.com/") ? keyOf(`https://${k}`) : k);
+      for (const name of ["linkTags", "tagSuggestions", "agentTags", "previews"]) {
+        const all = await read(name, {});
+        let n = 0;
+        for (const k of Object.keys(all)) {
+          const to = rekey(k);
+          if (to === k) continue;
+          if (name === "linkTags") all[to] = [...new Set([...(all[to] || []), ...(all[k] || [])])];
+          else if (!(to in all)) all[to] = all[k];
+          delete all[k];
+          n++;
+        }
+        if (n) await browser.storage.local.set({ [name]: all });
+        moved[name] = n;
+      }
+      const pics = await browser.storage.local.get(null);
+      const out = {}, gone = [];
+      for (const [k, v] of Object.entries(pics)) {
+        if (!k.startsWith(PREVIEW_IMG + "instagram.com/")) continue;
+        const to = PREVIEW_IMG + rekey(k.slice(PREVIEW_IMG.length));
+        if (!(to in pics) && !(to in out)) out[to] = v;
+        gone.push(k);
+      }
+      if (gone.length) { await browser.storage.local.set(out); await browser.storage.local.remove(gone); }
+      moved.pictures = gone.length;
+      return moved;
+    },
+  },
 ];
 
 // Where a loose link came from, by the importer that wrote its capture.

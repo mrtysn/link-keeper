@@ -31,6 +31,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import shutil
 import sqlite3
 import struct
@@ -109,6 +110,10 @@ def key_of(url: str) -> str:
         i = parts.index("status")
         if i + 1 < len(parts) and parts[i + 1].isdigit():
             return f"status:{parts[i + 1]}"
+    # An Instagram post under /p/, /reel/, /reels/ or /tv/, with or without its author's name first.
+    ig = re.match(r"^/(?:[\w.]+/)?(?:p|reels?|tv)/([\w-]+)", u.path) if host == "instagram.com" else None
+    if ig:
+        return f"ig:{ig.group(1)}"
     path = u.path[:-1] if u.path.endswith("/") else u.path
     # A fragment that is a route (holds a "/", as Gmail's #inbox/<id> does) names its own page.
     frag = f"#{u.fragment}" if "/" in u.fragment and not u.fragment.startswith(":~:") else ""
