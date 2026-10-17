@@ -22,6 +22,11 @@ OTHER = {
     "/wiki/Suspension_bridge": "generic-wiki.html",
     "/blog/rewrote-build": "generic-blog.html",
     "/docs/getting-started": "generic-docs.html",
+    # The reel, reached directly and from the reels feed, and a different reel's address over the same
+    # page, as when Instagram has swapped the post but not yet its tags.
+    "/reel/DedGyALCUWi/": "instagram-reel.html",
+    "/reels/DedGyALCUWi/": "instagram-reel.html",
+    "/reel/SomeOtherReel/": "instagram-reel.html",
 }
 
 

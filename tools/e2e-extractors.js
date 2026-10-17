@@ -212,3 +212,27 @@ await check("a docs page with no article or main: the block holding its paragrap
   has(r.text, ["Install the tool", "Run tool init."], "text");
   lacks(r.text, ["Hidden mobile menu", "Configure", "First run\nFirst run"], "text");
 });
+
+const igPage = async path => {
+  const tab = await loaded(`http://127.0.0.1:${PORT}${path}`, "video");
+  const r = (await browser.scripting.executeScript({ target: { tabId: tab.id }, func: () => LK.extract("www.instagram.com") }))[0].result;
+  await browser.tabs.remove(tab.id);
+  return r;
+};
+
+await check("an Instagram reel: its caption, author, posted day, counts and cover from its preview tags, under /reel/ID/", async () => {
+  const r = await igPage("/reel/DedGyALCUWi/");
+  eq([r.kind, r.url, r.author, r.posted, r.likes, r.comments],
+    ["reel", "https://www.instagram.com/reel/DedGyALCUWi/", { handle: "gittrend.io", name: "Trending OpenSource Projects" }, "2026-10-13", "998", "167"], "fields");
+  eq(r.title, "Gumroad's own code is open — run your own online store and sell straight to your buyers. More like t", "title: the caption's first line, cut at 100");
+  if (!r.text.startsWith("Gumroad's own code is open") || !r.text.endsWith("#webdev")) throw new Error(`text ${JSON.stringify(r.text)}`);
+  if (!/^https:\/\/scontent\.cdninstagram\.com\//.test(r.images[0])) throw new Error(`images ${JSON.stringify(r.images)}`);
+});
+
+await check("...the same from the reels feed", async () => {
+  eq((await igPage("/reels/DedGyALCUWi/")).url, "https://www.instagram.com/reel/DedGyALCUWi/", "url");
+});
+
+await check("...and nothing while the tags still name another post", async () => {
+  eq(await igPage("/reel/SomeOtherReel/"), null, "a stale page");
+});

@@ -549,12 +549,45 @@ const LK = (() => {
     };
   }
 
+  /* --- instagram --------------------------------------------------------------- */
+  /* A reel or post names everything in its preview tags: og:title 'Name on Instagram: "caption"',
+   * og:description '998 likes, 167 comments - handle on October 13, 2026: "caption"', twitter:title
+   * "Name (@handle) • Instagram reel", og:image its cover. The markup is per-build class names; the tags
+   * are what lasts. Instagram swaps posts without loading a page, so the tags count only while og:url
+   * names the post on screen. Kept under /reel/ID/ or /p/ID/, as the export writes them. */
+  function instagram() {
+    const id = location.pathname.match(/\/(reels?|p|tv)\/([\w-]+)/);
+    if (!id) return {};   // a profile or the feed: its preview tags, as any page
+    const ogUrl = meta("og:url") || "";
+    if (!ogUrl.includes(`/${id[2]}/`)) return null;
+    const tt = (meta("twitter:title") || "").match(/^(.*?)\s*\(@([\w.]+)\)/);
+    const reel = /\/(reels?|tv)\//.test(ogUrl) || /\breel\b/i.test(meta("twitter:title") || "");
+    const desc = meta("og:description") || meta("description") || "";
+    const quoted = str => (str.match(/:\s*"([\s\S]*)"\s*\.?\s*$/) || [])[1]?.trim() || null;
+    const caption = quoted(meta("og:title") || "") || quoted(desc);
+    const stats = desc.match(/^([\d.,]+[KkMm]?)\s+likes?,\s*([\d.,]+[KkMm]?)\s+comments?\s+-\s+([\w.]+)\s+on\s+([^:]+):/);
+    const day = stats && new Date(stats[4]);
+    const pad = n => String(n).padStart(2, "0");
+    return {
+      kind: reel ? "reel" : "ig-post",
+      url: `https://www.instagram.com/${reel ? "reel" : "p"}/${id[2]}/`,
+      title: caption ? caption.split("\n")[0].slice(0, 100) : null,
+      text: caption,
+      author: { handle: tt?.[2] || stats?.[3] || null, name: tt?.[1] || null },
+      posted: day && !Number.isNaN(day.getTime()) ? `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}` : null,
+      likes: stats?.[1] || null,
+      comments: stats?.[2] || null,
+      images: [meta("og:image")].filter(Boolean),
+    };
+  }
+
   const REGISTRY = [
     { hosts: /(^|\.)(x|twitter)\.com$/, run: tweet },
     { hosts: /(^|\.)github\.com$/, run: github },
     { hosts: /(^|\.)news\.ycombinator\.com$/, run: hackernews },
     { hosts: /(^|\.)(youtube\.com|youtu\.be)$/, run: youtube },
     { hosts: /(^|\.)reddit\.com$/, run: reddit },
+    { hosts: /(^|\.)instagram\.com$/, run: instagram },
   ];
 
   /* The site handler wins field by field; generic() fills the gaps. */
