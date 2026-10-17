@@ -1489,7 +1489,7 @@ function renderDetail() {
       el("div", { className: "when" }, when, readBadge(link))),
     el("div", { className: "pos", textContent: `${linkNumber(i)} / ${new Set(rowsOnPage.map(r => r.target.link.key)).size}` })));
 
-  const title = labelOf(link) || tab?.title || null;
+  const title = headingOf(link) || tab?.title || null;
   box.append(el("h2", { className: `dtitle${title ? "" : " plain"}`, textContent: title || shortUrl(url) }));
   box.append(el("div", { className: "durl", textContent: url }));
   box.append(LinkActions.bar(row.target));
@@ -1513,7 +1513,8 @@ function knownBox(row) {
     box.append(el("div", { className: "pvcard" }, pv.image ? el("img", { src: pv.image, alt: "" }) : "",
       el("div", {}, pv.title && pv.title !== labelOf(link) ? el("b", { textContent: pv.title }) : "", pv.text ? el("p", { textContent: pv.text }) : "")));
   }
-  if (c?.text) box.append(el("div", { className: "captext" }, c.handle && el("span", { className: "who", textContent: `${c.handle} ` }), c.text));
+  // A post's heading already names its author.
+  if (c?.text) box.append(el("div", { className: "captext" }, c.handle && !isTextPost(c) && el("span", { className: "who", textContent: `${c.handle} ` }), c.text));
   else if (c?.title && c.title !== labelOf(link)) box.append(el("p", { className: "muted", textContent: c.title }));
   if (c?.images?.length) {
     box.append(el("div", { className: "thumbs" }, ...c.images.slice(0, 8).map(src => {

@@ -45,6 +45,10 @@ function labelOf(link) {
   return cap.title || cap.handle || link.title || null;
 }
 
+/* The heading over a link's content, where its text is shown in full below: a post is its author
+ * ("@a on X"), not its text a second time; anything else is its label. */
+const headingOf = link => (isTextPost(link.cap) ? link.cap.title || link.cap.handle : labelOf(link));
+
 /* Whether its page was captured, shown the same on every page: a "captured" badge with the date on a
  * row or card, a page icon beside the title in a sidebar. Only web pages can be read, so only they get "not
  * read". */
@@ -57,9 +61,17 @@ function dmOriginText(o) {
     o.senders?.length && `sent by ${o.senders.join(", ")}`].filter(Boolean).join(" · ");
 }
 const dayOf = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : DAY_FMT.format(d); };
+const SHORT_FMT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const SHORT_YEAR_FMT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+/* "Oct 15", with the year when it is not this one. */
+const shortDay = iso => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return (d.getFullYear() === new Date().getFullYear() ? SHORT_FMT : SHORT_YEAR_FMT).format(d);
+};
 function readBadge(link) {
   const at = readAt(link);
-  if (at) return el("span", { className: "lk-read", textContent: "captured", title: `Captured ${whenOf(at)}: its text, images and links are saved` });
+  if (at) return el("span", { className: "lk-read", textContent: `captured ${shortDay(at)}`.trim(), title: `Captured ${whenOf(at)}: its text, images and links are saved` });
   if (link.cap) return el("span", { className: "lk-read", textContent: "captured", title: "Its text, images and links are saved" });
   return isWeb(link.url) ? el("span", { className: "lk-unread", textContent: "not captured", title: "Press 3 to capture its text, images and links" }) : null;
 }
