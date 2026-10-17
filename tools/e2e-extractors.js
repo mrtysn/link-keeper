@@ -1,14 +1,15 @@
 /* Run by test-extractors.zsh beside the real extension in headless Firefox: x.com captures hold every
- * rendered reply, and a page walk gathers the ones x.com drops while scrolling. PORT is filled in by
+ * rendered reply, and a page walk gathers the ones x.com drops while scrolling; a GitHub repo capture holds its README. PORT is filled in by
  * the runner; the pages are tools/extractor-fixtures/. */
 const BASE = `http://127.0.0.1:${PORT}/somehandle/status`;
 const FLAT = `${BASE}/2009295329057702081`;
 const VIRTUAL = `${BASE}/2009295329057702082`;
 const DISCOVER = `${BASE}/2009295329057702083`;
 const VIRTUAL_DISCOVER = `${BASE}/2009295329057702084`;
+const GITHUB_REPO = `http://127.0.0.1:${PORT}/slopus/happy-cli`;
 const PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-const loaded = async url => {
+const loaded = async (url, ready = 'article[data-testid="tweet"]') => {
   const tab = await browser.tabs.create({ url, active: true });
   // A new tab reports "complete" for its initial about:blank before the navigation starts, and
   // scripting into it is then refused; wait until the tab is on the page asked for and loaded.
@@ -22,7 +23,7 @@ const loaded = async url => {
   // tab can report as zero for a moment; wait until a post is in the document.
   for (let waited = 0; waited < 10000; waited += 100) {
     const [{ result }] = await browser.scripting.executeScript({
-      target: { tabId: tab.id }, func: () => !!document.querySelector('article[data-testid="tweet"]'),
+      target: { tabId: tab.id }, func: sel => !!document.querySelector(sel), args: [ready],
     });
     if (result) break;
     await new Promise(r => setTimeout(r, 100));
@@ -168,4 +169,15 @@ await check("a screenshot walk ignores everything after a heading that appears o
   eq(r.replies_scanned, 8, "replies_scanned");
   eq(r.reply_links.map(l => [l.href, l.self]), [["https://repo.dev/mine", true]], "reply_links from the walk");
   noRecommended(r, "walk");
+});
+
+await check("a GitHub repo in the 2026 layout: its About text, then its README, its links and its stars", async () => {
+  const tab = await loaded(GITHUB_REPO, "article.markdown-body");
+  const r = (await browser.scripting.executeScript({ target: { tabId: tab.id }, func: () => LK.extract("github.com") }))[0].result;
+  await browser.tabs.remove(tab.id);
+  eq([r.kind, r.title, r.author.handle, r.stars], ["repo", "slopus/happy-cli", "slopus", "553"], "kind, title, owner, stars");
+  if (!r.text.startsWith("Happy Coder CLI to connect your local Claude Code to mobile device\n\n")) throw new Error(`text starts ${JSON.stringify(r.text.slice(0, 120))}`);
+  for (const want of ["npm install -g happy-coder", "happy gemini"]) if (!r.text.includes(want)) throw new Error(`README text lacks ${want}`);
+  if (r.text.length > 6100) throw new Error(`text is ${r.text.length} characters`);
+  eq(r.links.map(l => l.href).slice(0, 3), ["https://github.com/slopus/happy", "https://api.cluster-fluster.com/", "https://app.happy.engineering/"], "README links, no in-page anchors");
 });

@@ -375,23 +375,45 @@ const LK = (() => {
 
   /* --- github ------------------------------------------------------------------ */
 
+  /* A repo page is its description and its README. GitHub's 2026 layout names its classes per build
+   * (SidebarAbout-module_eqNI3a_description) and serves no og: tags, so the description falls back
+   * to the About box by class prefix, then to the page title "owner/repo: description". */
+  const README_MAX = 6000;
+  const isBadge = src => /shields\.io|badge|\.svg(\?|$)/i.test(src);
+
   function github() {
     const [owner, repo] = location.pathname.split("/").filter(Boolean);
     if (!owner || !repo) return null;
     const isIssue = /\/(issues|pull)\/\d+/.test(location.pathname);
+    if (isIssue) {
+      return {
+        kind: "issue",
+        title: txt(document.querySelector(".gh-header-title, h1 bdi, [data-testid=issue-title]")) || document.title,
+        text: txt(document.querySelector(".comment-body, [data-testid=issue-body]"))?.slice(0, 800),
+        author: { name: owner, handle: owner },
+      };
+    }
+    const fromTitle = document.title.match(/^[^:]+\/[^:]+:\s*(.+)$/)?.[1] || null;
+    const about = txt(document.querySelector('[class*="SidebarAbout-module"][class*="_description"], p.f4.my-3, [data-testid="repo-description"]'))
+      || meta("og:description") || fromTitle;
+    const readmeNode = document.querySelector("article.markdown-body");
+    const readme = blockText(readmeNode)?.slice(0, README_MAX) || null;
+    const seen = new Set();
+    const links = [...document.querySelectorAll('.BorderGrid a[href^="http"], [class*="SidebarAbout-module"] a[href^="http"]'),
+      ...(readmeNode?.querySelectorAll('a[href^="http"]') || [])]
+      .filter(a => !seen.has(a.href) && seen.add(a.href) && !a.querySelector("img"))
+      .slice(0, 12)
+      .map(a => ({ href: a.href, display: txt(a), resolved: a.href }));
+    const images = [...(readmeNode?.querySelectorAll("img[src]") || [])]
+      .map(i => i.src).filter(src => /^https?:/.test(src) && !isBadge(src)).slice(0, 4);
     return {
-      kind: isIssue ? "issue" : "repo",
-      title: isIssue
-        ? txt(document.querySelector(".gh-header-title, h1 bdi")) || document.title
-        : `${owner}/${repo}`,
-      text: isIssue
-        ? txt(document.querySelector(".comment-body, [data-testid=issue-body]"))?.slice(0, 800)
-        : txt(document.querySelector('p.f4.my-3, [data-testid="repo-description"]')) || meta("og:description"),
+      kind: "repo",
+      title: `${owner}/${repo}`,
+      text: [about, readme].filter(Boolean).join("\n\n") || null,
       author: { name: owner, handle: owner },
-      links: [...document.querySelectorAll('.BorderGrid a[href^="http"]')]
-        .slice(0, 4)
-        .map(a => ({ href: a.href, display: txt(a), resolved: a.href })),
-      stars: txt(document.querySelector('#repo-stars-counter-star, a[href$="/stargazers"] strong')),
+      links,
+      ...(images.length ? { images } : {}),
+      stars: txt(document.querySelector('#repo-stars-counter-star, a[href$="/stargazers"] strong, [data-testid="star-button"] [data-component="CounterLabel"]')),
       lang: txt(document.querySelector('.BorderGrid [itemprop="programmingLanguage"]')),
     };
   }

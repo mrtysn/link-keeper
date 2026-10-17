@@ -1,0 +1,125 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>slopus/happy-cli: Happy Coder CLI to connect your local Claude Code to mobile device</title></head><body>
+<!-- Cut from github.com/slopus/happy-cli as saved on 2026-10-17: the page title, the About box, the star
+     counter and the README, in the 2026 layout's own markup (per-build class names, no og: tags). -->
+<div data-testid="repo-header-actions"><button data-testid="star-button" type="button"><span>Star</span><span aria-hidden="true" data-variant="secondary" data-component="CounterLabel" class="ml-1 prc-CounterLabel-CounterLabel-X-kRU"><span>553</span></span></button></div>
+<div class="CodeViewSidebar-module_6TmlqG_borderGrid"><h2><span>About</span></h2><p class="SidebarAbout-module_eqNI3a_description prc-Text-Text-9mHv3" data-component="Text">Happy Coder CLI to connect your local Claude Code to mobile device</p></div>
+<div class="DirectoryRichtextContent-module_ArZdLq_SharedMarkdownContent"><article class="markdown-body entry-content container-lg" itemprop="text"><div class="markdown-alert markdown-alert-warning" dir="auto"><p class="markdown-alert-title" dir="auto">Warning</p><p dir="auto">This repository has been merged to the <a href="https://github.com/slopus/happy">main one</a>. All issues and code is now living there.</p>
+</div>
+<div class="markdown-heading" dir="auto"><h1 tabindex="-1" class="heading-element" dir="auto">Happy</h1><a id="user-content-happy" class="anchor" aria-label="Permalink: Happy" href="#happy"></a></div>
+<p dir="auto">Code on the go — control AI coding agents from your mobile device.</p>
+<p dir="auto">Free. Open source. Code anywhere.</p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Installation</h2><a id="user-content-installation" class="anchor" aria-label="Permalink: Installation" href="#installation"></a></div>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="npm install -g happy-coder"><pre>npm install -g happy-coder</pre></div>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Usage</h2><a id="user-content-usage" class="anchor" aria-label="Permalink: Usage" href="#usage"></a></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Claude (default)</h3><a id="user-content-claude-default" class="anchor" aria-label="Permalink: Claude (default)" href="#claude-default"></a></div>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="happy"><pre>happy</pre></div>
+<p dir="auto">This will:</p>
+<ol dir="auto">
+<li>Start a Claude Code session</li>
+<li>Display a QR code to connect from your mobile device</li>
+<li>Allow real-time session sharing between Claude Code and your mobile app</li>
+</ol>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Gemini</h3><a id="user-content-gemini" class="anchor" aria-label="Permalink: Gemini" href="#gemini"></a></div>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="happy gemini"><pre>happy gemini</pre></div>
+<p dir="auto">Start a Gemini CLI session with remote control capabilities.</p>
+<p dir="auto"><strong>First time setup:</strong></p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="# Authenticate with Google
+happy connect gemini"><pre><span class="pl-c"><span class="pl-c">#</span> Authenticate with Google</span>
+happy connect gemini</pre></div>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Commands</h2><a id="user-content-commands" class="anchor" aria-label="Permalink: Commands" href="#commands"></a></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Main Commands</h3><a id="user-content-main-commands" class="anchor" aria-label="Permalink: Main Commands" href="#main-commands"></a></div>
+<ul dir="auto">
+<li><code>happy</code> – Start Claude Code session (default)</li>
+<li><code>happy gemini</code> – Start Gemini CLI session</li>
+<li><code>happy codex</code> – Start Codex mode</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Utility Commands</h3><a id="user-content-utility-commands" class="anchor" aria-label="Permalink: Utility Commands" href="#utility-commands"></a></div>
+<ul dir="auto">
+<li><code>happy auth</code> – Manage authentication</li>
+<li><code>happy connect</code> – Store AI vendor API keys in Happy cloud</li>
+<li><code>happy notify</code> – Send a push notification to your devices</li>
+<li><code>happy daemon</code> – Manage background service</li>
+<li><code>happy doctor</code> – System diagnostics &amp; troubleshooting</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Connect Subcommands</h3><a id="user-content-connect-subcommands" class="anchor" aria-label="Permalink: Connect Subcommands" href="#connect-subcommands"></a></div>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="happy connect gemini     # Authenticate with Google for Gemini
+happy connect claude     # Authenticate with Anthropic
+happy connect codex      # Authenticate with OpenAI
+happy connect status     # Show connection status for all vendors"><pre>happy connect gemini     <span class="pl-c"><span class="pl-c">#</span> Authenticate with Google for Gemini</span>
+happy connect claude     <span class="pl-c"><span class="pl-c">#</span> Authenticate with Anthropic</span>
+happy connect codex      <span class="pl-c"><span class="pl-c">#</span> Authenticate with OpenAI</span>
+happy connect status     <span class="pl-c"><span class="pl-c">#</span> Show connection status for all vendors</span></pre></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Gemini Subcommands</h3><a id="user-content-gemini-subcommands" class="anchor" aria-label="Permalink: Gemini Subcommands" href="#gemini-subcommands"></a></div>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="happy gemini                      # Start Gemini session
+happy gemini model set &lt;model&gt;    # Set default model
+happy gemini model get            # Show current model
+happy gemini project set &lt;id&gt;     # Set Google Cloud Project ID (for Workspace accounts)
+happy gemini project get          # Show current Google Cloud Project ID"><pre>happy gemini                      <span class="pl-c"><span class="pl-c">#</span> Start Gemini session</span>
+happy gemini model <span class="pl-c1">set</span> <span class="pl-k">&lt;</span>model<span class="pl-k">&gt;</span>    <span class="pl-c"><span class="pl-c">#</span> Set default model</span>
+happy gemini model get            <span class="pl-c"><span class="pl-c">#</span> Show current model</span>
+happy gemini project <span class="pl-c1">set</span> <span class="pl-k">&lt;</span>id<span class="pl-k">&gt;</span>     <span class="pl-c"><span class="pl-c">#</span> Set Google Cloud Project ID (for Workspace accounts)</span>
+happy gemini project get          <span class="pl-c"><span class="pl-c">#</span> Show current Google Cloud Project ID</span></pre></div>
+<p dir="auto"><strong>Available models:</strong> <code>gemini-2.5-pro</code>, <code>gemini-2.5-flash</code>, <code>gemini-2.5-flash-lite</code></p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Options</h2><a id="user-content-options" class="anchor" aria-label="Permalink: Options" href="#options"></a></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Claude Options</h3><a id="user-content-claude-options" class="anchor" aria-label="Permalink: Claude Options" href="#claude-options"></a></div>
+<ul dir="auto">
+<li><code>-m, --model &lt;model&gt;</code> - Claude model to use (default: sonnet)</li>
+<li><code>-p, --permission-mode &lt;mode&gt;</code> - Permission mode: auto, default, or plan</li>
+<li><code>--claude-env KEY=VALUE</code> - Set environment variable for Claude Code</li>
+<li><code>--claude-arg ARG</code> - Pass additional argument to Claude CLI</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Global Options</h3><a id="user-content-global-options" class="anchor" aria-label="Permalink: Global Options" href="#global-options"></a></div>
+<ul dir="auto">
+<li><code>-h, --help</code> - Show help</li>
+<li><code>-v, --version</code> - Show version</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Environment Variables</h2><a id="user-content-environment-variables" class="anchor" aria-label="Permalink: Environment Variables" href="#environment-variables"></a></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Happy Configuration</h3><a id="user-content-happy-configuration" class="anchor" aria-label="Permalink: Happy Configuration" href="#happy-configuration"></a></div>
+<ul dir="auto">
+<li><code>HAPPY_SERVER_URL</code> - Custom server URL (default: <a href="https://api.cluster-fluster.com" rel="nofollow">https://api.cluster-fluster.com</a>)</li>
+<li><code>HAPPY_WEBAPP_URL</code> - Custom web app URL (default: <a href="https://app.happy.engineering" rel="nofollow">https://app.happy.engineering</a>)</li>
+<li><code>HAPPY_HOME_DIR</code> - Custom home directory for Happy data (default: ~/.happy)</li>
+<li><code>HAPPY_DISABLE_CAFFEINATE</code> - Disable macOS sleep prevention (set to <code>true</code>, <code>1</code>, or <code>yes</code>)</li>
+<li><code>HAPPY_EXPERIMENTAL</code> - Enable experimental features (set to <code>true</code>, <code>1</code>, or <code>yes</code>)</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Gemini Configuration</h3><a id="user-content-gemini-configuration" class="anchor" aria-label="Permalink: Gemini Configuration" href="#gemini-configuration"></a></div>
+<ul dir="auto">
+<li><code>GEMINI_MODEL</code> - Override default Gemini model</li>
+<li><code>GOOGLE_CLOUD_PROJECT</code> - Google Cloud Project ID (required for Workspace accounts)</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Gemini Authentication</h2><a id="user-content-gemini-authentication" class="anchor" aria-label="Permalink: Gemini Authentication" href="#gemini-authentication"></a></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Personal Google Account</h3><a id="user-content-personal-google-account" class="anchor" aria-label="Permalink: Personal Google Account" href="#personal-google-account"></a></div>
+<p dir="auto">Personal Gmail accounts work out of the box:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="happy connect gemini
+happy gemini"><pre>happy connect gemini
+happy gemini</pre></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Google Workspace Account</h3><a id="user-content-google-workspace-account" class="anchor" aria-label="Permalink: Google Workspace Account" href="#google-workspace-account"></a></div>
+<p dir="auto">Google Workspace (organization) accounts require a Google Cloud Project:</p>
+<ol dir="auto">
+<li>Create a project in <a href="https://console.cloud.google.com/" rel="nofollow">Google Cloud Console</a></li>
+<li>Enable the Gemini API</li>
+<li>Set the project ID:</li>
+</ol>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="happy gemini project set your-project-id"><pre>happy gemini project <span class="pl-c1">set</span> your-project-id</pre></div>
+<p dir="auto">Or use environment variable:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="GOOGLE_CLOUD_PROJECT=your-project-id happy gemini"><pre>GOOGLE_CLOUD_PROJECT=your-project-id happy gemini</pre></div>
+<p dir="auto"><strong>Guide:</strong> <a href="https://goo.gle/gemini-cli-auth-docs#workspace-gca" rel="nofollow">https://goo.gle/gemini-cli-auth-docs#workspace-gca</a></p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Contributing</h2><a id="user-content-contributing" class="anchor" aria-label="Permalink: Contributing" href="#contributing"></a></div>
+<p dir="auto">Interested in contributing? See <a href="/slopus/happy-cli/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> for development setup and guidelines.</p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Requirements</h2><a id="user-content-requirements" class="anchor" aria-label="Permalink: Requirements" href="#requirements"></a></div>
+<ul dir="auto">
+<li>Node.js &gt;= 20.0.0</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">For Claude</h3><a id="user-content-for-claude" class="anchor" aria-label="Permalink: For Claude" href="#for-claude"></a></div>
+<ul dir="auto">
+<li>Claude CLI installed &amp; logged in (<code>claude</code> command available in PATH)</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">For Gemini</h3><a id="user-content-for-gemini" class="anchor" aria-label="Permalink: For Gemini" href="#for-gemini"></a></div>
+<ul dir="auto">
+<li>Gemini CLI installed (<code>npm install -g @google/gemini-cli</code>)</li>
+<li>Google account authenticated via <code>happy connect gemini</code></li>
+</ul>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">License</h2><a id="user-content-license" class="anchor" aria-label="Permalink: License" href="#license"></a></div>
+<p dir="auto">MIT</p>
+</article></div>
+</body></html>

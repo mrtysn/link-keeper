@@ -1,8 +1,8 @@
 #!/bin/zsh
-# DESC: Check in headless Firefox that an x.com capture holds every rendered reply, that a page walk gathers the ones x.com drops while scrolling, and that the Discover more posts below never count as replies.
+# DESC: Check in headless Firefox that an x.com capture holds every rendered reply, that a page walk gathers the ones x.com drops while scrolling, that the Discover more posts below never count as replies, and that a GitHub repo capture holds its README.
 #
 # Usage: test-extractors.zsh [--port 8793]
-# Serves the saved x.com pages in tools/extractor-fixtures/ on 127.0.0.1 (the extension may reach that
+# Serves the saved x.com and GitHub pages in tools/extractor-fixtures/ on 127.0.0.1 (the extension may reach that
 # host), then runs e2e-extractors.js beside the real extension through run-in-headless-firefox.zsh.
 
 set -euo pipefail
