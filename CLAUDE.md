@@ -23,7 +23,7 @@ release, not a release per change.
 ## Before a release
 
 Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tools/test-stash.mjs`, `tools/test-extractors.zsh` (for the extractors or a capture), `tools/test-instagram-export.py` and
-`tools/test-refresh-instagram-accounts.zsh` (for the Instagram importer, `attach-dm-origin.py` or the refresh), `tools/test-x-archive.py` (for the X archive importer), `node tools/test-chat-grab.mjs` (for grabbing links from a chat page), `tools/test-bridge-refresh.py` (for the helper's refresh), `tools/test-bridge-socket.py` (for the helper's shell socket),
+`tools/test-refresh-instagram-accounts.zsh` (for the Instagram importer, `attach-dm-origin.py` or the refresh), `tools/test-x-archive.py` (for the X archive importer), `node tools/test-chat-grab.mjs` (for grabbing links from a chat page), `tools/test-bridge-refresh.py` (for the helper's refresh), `tools/test-bridge-socket.py` (for the helper's shell socket), `tools/test-bridge-owner.py` (for which profile owns the backups),
 `node tools/test-bridge.mjs`, for stashing or the live preview `tools/run-in-headless-firefox.zsh
 --extension extension tools/e2e-stash.js` and `tools/preview-frames/test-preview-frames.zsh`, and
 for the bridge or storage `tools/test-bridge-firefox.zsh`.

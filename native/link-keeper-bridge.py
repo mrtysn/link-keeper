@@ -13,6 +13,11 @@ extension goes. While it runs it does two jobs:
              and its answer comes back on the same connection as one JSON line.
 
 The backup folder is LINK_KEEPER_BACKUP_DIR, from the environment or the repo's config.local.sh.
+One Firefox profile owns it (.owner.json in it): the profile of the Firefox that started this helper,
+read from that Firefox's -profile or -P argument ("default" with neither, as a Dock launch has). A
+helper started by any other profile, such as a copy of the owner's profile or another session's test
+Firefox with the add-on installed, neither writes nor reads its backups and leaves the socket alone. The folder is claimed by the first
+profile to send a backup at least half the size of its latest.json, so a near-empty profile never can.
 The socket is $LINK_KEEPER_STATE_DIR/bridge.sock, by default ~/.local/state/link-keeper/.
 
 Firefox caps a message to the extension at 1 MB, so a bigger one goes as chunks of CHUNK
@@ -110,11 +115,82 @@ def write_atomic(path: Path, body: str) -> None:
     os.replace(tmp, path)
 
 
+# --- which profile owns the backup folder ---------------------------------------------------------
+
+OWNER_FILE = ".owner.json"
+FOREIGN = ("another Firefox profile backs up to {folder}, so this one is left out of it: its backups are "
+           "not written and the folder's are not read. Give this profile a folder of its own with "
+           "LINK_KEEPER_BACKUP_DIR in the environment Firefox starts with, or, if this is now your main "
+           "profile, delete {folder}/.owner.json and it takes the folder over")
+
+
+def firefox_profile(args: str | None = None) -> str:
+    """Which profile the Firefox that started this helper runs: its -profile path, its -P name, or
+    "default". A copy of a profile is a different folder, so it never passes for the original."""
+    if args is None:
+        try:
+            args = subprocess.run(["ps", "-o", "args=", "-p", str(os.getppid())], capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            args = ""
+    m = re.search(r"(?:^|\s)--?profile[\s=]+(\S+)", args)
+    if m:
+        return "path:" + os.path.realpath(m.group(1))
+    m = re.search(r"(?:^|\s)-P\s+(\S+)", args)
+    return "name:" + m.group(1) if m else "default"
+
+
+PROFILE = firefox_profile()
+
+
+def owner() -> str | None:
+    folder = backup_dir()
+    try:
+        return json.loads((folder / OWNER_FILE).read_text()).get("profile") if folder else None
+    except (OSError, ValueError):
+        return None
+
+
+def foreign() -> str | None:
+    """Why this helper's profile may not use the backup folder, or None when it may."""
+    own = owner()
+    if own and own != PROFILE:
+        return FOREIGN.format(folder=backup_dir())
+    return None
+
+
+def link_count(data: dict) -> int:
+    sessions = data.get("sessions") or []
+    return sum(len(s.get("tabs") or []) for s in sessions) + len((data.get("storage") or {}).get("items") or [])
+
+
+def claim_or_refuse(folder: Path, data: dict) -> str | None:
+    """With no owner yet: a backup at least half the size of latest.json is written, and claims the
+    folder for its profile when it names one; a smaller one is refused."""
+    if owner():
+        return None
+    try:
+        before = link_count(json.loads((folder / "latest.json").read_text()))
+    except (OSError, ValueError):
+        before = 0
+    now = link_count(data)
+    if now * 2 < before:
+        return (f"not written: this backup holds {now} links and {folder}/latest.json {before}, so it is "
+                "probably another Firefox profile's; give that profile a folder of its own with LINK_KEEPER_BACKUP_DIR")
+    write_atomic(folder / OWNER_FILE, json.dumps({"profile": PROFILE, "since": dt.datetime.now().isoformat(timespec="seconds")}))
+    return None
+
+
 def write_backup(data: dict, reason: str) -> dict:
     folder = backup_dir()
     if not folder:
         return {"ok": False, "error": "no backup folder: set LINK_KEEPER_BACKUP_DIR in config.local.sh"}
+    if foreign():
+        return {"ok": False, "error": foreign()}
     folder.mkdir(parents=True, exist_ok=True)
+    if reason != "pre-restore":
+        refused = claim_or_refuse(folder, data)
+        if refused:
+            return {"ok": False, "error": refused}
     body = json.dumps(data, ensure_ascii=False)
     now = dt.datetime.now()
     if reason == "pre-restore":
@@ -135,6 +211,8 @@ def write_backup(data: dict, reason: str) -> dict:
 
 
 def list_backups() -> dict:
+    if foreign():
+        return {"ok": False, "error": foreign()}
     folder = backup_dir()
     if not folder or not folder.exists():
         return {"ok": True, "folder": str(folder) if folder else None, "backups": []}
@@ -146,6 +224,8 @@ def list_backups() -> dict:
 
 
 def read_backup(name: str) -> dict:
+    if foreign():
+        return {"ok": False, "error": foreign()}
     folder = backup_dir()
     if not folder:
         return {"ok": False, "error": "no backup folder is set"}
@@ -365,7 +445,7 @@ SOCK_CHECK_S = 5
 
 def main() -> None:
     sock = state_dir() / "bridge.sock"
-    threading.Thread(target=serve_socket, args=(sock,), daemon=True).start()
+    serving = False
     try:
         while True:
             m = read_frame()
@@ -375,8 +455,12 @@ def main() -> None:
             if kind == "hello":
                 hello.update({k: m[k] for k in ("version",) if k in m})
                 folder = backup_dir()
+                # The shell's socket reaches the profile that owns the backups, never another one.
+                if not serving and not foreign():
+                    threading.Thread(target=serve_socket, args=(sock,), daemon=True).start()
+                    serving = True
                 send({"type": "hello", "backup_folder": str(folder) if folder else None,
-                      "error": None if folder else "no backup folder: set LINK_KEEPER_BACKUP_DIR in config.local.sh"})
+                      "error": foreign() or (None if folder else "no backup folder: set LINK_KEEPER_BACKUP_DIR in config.local.sh")})
             elif kind == "host":
                 threading.Thread(target=host_op, args=(m,), daemon=True).start()
             elif kind == "reply":
@@ -388,7 +472,7 @@ def main() -> None:
     finally:
         # Only our own socket: another Firefox's bridge may have replaced it since.
         try:
-            if sock.exists() and os.stat(sock).st_ino == SOCK_INODE.get("ino"):
+            if serving and sock.exists() and os.stat(sock).st_ino == SOCK_INODE.get("ino"):
                 sock.unlink()
         except OSError:
             pass
