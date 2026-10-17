@@ -246,6 +246,9 @@ await check("a capture made on a page says so on the page: a toast that reads ca
     eq(await state(), "captured", "after a capture");
     await confirmCapture({ ok: false, error: "could not read that page" });
     eq(await state(), "failed", "after a failed one, replacing the first");
+    await handleMessage({ type: "capture-active", note: "" });
+    for (let i = 0; i < 20 && await state() !== "captured"; i++) await new Promise(r => setTimeout(r, 50));
+    eq(await state(), "captured", "after the popup's capture button");
   } finally {
     await browser.tabs.remove(tab.id);
   }

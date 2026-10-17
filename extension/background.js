@@ -2640,8 +2640,12 @@ async function handleMessage(msg) {
       return addItems([{ url: tab.url.split("#")[0], saved_at: new Date().toISOString() }], msg.note);
     }
 
-    case "capture-active":
-      return captureActive(msg.note, !!msg.withShot);
+    case "capture-active": {
+      // The popup's capture button: the popup says what happened, and so does the page, as after the shortcut.
+      const res = await captureActive(msg.note, !!msg.withShot);
+      confirmCapture(res);
+      return res;
+    }
 
     case "capture-url":
       return captureUrl(msg.url, msg.note);
