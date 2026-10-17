@@ -1089,6 +1089,31 @@ await check("an Instagram post keys the same under every address it is saved by,
   assert.deepEqual(store.dataPatches["2026-10-17-instagram-one-key"].linkTags, 2);
 });
 
+await check("a YouTube video keys the same under every address; its old keys' tags move, and its two captures become the newest", async () => {
+  const { browser, store } = makeBrowser([]);
+  const bg = await load(browser);
+  const spellings = ["https://youtu.be/qF2vhmTZcPY?si=AoKIsFdJGhy6JGOr", "https://www.youtube.com/watch?v=qF2vhmTZcPY", "https://m.youtube.com/watch?v=qF2vhmTZcPY&t=42s",
+    "https://www.youtube.com/watch?list=PL1&v=qF2vhmTZcPY", "https://youtube.com/shorts/qF2vhmTZcPY", "https://www.youtube.com/embed/qF2vhmTZcPY", "https://music.youtube.com/watch?v=qF2vhmTZcPY"];
+  assert.deepEqual([...new Set(spellings.map(bg.keyOf))], ["yt:qF2vhmTZcPY"]);
+  assert.equal(bg.keyOf("https://www.youtube.com/@kamusalsinema"), "youtube.com/@kamusalsinema", "a channel keeps its address");
+  assert.equal(bg.keyOf("https://www.youtube.com/results?search_query=x"), "youtube.com/results?search_query=x", "and a search too");
+  store.linkTags = { "youtu.be/qF2vhmTZcPY?si=AoKIsFdJGhy6JGOr": ["games"] };
+  store.captures = [
+    { url: "https://youtu.be/qF2vhmTZcPY?si=AoKIsFdJGhy6JGOr", title: "T", text: null, captured_at: "2026-08-12T16:41:32+00:00", thread: ["@m"] },
+    { url: "https://x.com/a/status/1", text: "a post", captured_at: "2026-09-01T00:00:00Z" },
+    { url: "https://www.youtube.com/watch?v=qF2vhmTZcPY", title: "T", text: "the description", captured_at: "2026-10-17T12:23:39Z" },
+  ];
+  store.dataPatches = Object.fromEntries(["2026-09-29-mark-onetab-import", "2026-10-07-capture-is-not-keep", "2026-10-07-filter-own-linkedin",
+    "2026-10-15-purge-opened-marks-and-verdicts", "2026-10-15-drop-badged-x-icon", "2026-10-15-group-loose-links", "2026-10-17-preview-pictures-apart",
+    "2026-10-17-instagram-one-key"].map(id => [id, { at: "x" }]));
+  await bg.applyDataPatches();
+  assert.deepEqual(store.linkTags, { "yt:qF2vhmTZcPY": ["games"] });
+  assert.deepEqual(store.captures.map(c => [c.url, c.text, c.thread]),
+    [["https://www.youtube.com/watch?v=qF2vhmTZcPY", "the description", ["@m"]], ["https://x.com/a/status/1", "a post", undefined]],
+    "the page read wins, keeps the import's origin, and takes the first one's place");
+  assert.equal(store.dataPatches["2026-10-17-youtube-one-key"].captures, 1);
+});
+
 /* Stash folders as the 29 Sep import left them: written within ten seconds, in these sizes, plus
  * a stash of open tabs from the day before and one from the day after. */
 async function sep29(browser, bm, bg, sizes = [80, 87, 40, 23, 296, 7, 2, 12]) {

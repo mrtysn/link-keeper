@@ -983,40 +983,65 @@ const DATA_PATCHES = [
     },
   },
   {
-    // An Instagram post keys as ig:<id> since 5.66, whichever of its addresses was saved; what was
-    // stored under the old keys moves to the new one. Tags join; for the rest the entry already there wins.
+    // An Instagram post keys as ig:<id> since 5.66, whichever of its addresses was saved.
     id: "2026-10-17-instagram-one-key",
-    async run() {
-      const moved = {};
-      const rekey = k => (k.startsWith("instagram.com/") ? keyOf(`https://${k}`) : k);
-      for (const name of ["linkTags", "tagSuggestions", "agentTags", "previews"]) {
-        const all = await read(name, {});
-        let n = 0;
-        for (const k of Object.keys(all)) {
-          const to = rekey(k);
-          if (to === k) continue;
-          if (name === "linkTags") all[to] = [...new Set([...(all[to] || []), ...(all[k] || [])])];
-          else if (!(to in all)) all[to] = all[k];
-          delete all[k];
-          n++;
-        }
-        if (n) await browser.storage.local.set({ [name]: all });
-        moved[name] = n;
-      }
-      const pics = await browser.storage.local.get(null);
-      const out = {}, gone = [];
-      for (const [k, v] of Object.entries(pics)) {
-        if (!k.startsWith(PREVIEW_IMG + "instagram.com/")) continue;
-        const to = PREVIEW_IMG + rekey(k.slice(PREVIEW_IMG.length));
-        if (!(to in pics) && !(to in out)) out[to] = v;
-        gone.push(k);
-      }
-      if (gone.length) { await browser.storage.local.set(out); await browser.storage.local.remove(gone); }
-      moved.pictures = gone.length;
-      return moved;
-    },
+    run: () => rekeyStored(["instagram.com/"]),
+  },
+  {
+    // A YouTube video keys as yt:<id> since 5.67: youtu.be/<id>?si= and youtube.com/watch?v=<id> are one link.
+    id: "2026-10-17-youtube-one-key",
+    run: () => rekeyStored(["youtube.com/", "m.youtube.com/", "music.youtube.com/", "youtu.be/"]),
   },
 ];
+
+/* After keyOf learns that several addresses are one link: what was stored under the old keys that start
+ * with one of prefixes moves to the new key. Tags join; for the rest the entry already there wins. */
+async function rekeyStored(prefixes) {
+  const moved = {};
+  const rekey = k => (prefixes.some(p => k.startsWith(p)) ? keyOf(`https://${k}`) : k);
+  for (const name of ["linkTags", "tagSuggestions", "agentTags", "previews"]) {
+    const all = await read(name, {});
+    let n = 0;
+    for (const k of Object.keys(all)) {
+      const to = rekey(k);
+      if (to === k) continue;
+      if (name === "linkTags") all[to] = [...new Set([...(all[to] || []), ...(all[k] || [])])];
+      else if (!(to in all)) all[to] = all[k];
+      delete all[k];
+      n++;
+    }
+    if (n) await browser.storage.local.set({ [name]: all });
+    moved[name] = n;
+  }
+  const pics = await browser.storage.local.get(null);
+  const out = {}, gone = [];
+  for (const [k, v] of Object.entries(pics)) {
+    if (!k.startsWith(PREVIEW_IMG)) continue;
+    const to = PREVIEW_IMG + rekey(k.slice(PREVIEW_IMG.length));
+    if (to === k) continue;
+    if (!(to in pics) && !(to in out)) out[to] = v;
+    gone.push(k);
+  }
+  if (gone.length) { await browser.storage.local.set(out); await browser.storage.local.remove(gone); }
+  moved.pictures = gone.length;
+  // Two captures now under one key (an importer's of youtu.be/<id>, a page read of watch?v=<id>) become
+  // one: the newest, keeping the other's origin, in the place of the first.
+  const caps = await getCaptures();
+  const best = new Map();
+  for (const c of caps) {
+    const k = keyOf(c.url), old = best.get(k);
+    if (!old) { best.set(k, c); continue; }
+    const [win, lose] = String(c.captured_at || "") >= String(old.captured_at || "") ? [c, old] : [old, c];
+    for (const f of ORIGIN_FIELDS) if (lose[f] && !win[f]) win[f] = lose[f];
+    best.set(k, win);
+  }
+  if (best.size < caps.length) {
+    const seen = new Set();
+    await setCaptures(caps.map(c => keyOf(c.url)).filter(k => !seen.has(k) && seen.add(k)).map(k => best.get(k)));
+  }
+  moved.captures = caps.length - best.size;
+  return moved;
+}
 
 // Where a loose link came from, by the importer that wrote its capture.
 const SOURCE_LABELS = { "instagram-export": "Instagram export", "watch-reel": "Instagram reels", "x-archive": "X archive",

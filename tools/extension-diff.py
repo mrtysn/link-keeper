@@ -40,7 +40,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -114,6 +114,14 @@ def key_of(url: str) -> str:
     ig = re.match(r"^/(?:[\w.]+/)?(?:p|reels?|tv)/([\w-]+)", u.path) if host == "instagram.com" else None
     if ig:
         return f"ig:{ig.group(1)}"
+    # A YouTube video under youtu.be, watch?v=, shorts, embed or live, whatever else its address carries.
+    yt = None
+    if re.fullmatch(r"(m\.|music\.)?youtube\.com", host):
+        yt = (parse_qs(u.query).get("v") or [None])[0] if u.path == "/watch" else (re.match(r"^/(?:shorts|embed|live|v)/([\w-]{11})", u.path) or [None, None])[1]
+    elif host == "youtu.be":
+        yt = (re.match(r"^/([\w-]{11})", u.path) or [None, None])[1]
+    if yt:
+        return f"yt:{yt}"
     path = u.path[:-1] if u.path.endswith("/") else u.path
     # A fragment that is a route (holds a "/", as Gmail's #inbox/<id> does) names its own page.
     frag = f"#{u.fragment}" if "/" in u.fragment and not u.fragment.startswith(":~:") else ""
