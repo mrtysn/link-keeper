@@ -77,8 +77,23 @@ const FILTER_TAG = "filtered-out";
 
 /* keepFiltered: Links (which shows them under its own filter) and Tags keep them. hidden is the keys
  * left out, for pages that draw from a stash's tabs directly; count is how many links were. */
+/* Preview pictures are stored one per link (background.js, PREVIEW_IMG) and kept here for the page's
+ * life, by link and preview date: a reload asks storage only for the ones it has not seen. */
+const PREVIEW_PICS = new Map();
+async function fillPreviewPics(links) {
+  const want = links.filter(l => l.preview?.image === true);
+  const id = l => `${l.key}|${l.preview.at}`;
+  const missing = want.filter(l => !PREVIEW_PICS.has(id(l)));
+  if (missing.length) {
+    const got = await browser.storage.local.get(missing.map(l => "pvimg:" + l.key));
+    for (const l of missing) PREVIEW_PICS.set(id(l), got["pvimg:" + l.key] || null);
+  }
+  for (const l of want) l.preview.image = PREVIEW_PICS.get(id(l));
+}
+
 async function loadLinks({ keepFiltered = false } = {}) {
   const [data, chosen, { tagDefs, favicons }] = await Promise.all([send({ type: "links" }), window.LinkSources.ready, browser.storage.local.get(["tagDefs", "favicons"])]);
+  await fillPreviewPics(data.links);
   setTagLibrary(tagDefs);
   SITE_ICONS.clear();
   for (const [host, f] of Object.entries(favicons || {})) if (f?.icon) SITE_ICONS.set(host, f.icon);

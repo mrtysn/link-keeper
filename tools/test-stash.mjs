@@ -1038,7 +1038,7 @@ await check("previews: a captured link's comes from its capture, is kept, and re
   assert.deepEqual([p.title, p.text, p.image, p.from], ["@a on X", "a post about things", null, "capture"]);
   await bg.savePreview(bg.keyOf("https://x.com/a/status/1"), p);
   const links = plain(await browser.handle({ type: "links" })).links;
-  assert.deepEqual(links.find(l => l.url === "https://x.com/a/status/1").preview, { title: "@a on X", text: "a post about things", image: null });
+  assert.deepEqual(links.find(l => l.url === "https://x.com/a/status/1").preview, { title: "@a on X", text: "a post about things", image: null, at: p.at });
   store.previews[bg.keyOf("https://none.example/")] = { none: true, at: "x" };
   store.items = [{ url: "https://none.example/" }, { url: "https://bare.example/" }];
   const c = plain(await browser.handle({ type: "preview-counts" }));
@@ -1049,6 +1049,23 @@ await check("previews: a captured link's comes from its capture, is kept, and re
   bg.fetch = async () => { fetched++; throw new Error("no network in a test"); };
   await bg.previewNew(["https://bare.example/"]);
   assert.deepEqual([fetched, !!store.previews[bg.keyOf("https://bare.example/")]], [0, false]);
+});
+
+await check("previews: a picture is stored apart from its preview, so reading every link moves none; one kept inline is moved once", async () => {
+  const { browser, store } = makeBrowser([]);
+  const bg = await load(browser);
+  const k = bg.keyOf("https://pic.example/");
+  await bg.savePreview(k, { title: "t", text: null, image: "data:image/jpeg;base64,AAAA", src: "https://pic.example/i.jpg", at: "x" });
+  assert.deepEqual([store.previews[k].image, store["pvimg:" + k]], [true, "data:image/jpeg;base64,AAAA"]);
+  store.items = [{ url: "https://pic.example/" }];
+  assert.equal(plain(await browser.handle({ type: "links" })).links[0].preview.image, true, "the link says it has one; the page fetches it");
+  const old = makeBrowser([]);
+  old.store.previews = { a: { title: "a", image: "data:image/jpeg;base64,BBBB", at: "x" }, b: { title: "b", image: null, at: "x" }, c: { none: true, at: "x" } };
+  const obg = await load(old.browser);
+  await obg.applyDataPatches();
+  assert.deepEqual([old.store.previews.a.image, old.store["pvimg:a"], old.store.previews.b.image, old.store["pvimg:b"], old.store.previews.c],
+    [true, "data:image/jpeg;base64,BBBB", null, undefined, { none: true, at: "x" }]);
+  assert.equal(old.store.dataPatches["2026-10-17-preview-pictures-apart"].moved, 1);
 });
 
 /* Stash folders as the 29 Sep import left them: written within ten seconds, in these sizes, plus

@@ -847,6 +847,11 @@ function migrateStashes() {
  * is stored; otherwise it records why it skipped and changes nothing. One that throws is not
  * recorded, so the next launch tries it again. */
 const GROUP_PATCH = "2026-10-15-group-loose-links";
+/* Each preview's picture is a storage entry of its own, PREVIEW_IMG + link key, and the preview says
+ * image: true. The previews stay small, so a reload of every link moves no pictures (5.65 kept them
+ * inline: 40 MB at 2000 links, read and sent to the page on every remove), and a page fetches each
+ * picture once (link-view.js, fillPreviewPics). */
+const PREVIEW_IMG = "pvimg:";
 const DATA_PATCHES = [
   {
     // The OneTab import of 29 Sep 2026 ran on 5.10, before imports were marked (5.14), so its
@@ -962,6 +967,19 @@ const DATA_PATCHES = [
         if (!saved?.ok) throw new Error(`no backup, so nothing grouped: ${saved?.error || "the helper did not answer"}`);
       }
       return groupLooseLinks();
+    },
+  },
+  {
+    // 5.65 kept each preview's picture inside the previews entry; each moves to its own (PREVIEW_IMG).
+    id: "2026-10-17-preview-pictures-apart",
+    async run() {
+      const all = await read("previews", {});
+      const pics = {};
+      for (const [k, p] of Object.entries(all)) {
+        if (typeof p?.image === "string") { pics[PREVIEW_IMG + k] = p.image; all[k] = { ...p, image: true }; }
+      }
+      if (Object.keys(pics).length) await browser.storage.local.set({ ...pics, previews: all });
+      return { moved: Object.keys(pics).length };
     },
   },
 ];
@@ -1682,9 +1700,10 @@ function previewTags(html, url) {
 async function savePreview(key, p) {
   if (!p) return;
   await previewQueue(async () => {
+    const { image, ...rest } = p;
     const all = await read("previews", {});
-    all[key] = p;
-    await browser.storage.local.set({ previews: all });
+    all[key] = image ? { ...rest, image: true } : rest;
+    await browser.storage.local.set({ ...(image ? { [PREVIEW_IMG + key]: image } : {}), previews: all });
   });
 }
 

@@ -205,7 +205,8 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     link.note = link.list?.note || link.note || null;
     // Its preview, as a chat app shows under a link (background.js, previews): a picture and a line.
     const p = previews[link.key];
-    link.preview = p && !p.none ? { title: p.title || null, text: p.text || null, image: p.image || null } : null;
+    // image is true when the picture is stored apart (background.js, PREVIEW_IMG); the page fills it in.
+    link.preview = p && !p.none ? { title: p.title || null, text: p.text || null, image: p.image || null, at: p.at || null } : null;
     delete link.sentAt;
     link.tags = (tags[link.key] || []).slice();
     link.suggested = link.tags.length ? [] : suggestionsFor(suggestions, link.key);
