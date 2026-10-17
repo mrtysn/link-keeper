@@ -34,6 +34,80 @@ const LK = (() => {
     return {};
   }
 
+  /* --- a page's own text -------------------------------------------------------------
+   * For a page no site reader knows: the text of its main content, as it reads on screen, without the
+   * menus, sidebars, footers and boxes around it. The main content is the page's <article> or <main>
+   * when it marks one (the longest, and of equals the innermost, so <main> around an article gives the
+   * article without the title above it), else the element holding most of its paragraphs. */
+  const MAIN_MAX = 6000;
+  const SKIP = "nav, header, footer, aside, form, button, script, style, noscript, template, svg, canvas, iframe, dialog, " +
+    "[role=navigation], [role=banner], [role=contentinfo], [role=complementary], [aria-hidden=true], [hidden], " +
+    ".infobox, .navbox, .sidebar, .toc, #toc, .mw-editsection, .reference, .references, sup.reference, .metadata, .ambox, " +
+    ".share, .social, .related, .comments, #comments, .cookie, .newsletter, .advert, .ad";
+  const BLOCK = /^(P|DIV|SECTION|ARTICLE|MAIN|LI|UL|OL|DL|DT|DD|H[1-6]|PRE|BLOCKQUOTE|TABLE|TR|FIGURE|FIGCAPTION|HR|BR|DETAILS|SUMMARY)$/;
+
+  const shown = node => {
+    const r = node.getBoundingClientRect?.();
+    if (r && !r.width && !r.height && getComputedStyle(node).display !== "contents") return false;
+    return getComputedStyle(node).visibility !== "hidden";
+  };
+  const paraLength = node => [...node.querySelectorAll("p")].reduce((n, p) => n + (p.textContent || "").trim().length, 0);
+
+  function mainNode() {
+    const marked = [...document.querySelectorAll('article, main, [role=main], #mw-content-text, .post-content, .entry-content, .article-body')]
+      .filter(n => !n.closest(SKIP) && paraLength(n) > 200);
+    if (marked.length) return marked.sort((a, b) => paraLength(b) - paraLength(a) || (a.contains(b) ? 1 : b.contains(a) ? -1 : 0))[0];
+    // Else the parent of the most paragraph text.
+    const by = new Map();
+    for (const p of document.querySelectorAll("p")) {
+      if (p.closest(SKIP)) continue;
+      const parent = p.parentElement;
+      if (parent) by.set(parent, (by.get(parent) || 0) + (p.textContent || "").trim().length);
+    }
+    const best = [...by].sort((a, b) => b[1] - a[1])[0];
+    return best && best[1] > 200 ? best[0] : null;
+  }
+
+  /* Its text with paragraphs a blank line apart, list items and other blocks on their own lines (an item
+   * marked "• "), and code as it is written, up to MAIN_MAX. Breaks are gathered as marks and settled at
+   * the end, so nested blocks give one break, not a pile of them. */
+  const PARA = /^(P|H[1-6]|PRE|BLOCKQUOTE|TABLE|FIGURE|UL|OL|DL|HR|SECTION|ARTICLE)$/;
+  function readableText(root) {
+    const LINE = "\u0001", GAP = "\u0002", KEEP = "\u0003";
+    const out = [];
+    let size = 0;
+    const walk = node => {
+      if (size > MAIN_MAX) return;
+      if (node.nodeType === 3) { const t = node.nodeValue.replace(/\s+/g, " "); out.push(t); size += t.length; return; }
+      if (node.nodeType !== 1 || node.matches(SKIP) || !shown(node)) return;
+      const brk = PARA.test(node.tagName) ? GAP : BLOCK.test(node.tagName) ? LINE : "";
+      if (node.tagName === "PRE") {
+        const code = node.textContent.replace(/^\n+|\n+$/g, "");
+        out.push(GAP, code.replace(/ /g, KEEP).replace(/\n/g, KEEP + "n"), GAP);
+        size += code.length;
+        return;
+      }
+      out.push(brk, node.tagName === "LI" ? "• " : "");
+      for (const child of node.childNodes) walk(child);
+      out.push(brk);
+    };
+    walk(root);
+    const text = out.join("")
+      .replace(/[ \u0001\u0002]*[\u0001\u0002][ \u0001\u0002]*/g, run => (run.includes(GAP) ? "\n\n" : "\n"))
+      .replace(/ {2,}/g, " ").split("\n").map(l => l.trim()).join("\n")
+      .replace(new RegExp(KEEP + "n", "g"), "\n").replace(new RegExp(KEEP, "g"), " ").trim();
+    return text ? text.slice(0, MAIN_MAX) : null;
+  }
+
+  /* Its links to other sites, in page order, once each. */
+  function mainLinks(root) {
+    const seen = new Set();
+    return [...root.querySelectorAll('a[href^="http"]')]
+      .filter(a => !a.closest(SKIP) && new URL(a.href).hostname !== location.hostname && !seen.has(a.href) && seen.add(a.href))
+      .slice(0, 12)
+      .map(a => ({ href: a.href, display: txt(a), resolved: a.href }));
+  }
+
   /* --- generic ------------------------------------------------------------------ */
 
   function generic() {
@@ -488,6 +562,15 @@ const LK = (() => {
     const host = hostname.toLowerCase();
     const handler = REGISTRY.find(entry => entry.hosts.test(host));
     const base = generic();
+    // A page no site reader knows is kept by its own text: its description stays only when that text is short.
+    if (!handler) {
+      const root = mainNode();
+      const own = root && readableText(root);
+      if (own && own.length >= 280) {
+        base.text = base.text && !own.replace(/\s+/g, " ").includes(base.text.replace(/\s+/g, " ").slice(0, 60)) ? `${base.text}\n\n${own}` : own;
+        base.links = mainLinks(root);
+      }
+    }
     let specific = null;
     if (handler) {
       try {

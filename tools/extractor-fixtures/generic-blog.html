@@ -1,0 +1,24 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Why I rewrote my build in zsh | A blog</title>
+<meta property="og:title" content="Why I rewrote my build in zsh"><meta property="og:description" content="A short story about a long Makefile.">
+<meta property="og:image" content="https://blog.example/cover.png"></head>
+<!-- Shaped like a blog post: the post in <article> with its own header, a share bar, a sidebar of
+     other posts, a newsletter box and comments. -->
+<body>
+<nav class="site-nav"><a href="/">Home</a> <a href="/about">About</a></nav>
+<div class="layout">
+<article class="post">
+<header><h1>Why I rewrote my build in zsh</h1><time datetime="2026-09-01">Sep 1, 2026</time></header>
+<div class="share">Share on X · Share on LinkedIn</div>
+<p>For three years our build was a Makefile that nobody dared to touch. It had grown to nine hundred lines and every change broke something on somebody's machine.</p>
+<p>So I rewrote it in zsh, one target at a time, with the old and the new running side by side until their outputs matched. The tool I used to compare them is <a href="https://github.com/example/difftool">difftool</a>.</p>
+<pre>build() {
+  print -- "building $1"
+}</pre>
+<p>The new build is a third of the size and twice as fast, and new people can read it on their first day.</p>
+<div class="newsletter">Subscribe to the newsletter for more posts like this.</div>
+</article>
+<aside class="sidebar"><h3>Other posts</h3><p>Sidebar paragraph about another post that is long enough to look like content but sits in the sidebar of the page.</p></aside>
+</div>
+<section id="comments"><p>A comment that should not be part of the capture at all, even though it is a paragraph.</p></section>
+<footer>© 2026 A blog</footer>
+</body></html>

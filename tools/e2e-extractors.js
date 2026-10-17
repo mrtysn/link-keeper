@@ -181,3 +181,34 @@ await check("a GitHub repo in the 2026 layout: its About text, then its README, 
   if (r.text.length > 6100) throw new Error(`text is ${r.text.length} characters`);
   eq(r.links.map(l => l.href).slice(0, 3), ["https://github.com/slopus/happy", "https://api.cluster-fluster.com/", "https://app.happy.engineering/"], "README links, no in-page anchors");
 });
+
+const plainPage = async path => {
+  const tab = await loaded(`http://127.0.0.1:${PORT}${path}`, "h1");
+  const r = (await browser.scripting.executeScript({ target: { tabId: tab.id }, func: () => LK.extract("plain.example") }))[0].result;
+  await browser.tabs.remove(tab.id);
+  return r;
+};
+const has = (text, want, what) => { for (const w of want) if (!text.includes(w)) throw new Error(`${what} lacks ${JSON.stringify(w)}: ${JSON.stringify(text.slice(0, 300))}`); };
+const lacks = (text, unwanted, what) => { for (const w of unwanted) if (text.includes(w)) throw new Error(`${what} holds ${JSON.stringify(w)}`); };
+
+await check("a plain page with no description is kept by its own text: a Wikipedia article without its boxes, edit links and references", async () => {
+  const r = await plainPage("/wiki/Suspension_bridge");
+  if (!r.text.startsWith("A suspension bridge is a type of bridge")) throw new Error(`text starts ${JSON.stringify(r.text.slice(0, 80))}`);
+  has(r.text, ["Structure\n", "The main cables", "• Main cables\n• Towers"], "text");
+  lacks(r.text, ["[1]", "[edit]", "Infobox", "Navbox", "Reference text", "Footer", "Random article"], "text");
+  eq(r.links.map(l => l.href), ["https://www.britannica.com/technology/suspension-bridge"], "links to other sites only");
+});
+
+await check("a blog post: its description, then the post's own text and code, without its title, share bar, sidebar, newsletter or comments", async () => {
+  const r = await plainPage("/blog/rewrote-build");
+  if (!r.text.startsWith("A short story about a long Makefile.\n\nFor three years")) throw new Error(`text starts ${JSON.stringify(r.text.slice(0, 120))}`);
+  has(r.text, ["nine hundred lines", 'build() {\n  print -- "building $1"\n}', "a third of the size"], "text");
+  lacks(r.text, ["Share on", "Sidebar paragraph", "Subscribe", "A comment", "©"], "text");
+  eq(r.links.map(l => l.href), ["https://github.com/example/difftool"], "links");
+});
+
+await check("a docs page with no article or main: the block holding its paragraphs, not the menu or a hidden menu", async () => {
+  const r = await plainPage("/docs/getting-started");
+  has(r.text, ["Install the tool", "Run tool init."], "text");
+  lacks(r.text, ["Hidden mobile menu", "Configure", "First run\nFirst run"], "text");
+});

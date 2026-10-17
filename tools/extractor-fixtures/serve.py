@@ -1,7 +1,8 @@
-"""Serve the saved x.com status pages and GitHub repo page for test-extractors.zsh.
+"""Serve the saved pages for test-extractors.zsh: x.com status pages, a GitHub repo, and plain pages.
 
 /somehandle/status/<id> serves the page PAGES names for that id, whatever the handle: ...081 x-status.html,
-...082 x-status-virtual.html, ...083 x-status-discover.html, ...084 x-status-virtual-discover.html; /slopus/happy-cli serves github-repo.html.
+...082 x-status-virtual.html, ...083 x-status-discover.html, ...084 x-status-virtual-discover.html; OTHER names the GitHub page and the plain pages
+(a Wikipedia-shaped article, a blog post, a docs page) by path.
 Usage: serve.py <port>
 """
 import http.server
@@ -16,12 +17,18 @@ PAGES = {
     "2009295329057702083": "x-status-discover.html",
     "2009295329057702084": "x-status-virtual-discover.html",
 }
+OTHER = {
+    "/slopus/happy-cli": "github-repo.html",
+    "/wiki/Suspension_bridge": "generic-wiki.html",
+    "/blog/rewrote-build": "generic-blog.html",
+    "/docs/getting-started": "generic-docs.html",
+}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         m = re.match(r"^/[^/]+/status/(\d+)", self.path)
-        page = PAGES.get(m.group(1)) if m else "github-repo.html" if self.path == "/slopus/happy-cli" else None
+        page = PAGES.get(m.group(1)) if m else OTHER.get(self.path)
         if not page:
             self.send_error(404)
             return
