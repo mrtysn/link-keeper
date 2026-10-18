@@ -2,12 +2,15 @@
 
 ## Waiting on the owner
 
-**Make the link previews (as of 5.68, 2026-10-18).** Previews (a picture and a line per link, shown
-in the list and the hover card) are built, but the existing links have none until the owner clicks
-**Make previews for N links** in Links → Settings → Previews, between "Filtered out" and "Backups".
-The button reads just "Make previews" when none are missing. Afterwards, check that they came through
-with pictures; the `link-keeper` CLI does not report previews, so read them from the live add-on's
-storage (`previews` and the `pvimg:<key>` entries, in `extension/background.js`).
+**Make the link previews (as of 2026-10-18).** Previews (a picture and a line per link, shown
+in the list and the hover card) are built and shipped: 5.68 is signed and installed in the owner's
+Firefox. Existing links have none until the owner clicks **Make previews for N links** in Links →
+Settings → Previews, between "Filtered out" and "Backups"; N is the count still missing, and the
+button reads just "Make previews" when none are. Nothing else waits on this. To check afterwards: the
+same Previews box shows the count still missing, and the list shows the pictures. The `link-keeper`
+CLI does not report previews, and the profile's files are not read (see CLAUDE.md), so the box is
+the only check today. A link with no picture is normal (many pages have none); a run that leaves
+many missing is a bug in `savePreview` (extension/background.js).
 
 ## Considered and not built
 
