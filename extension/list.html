@@ -98,17 +98,17 @@
      is plain; narrowing to it is outlined with a tick; leaving it out is struck through with a cross.
      The same look marks a Sites or Tags chip that is picked (✓) or excluded (✕). */
   .filters.tri { display: flex; flex-wrap: nowrap; gap: 2px; }
-  /* Three dots on a three-state control, its state filled (list.js stateDots). On the many site and
-     tag chips they show only on hover, focus or when the chip is on, so the rows stay quiet. */
+  /* Three dots on a filter switch, its state filled (list.js stateDots), shown only on hover or focus.
+     Site and tag chips have none: their look is their state (gray off, outlined only, struck out left out). */
   /* Drawn over the control's bottom edge rather than beside its text, so showing them on hover never
      changes its width and nothing next to it moves under the pointer. */
   .chip:has(> .tri-dots) { position: relative; }
   .tri-dots { position: absolute; left: 50%; bottom: 2px; translate: -50% 0; display: inline-flex; gap: 2px; pointer-events: none; }
   .tri-dots i { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .25; }
   .tri-dots i.on { opacity: 1; }
-  .domains .chip .tri-dots, .filters.tri .chip[data-state="0"] .tri-dots { display: none; }
-  .domains .chip:is([aria-pressed="true"], .excluded, :focus-visible) .tri-dots, .filters.tri .chip:focus-visible .tri-dots { display: inline-flex; }
-  @media (hover: hover) { .domains .chip:hover .tri-dots, .filters.tri .chip:hover .tri-dots { display: inline-flex; } }
+  .filters.tri .chip[data-state="0"] .tri-dots { display: none; }
+  .filters.tri .chip:focus-visible .tri-dots { display: inline-flex; }
+  @media (hover: hover) { .filters.tri .chip:hover .tri-dots { display: inline-flex; } }
   /* Off, the switches and the Group by menu sit back like the chip rows: no fill or outline until
      hovered; a switch that is on gets its outline and mark (below). */
   .filters.tri .chip[data-state="0"] { background: none; border-color: transparent; color: var(--dim); }

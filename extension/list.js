@@ -826,8 +826,6 @@ function markChip(b, id, only, except) {
   b.setAttribute("aria-pressed", String(only.has(id)));
   b.classList.toggle("excluded", except.has(id));
   b.title = only.has(id) ? "Showing only these · next click: everything except them" : except.has(id) ? "Left out · next click: clear" : "Next click: show only these";
-  b.querySelector(".tri-dots")?.remove();
-  b.append(stateDots(only.has(id) ? 1 : except.has(id) ? 2 : 0));
 }
 
 function chipRow(box, label, expanded, flip, chips, selected, clear) {
