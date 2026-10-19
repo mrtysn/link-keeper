@@ -284,6 +284,13 @@ await check("a capture out of sight waits for an app to draw its text, and keeps
   if (!/patient reader waits/.test(res.record.text || "")) throw new Error(`text ${JSON.stringify(res.record.text)}`);
 });
 
+await check("an app or listing with no paragraphs is kept by its visible text, without its menu and footer", async () => {
+  const res = await captureUrl(at("/app/listing"));
+  if (!res.ok) throw new Error(res.error);
+  has(res.record.text || "", ["Hollow Lantern", "Squad Weapon Skins", "free until Thursday"], "text");
+  lacks(res.record.text || "", ["Sign in", "Privacy"], "text");
+});
+
 const queueDone = async () => {
   for (let waited = 0; waited < 60000; waited += 250) {
     const s = await handleMessage({ type: "capture-queue-status" });

@@ -623,10 +623,17 @@ const LK = (() => {
     const handler = REGISTRY.find(entry => entry.hosts.test(host));
     const base = generic();
     // A page no site reader knows is kept by its own text: its description stays only when that text is short.
+    // An app, a listing or a dashboard has no block of paragraphs to find; its visible text, without the
+    // menus, headers and footers around it, stands in, and is kept whenever there is no description.
     if (!handler) {
-      const root = mainNode();
-      const own = root && readableText(root);
-      if (own && own.length >= 280) {
+      let root = mainNode();
+      let own = root && readableText(root);
+      if (!own || own.length < 280) {
+        const whole = document.querySelector("main, [role=main]") || document.body;
+        const all = whole && readableText(whole);
+        if (all && all.length > (own?.length || 0)) { root = whole; own = all; }
+      }
+      if (own && (own.length >= 280 || !base.text)) {
         base.text = base.text && !own.replace(/\s+/g, " ").includes(base.text.replace(/\s+/g, " ").slice(0, 60)) ? `${base.text}\n\n${own}` : own;
         base.links = mainLinks(root);
       }

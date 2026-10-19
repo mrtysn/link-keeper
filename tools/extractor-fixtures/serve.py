@@ -32,6 +32,8 @@ OTHER = {
     "/accounts/login/": "login-page.html",
     # An app that draws its text 1.5 s after load.
     "/app/late": "app-late.html",
+    # A listing with no paragraphs, as an app or a store front draws itself.
+    "/app/listing": "app-listing.html",
 }
 
 
