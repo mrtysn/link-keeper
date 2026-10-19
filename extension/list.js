@@ -284,19 +284,30 @@ function cursorRow(li, target) {
 
 /* --- selecting: tick links, tag or capture them together ----------------------------
  * Select puts a checkbox on every row; shift-click ticks the run between two. A link is ticked by its
- * key, so it stays ticked in every stash that shows it. Tag… adds one tag to all of them; Capture hands
- * the ones not captured yet to the capture queue. */
+ * key, so it stays ticked in every stash that shows it. The selection is the ticked links shown now: a
+ * link a filter hides keeps its tick, but is left out of the count, Tag… and Capture until it shows
+ * again (folded groups count as shown). Tag… adds one tag to all of them; Capture hands the ones not
+ * captured yet to the capture queue. */
 
 let selecting = false;
 const ticked = new Set();
 let lastTick = null;   // the row index of the last tick, the other end of a shift-click
 
+// The ticked links shown now, by key.
+function selectedKeys() {
+  const shown = new Set(rowsOnPage.map(r => r.target.link.key));
+  return [...ticked].filter(k => shown.has(k));
+}
+
 function paintSelectBar() {
   $("selbar").hidden = !selecting;
   $("t-select").setAttribute("aria-pressed", String(selecting));
   document.body.classList.toggle("selecting", selecting);
-  $("sel-count").textContent = ticked.size ? `${plural(ticked.size, "link")} selected` : "Tick links to tag or capture them";
-  $("sel-tag").disabled = $("sel-capture").disabled = $("sel-clear").disabled = !ticked.size;
+  const n = selectedKeys().length, hidden = ticked.size - n;
+  $("sel-count").textContent = n ? `${plural(n, "link")} selected${hidden ? ` · ${hidden} more hidden by filters` : ""}`
+    : hidden ? `${plural(hidden, "ticked link")} hidden by filters` : "Tick links to tag or capture them";
+  $("sel-tag").disabled = $("sel-capture").disabled = !n;
+  $("sel-clear").disabled = !ticked.size;
 }
 
 function paintTicks() {
@@ -335,7 +346,7 @@ function setSelecting(on) {
  * permission prompt has to come straight from the click, so it is the first thing awaited. A pattern
  * names a host without its port, which match patterns do not take. */
 async function captureTicked() {
-  const links = [...ticked].map(k => data.links.find(l => l.key === k)).filter(l => l && /^https?:/.test(l.url));
+  const links = selectedKeys().map(k => data.links.find(l => l.key === k)).filter(l => l && /^https?:/.test(l.url));
   const urls = links.filter(l => !l.cap).map(l => l.url);
   if (!urls.length) { say(links.length ? "Every ticked link is captured already" : "None of the ticked links is a web page"); return; }
   const origins = [...new Set(urls.map(u => { try { const x = new URL(u); return `${x.protocol}//${x.hostname}/*`; } catch (e) { return null; } }).filter(Boolean))];
@@ -433,7 +444,7 @@ async function loadQueue() {
 browser.storage.onChanged.addListener((changes, area) => { if (area === "session" && changes.captureQueue) loadQueue(); });
 
 function bulkTagPopover(anchor) {
-  const urls = [...ticked].map(k => data.links.find(l => l.key === k)?.url).filter(Boolean);
+  const urls = selectedKeys().map(k => data.links.find(l => l.key === k)?.url).filter(Boolean);
   if (!urls.length) return;
   const input = el("input", { type: "text", placeholder: `tag ${plural(urls.length, "link")}, Enter`, autocomplete: "off", spellcheck: false });
   input.setAttribute("aria-label", `Tag ${plural(urls.length, "link")}`);
@@ -1299,6 +1310,7 @@ function foldGroups() {
 
 function render() {
   renderRows();
+  if (selecting) paintSelectBar();   // what a filter hides leaves the count
   sortGroups();
   foldGroups();
   renderOnly();

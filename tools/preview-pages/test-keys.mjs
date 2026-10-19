@@ -808,6 +808,20 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!!(await p.$(".tagpop .tagger input")), "select: Tag… opens a field");
   await p.fill(".tagpop .tagger input", "bulk test"); await p.keyboard.press("Enter"); await p.waitForTimeout(500);
   ok(/Tagged \d+ links? bulk test/.test(await p.$eval("#msg", e => e.textContent)), "select: it says what it tagged");
+  // Select all, then leave a site out: its links leave the selection, and the count matches the rows shown.
+  await p.keyboard.press("Escape"); await p.waitForTimeout(100);   // the Tag… field may still be open
+  await p.click("#sel-all"); await p.waitForTimeout(200);
+  const all = await p.evaluate(() => ticked.size);
+  ok(all > 4, `select: Select all shown ticks every link shown (${all})`);
+  const site = p.locator("#domains .chip", { hasText: "x.com" }).first();
+  await site.click(); await site.click(); await p.waitForTimeout(300);
+  // Through "only x.com" to "everything but x.com", as two clicks go: the count follows what is shown.
+  const nShown = await p.evaluate(() => new Set(rowsOnPage.map(r => r.target.link.key)).size);
+  const said = await p.$eval("#sel-count", e => e.textContent);
+  ok(said === `${nShown} links selected · ${all - nShown} more hidden by filters`, `select: a site left out leaves the count (${said})`);
+  ok(!(await p.$$eval("ul.rows > li .tick", l => l.some(b => !b.checked))), "select: every row still shown stays ticked");
+  await site.click(); await p.waitForTimeout(200);
+  ok(await p.$eval("#sel-count", e => e.textContent) === `${all} links selected`, "select: lifting the filter brings its ticks back");
   await p.click("#sel-done"); await p.waitForTimeout(200);
   ok(await p.$eval("#selbar", e => e.hidden) && !(await p.$("ul.rows > li .tick:checked")), "select: Done hides the bar and clears the ticks");
   ok(p.errs.length === 0, `select: no errors ${p.errs.join()}`);
