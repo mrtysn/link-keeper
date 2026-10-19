@@ -4,7 +4,8 @@
 // Reads the queue's state and this run's captures through link-keeper (read-only), then prints one block: progress,
 // the busiest sites with their closest two captures, any pair closer than the site's wait (the queue's own
 // figure for it, robots.txt Crawl-delay included, less the 20% jitter), and the captures that look wrong: no title, under 40
-// characters of text, marked incomplete, a login or captcha title, or a page that moved to another site.
+// characters of text, marked incomplete, a login or captcha title, or a page that moved to another site,
+// and every site that refused a page (a login, captcha, block or rate limit), with whether the queue stopped it.
 //
 // Usage: node tools/check-capture-queue.mjs
 import { execFileSync } from "node:child_process";
@@ -63,3 +64,16 @@ console.log(`  content: ${caps.length - bad.length} look right, ${bad.length} su
 for (const b of bad.slice(-12)) console.log(`    ${b}`);
 const fails = q.failed.filter(f => !/^not tried/.test(f.error));
 if (fails.length) console.log(`  failed: ${fails.slice(-8).map(f => `${host(f.url)}: ${f.error.slice(0, 70)}`).join(" | ")}`);
+
+// Refusals: a site saying no (a login, a captcha, a block, a rate limit) is never stored as a capture, so the
+// lines above cannot show it; it is in the queue's failures. One is the signal to stop sending to that site.
+const REFUSAL = /asked to log in|captcha|refused the page|blocked|too many requests|rate.?limit|this quickly|unusual traffic/i;
+const refused = new Map();
+for (const f of q.failed.filter(f => !/^not tried/.test(f.error) && REFUSAL.test(f.error))) {
+  const h = host(f.url);
+  const r = refused.get(h) || refused.set(h, { n: 0, why: f.error }).get(h);
+  r.n++;
+}
+console.log(refused.size
+  ? `  REFUSED by ${refused.size} sites: ${[...refused].map(([h, r]) => `${h} ×${r.n}${q.stoppedSites?.[h] || q.stoppedSites?.[h.replace(/^www\./, "")] ? " (stopped)" : " (NOT STOPPED)"} ${r.why.slice(0, 50)}`).join(" | ")}`
+  : "  refusals: none");
