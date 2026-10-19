@@ -140,6 +140,29 @@ await check("sites take turns: the ready site served longest ago goes next, what
   assert.deepEqual(w.loadingNow(), [A(2), B(2)], "then a and b again, a first as served longer ago");
 });
 
+await check("speed: Gentle loads one at a time and doubles waits, Fast three at a time and halves them", async () => {
+  const w = world();
+  await w.q.start([A(1), A(2), B(1), C(1)], "gentle");
+  await w.flush();
+  assert.deepEqual(w.loadingNow(), [A(1)], "gentle: one at a time");
+  await w.finish();
+  await w.finish();
+  await w.finish();
+  await w.advance(4300);
+  assert.deepEqual(w.loadingNow(), [], "gentle: a's wait is 4.4 s, not 2.2");
+  await w.advance(200);
+  assert.deepEqual(w.loadingNow(), [A(2)]);
+  const f = world();
+  await f.q.start([A(1), A(2), B(1), C(1)]);
+  await f.q.setSpeed("fast");
+  await f.flush();
+  assert.deepEqual(f.loadingNow(), [A(1), B(1), C(1)], "fast: three at a time");
+  await f.finish(A(1));
+  await f.advance(1200);
+  assert.deepEqual(f.loadingNow(), [B(1), C(1), A(2)], "fast: a's wait is 1.1 s");
+  assert.equal((await f.q.setSpeed("warp")).ok, false, "an unknown speed is refused");
+});
+
 await check("a failure doubles its site's wait and a success halves it back", async () => {
   const bad = { ok: false, error: "the page never finished loading" };
   const w = world({ answers: { [A(1)]: bad, [A(2)]: bad } });

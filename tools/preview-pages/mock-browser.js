@@ -16,7 +16,7 @@
 
   const storageListeners = new Set();
   // The capture queue as capture-queue.js reports it (its status message).
-  const idleQueue = () => ({ status: "idle", total: 0, captured: 0, skipped: 0, pending: 0, active: [], failed: [], stoppedSites: {}, next: null });
+  const idleQueue = () => ({ status: "idle", speed: "normal", total: 0, captured: 0, skipped: 0, pending: 0, active: [], failed: [], stoppedSites: {}, next: null });
   const mockQueue = idleQueue();
   if (params.has("queue")) {
     Object.assign(mockQueue, { status: params.get("queue") || "running", total: 1009, captured: 211, skipped: 3, pending: 788, active: [],
@@ -418,6 +418,7 @@
           case "capture-queue-start":
             Object.assign(mockQueue, { status: "running", total: mockQueue.total + msg.urls.length, active: msg.urls.slice(0, 2) });
             return { ok: true, added: msg.urls.length, ...mockQueue };
+          case "capture-queue-speed": mockQueue.speed = msg.speed; return { ok: true, ...mockQueue };
           case "capture-queue-pause": mockQueue.status = "paused"; mockQueue.active = []; return { ok: true, ...mockQueue };
           case "capture-queue-resume": mockQueue.status = "running"; return { ok: true, ...mockQueue };
           case "capture-queue-stop": mockQueue.status = "stopped"; mockQueue.active = []; return { ok: true, ...mockQueue };

@@ -2662,7 +2662,9 @@ async function handleMessage(msg) {
 
     // The capture queue (capture-queue.js): Links starts it with the ticked links and drives it from its line.
     case "capture-queue-start":
-      return captureQueue.start(msg.urls);
+      return captureQueue.start(msg.urls, msg.speed);
+    case "capture-queue-speed":
+      return captureQueue.setSpeed(msg.speed);
     case "capture-queue-status":
       return { ok: true, ...(await captureQueue.status()) };
     case "capture-queue-pause":

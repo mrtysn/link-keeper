@@ -8,7 +8,8 @@
  * person reading, not a crawler, and the wait adapts: each failure doubles it (up to SITE_BACKOFF_MAX
  * times), each success halves it back toward the site's own. A site that answers with a wall (a login page, a captcha, a block) or fails three times in a row is stopped:
  * its remaining links are set aside as failed, with the reason, and the rest carry on. Retry failed puts
- * them back.
+ * them back. A speed (SPEEDS) scales it all: Gentle loads one link at a time and doubles every wait, Fast
+ * loads three and halves them.
  *
  * The state lives in storage.session: it outlives the background page being put to sleep and Links being
  * closed, and ends with Firefox, so a queue never starts loading pages by itself at the next launch.
@@ -18,7 +19,11 @@
  * makeCaptureQueue takes its effects as arguments so tools/test-capture-queue.mjs can run it on a clock
  * of its own; the bottom of this file wires it to the browser. */
 
-const CAPTURE_WORKERS = 2;
+const SPEEDS = {
+  gentle: { workers: 1, gap: 2 },
+  normal: { workers: 2, gap: 1 },
+  fast: { workers: 3, gap: 0.5 },
+};
 const SITE_STOP_AFTER = 3;   // failures in a row that stop a site
 const SITE_GAPS = [
   // [host pattern, seconds between two pages of that site]
@@ -40,8 +45,9 @@ function makeCaptureQueue(fx) {
   const busy = new Set();   // sites with a page loading now
   let timer = null;
 
-  const blank = () => ({ status: "idle", total: 0, captured: 0, skipped: 0, pending: [], active: [], failed: [], stoppedSites: {}, streaks: {}, nextAt: {}, servedAt: {}, backoff: {}, windowId: null, started_at: null });
+  const blank = () => ({ status: "idle", speed: "normal", total: 0, captured: 0, skipped: 0, pending: [], active: [], failed: [], stoppedSites: {}, streaks: {}, nextAt: {}, servedAt: {}, backoff: {}, windowId: null, started_at: null });
   const save = () => fx.save(state);
+  const speed = () => SPEEDS[state.speed] || SPEEDS.normal;
   const view = () => ({ ...state, pending: state.pending.length, next: nextWait() });
 
   // The soonest moment a waiting link may start, with its site, for the progress line.
@@ -63,6 +69,7 @@ function makeCaptureQueue(fx) {
     if (state.active.length) { state.pending.unshift(...state.active); state.active = []; await save(); }
     state.servedAt ||= {};
     state.backoff ||= {};
+    state.speed ||= "normal";
     if (state.status === "running") pump();
   }
 
@@ -110,7 +117,7 @@ function makeCaptureQueue(fx) {
     clearTimeout(timer);
     timer = null;
     if (state.status !== "running") return;
-    while (state.active.length < CAPTURE_WORKERS) {
+    while (state.active.length < speed().workers) {
       const i = nextReady();
       if (i === -1) break;
       const [url] = state.pending.splice(i, 1);
@@ -118,7 +125,7 @@ function makeCaptureQueue(fx) {
     }
     if (!state.active.length && !state.pending.length) { finish(); return; }
     const next = nextWait();
-    if (next && state.active.length < CAPTURE_WORKERS) timer = fx.setTimer(pump, Math.max(50, next.at - fx.now()));
+    if (next && state.active.length < speed().workers) timer = fx.setTimer(pump, Math.max(50, next.at - fx.now()));
   }
 
   async function work(url) {
@@ -142,7 +149,7 @@ function makeCaptureQueue(fx) {
       const scale = state.backoff[host] || 1;
       state.backoff[host] = res.ok ? Math.max(1, scale / 2) : Math.min(SITE_BACKOFF_MAX, scale * 2);
       if (state.backoff[host] === 1) delete state.backoff[host];
-      state.nextAt[host] = fx.now() + siteGap(host) * (state.backoff[host] || 1) * (0.8 + 0.6 * fx.random());
+      state.nextAt[host] = fx.now() + siteGap(host) * speed().gap * (state.backoff[host] || 1) * (0.8 + 0.6 * fx.random());
     }
     if (res.ok) {
       res.skipped ? state.skipped++ : state.captured++;
@@ -170,9 +177,10 @@ function makeCaptureQueue(fx) {
     status: async () => { await init(); return view(); },
 
     // Adds links to the line, starting it if it is not running. A finished queue starts its counts over.
-    async start(urls) {
+    async start(urls, pace) {
       await init();
-      if (!["running", "paused"].includes(state.status)) state = { ...blank(), windowId: state.windowId, started_at: new Date(fx.now()).toISOString() };
+      if (!["running", "paused"].includes(state.status)) state = { ...blank(), speed: state.speed, windowId: state.windowId, started_at: new Date(fx.now()).toISOString() };
+      if (SPEEDS[pace]) state.speed = pace;
       const held = new Set([...state.pending, ...state.active]);
       let added = 0;
       for (const url of urls || []) {
@@ -186,6 +194,16 @@ function makeCaptureQueue(fx) {
       await save();
       pump();
       return { ok: true, added, ...view() };
+    },
+
+    // Gentle, normal or fast, from the next page on.
+    async setSpeed(pace) {
+      await init();
+      if (!SPEEDS[pace]) return { ok: false, error: `no speed ${pace}` };
+      state.speed = pace;
+      await save();
+      pump();
+      return { ok: true, ...view() };
     },
 
     // Lets the pages loading now finish, then waits; the window closes until it resumes.

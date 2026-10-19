@@ -542,7 +542,8 @@ captured** (narrow by site if you like), press **Select**, then **Select all sho
 **Capture**. Firefox asks once for the sites involved; the links already captured are left out. A line
 under the filters then shows how far it is, what it is reading, or which site it waits on and for how
 long, with **Pause**, **Resume**, **Stop**, **Retry failed** and **Dismiss**, and a list of the links that
-failed and why. Closing Links does not stop it; quitting Firefox does, and nothing starts by itself at the
+failed and why. Its speed — **Gentle** (one link at a time, every wait doubled), **Normal** (two) or
+**Fast** (three, waits halved) — changes from the next page and is remembered for the next run. Closing Links does not stop it; quitting Firefox does, and nothing starts by itself at the
 next launch. Site chips count captured of all (`12/132`) while a site has links left to capture.
 
 `capture-queue.js` runs it in the background page. Each link is read the way **Capture** reads one, in a

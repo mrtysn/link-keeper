@@ -341,7 +341,7 @@ async function captureTicked() {
   const origins = [...new Set(urls.map(u => { try { const x = new URL(u); return `${x.protocol}//${x.hostname}/*`; } catch (e) { return null; } }).filter(Boolean))];
   const granted = await browser.permissions.request({ origins }).catch(() => false);
   if (!granted) { say(`Capturing them needs access to ${plural(origins.length, "site")}`); return; }
-  const res = await send({ type: "capture-queue-start", urls });
+  const res = await send({ type: "capture-queue-start", urls, speed: queueSpeed() });
   if (!res?.ok) { say(res?.error || "The capture queue did not start"); return; }
   const done = links.length - urls.length;
   say(`Queued ${plural(res.added, "link")} to capture${done ? `; ${done} captured already` : ""}`);
@@ -354,6 +354,9 @@ async function captureTicked() {
  * it is, the site it waits on and for how long, the sites it stopped, and each failed link with why. */
 let queue = null;
 let queueTick = null;
+// The speed a queue runs at, remembered here for the next one: gentle, normal or fast (capture-queue.js, SPEEDS).
+const SPEED_KEY = "captureSpeed";
+const queueSpeed = () => { try { return localStorage.getItem(SPEED_KEY) || "normal"; } catch (e) { return "normal"; } };
 
 function showQueue(q) {
   queue = q?.ok === false ? queue : q;
@@ -393,6 +396,17 @@ function paintQueue() {
     return b;
   };
   const acts = el("span", { className: "acts" });
+  if (["running", "paused"].includes(queue.status)) {
+    const pace = el("select", { className: "small", title: "Gentle: one link at a time, every wait doubled. Fast: three at a time, waits halved" });
+    pace.setAttribute("aria-label", "Capture speed");
+    for (const [value, label] of [["gentle", "Gentle"], ["normal", "Normal"], ["fast", "Fast"]]) pace.append(el("option", { value, textContent: label }));
+    pace.value = queue.speed || "normal";
+    pace.onchange = async () => {
+      try { localStorage.setItem(SPEED_KEY, pace.value); } catch (e) { /* remembered for this run only */ }
+      showQueue(await send({ type: "capture-queue-speed", speed: pace.value }));
+    };
+    acts.append(pace);
+  }
   if (queue.status === "running") acts.append(button("Pause", "capture-queue-pause", "Finish the pages loading now, then wait"));
   if (queue.status === "paused") acts.append(button("Resume", "capture-queue-resume", "Carry on with the links still waiting"));
   if (["running", "paused"].includes(queue.status)) acts.append(button("Stop", "capture-queue-stop", "Drop the links still waiting; what was captured stays"));

@@ -816,6 +816,9 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(await p.$eval("#selbar", e => e.hidden), "capture queue: the selection ends");
   const line = await p.$eval("#capq", e => (e.hidden ? "" : e.textContent));
   ok(/^Capturing/.test(line) && /reading/.test(line), `capture queue: the line shows it reading (${line.slice(0, 80)})`);
+  ok(await p.$eval("#capq select", e => e.value) === "normal", "capture queue: the speed starts at Normal");
+  await p.selectOption("#capq select", "gentle"); await p.waitForTimeout(200);
+  ok(await p.$eval("#capq select", e => e.value) === "gentle" && await p.evaluate(() => localStorage.getItem("captureSpeed")) === "gentle", "capture queue: Gentle is set and remembered for the next run");
   await p.click("#capq button:text-is('Pause')"); await p.waitForTimeout(200);
   ok(/^Capture paused/.test(await p.$eval("#capq", e => e.textContent)) && !!(await p.$("#capq button:text-is('Resume')")), "capture queue: Pause, then Resume offered");
   ok(p.errs.length === 0, `capture queue: no errors ${p.errs.join()}`);
