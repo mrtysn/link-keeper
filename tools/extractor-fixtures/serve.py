@@ -2,7 +2,8 @@
 
 /somehandle/status/<id> serves the page PAGES names for that id, whatever the handle: ...081 x-status.html,
 ...082 x-status-virtual.html, ...083 x-status-discover.html, ...084 x-status-virtual-discover.html; OTHER names the GitHub page and the plain pages
-(a Wikipedia-shaped article, a blog post, a docs page) by path.
+(a Wikipedia-shaped article, a blog post, a docs page) by path. Walls for the capture queue: /reel/Walled/
+redirects to an Instagram-shaped login page under /accounts/login/, and /cdn-cgi/challenge is a Cloudflare one.
 Usage: serve.py <port>
 """
 import http.server
@@ -27,11 +28,20 @@ OTHER = {
     "/reel/DedGyALCUWi/": "instagram-reel.html",
     "/reels/DedGyALCUWi/": "instagram-reel.html",
     "/reel/SomeOtherReel/": "instagram-reel.html",
+    "/cdn-cgi/challenge": "cloudflare-challenge.html",
+    "/accounts/login/": "login-page.html",
 }
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == "/reel/Walled/":
+            self.send_response(302)
+            self.send_header("Location", "/accounts/login/?next=%2Freel%2FWalled%2F")
+            self.end_headers()
+            return
+        if self.path.startswith("/accounts/login/?"):
+            self.path = "/accounts/login/"
         m = re.match(r"^/[^/]+/status/(\d+)", self.path)
         page = PAGES.get(m.group(1)) if m else OTHER.get(self.path)
         if not page:

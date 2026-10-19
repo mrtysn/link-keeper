@@ -253,3 +253,65 @@ await check("a capture made on a page says so on the page: a toast that reads ca
     await browser.tabs.remove(tab.id);
   }
 });
+
+/* --- walls and the capture queue ---------------------------------------------------- */
+
+const at = path => `http://127.0.0.1:${PORT}${path}`;
+const wallOf = async path => {
+  const tab = await loaded(at(path), "h1");
+  const r = (await browser.scripting.executeScript({ target: { tabId: tab.id }, func: () => LK.wall() }))[0].result;
+  await browser.tabs.remove(tab.id);
+  return r;
+};
+
+await check("a wall is told from a page: a login redirect and a Cloudflare challenge are walls, an article is not", async () => {
+  eq((await wallOf("/reel/Walled/"))?.kind, "login", "redirected to a login page");
+  eq((await wallOf("/cdn-cgi/challenge"))?.kind, "captcha", "a challenge page");
+  for (const path of ["/blog/rewrote-build", "/wiki/Suspension_bridge", "/docs/getting-started"]) eq(await wallOf(path), null, path);
+});
+
+await check("a capture of a link behind a wall is refused, says why, and stores nothing", async () => {
+  const before = (await getCaptures()).length;
+  const res = await captureUrl(at("/reel/Walled/"));
+  eq([res.ok, res.wall], [false, "login"], `refused as a login (${res.error})`);
+  if (!/asked to log in/.test(res.error)) throw new Error(`error ${JSON.stringify(res.error)}`);
+  eq((await getCaptures()).length, before, "captures");
+});
+
+const queueDone = async () => {
+  for (let waited = 0; waited < 60000; waited += 250) {
+    const s = await handleMessage({ type: "capture-queue-status" });
+    if (!["running", "paused"].includes(s.status)) return s;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  throw new Error("the capture queue never finished");
+};
+
+await check("the capture queue reads each link in a minimised window of its own, then closes it", async () => {
+  const windowsBefore = (await browser.windows.getAll()).length;
+  const urls = ["/wiki/Suspension_bridge", "/docs/getting-started"].map(at);
+  const started = await handleMessage({ type: "capture-queue-start", urls });
+  eq([started.ok, started.added], [true, 2], "started");
+  let sawWindow = false;
+  for (let i = 0; i < 40 && !sawWindow; i++) {
+    sawWindow = (await browser.windows.getAll()).some(w => w.state === "minimized");
+    if (!sawWindow) await new Promise(r => setTimeout(r, 100));
+  }
+  if (!sawWindow) throw new Error("no minimised window while capturing");
+  const s = await queueDone();
+  eq([s.status, s.captured, s.failed.length], ["done", 2, 0], `status, captured, failed (${JSON.stringify(s.failed)})`);
+  const keys = new Set((await getCaptures()).map(c => keyOf(c.url)));
+  for (const u of urls) if (!keys.has(keyOf(u))) throw new Error(`${u} not captured`);
+  eq((await browser.windows.getAll()).length, windowsBefore, "windows after");
+  await handleMessage({ type: "capture-queue-dismiss" });
+});
+
+await check("a wall in the queue stops its site: the site's other links are set aside, not loaded", async () => {
+  const urls = ["/reel/Walled/", "/blog/rewrote-build"].map(at);
+  await handleMessage({ type: "capture-queue-start", urls });
+  const s = await queueDone();
+  eq(s.failed.map(f => f.url), urls, "failed");
+  if (!/^not tried: /.test(s.failed[1].error)) throw new Error(`second error ${JSON.stringify(s.failed[1].error)}`);
+  eq(Object.keys(s.stoppedSites), ["127.0.0.1"], "stopped sites");
+  await handleMessage({ type: "capture-queue-dismiss" });
+});

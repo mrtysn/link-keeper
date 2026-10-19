@@ -189,9 +189,13 @@ async function addItems(entries, note = "", group = dayGroup()) {
 /* --- capture -------------------------------------------------------------------- */
 
 /* Injected into the target tab. extractors.js returns null while a single-page app is still
- * hydrating, so poll briefly rather than capture an empty shell. */
-async function runExtractor() {
+ * hydrating, so poll briefly rather than capture an empty shell. A login page, captcha or block
+ * comes back as `wall`, which captureUrl refuses to store; the tab in front of you is read whatever
+ * it is (checkWall false), since you chose it. */
+async function runExtractor(checkWall = true) {
   for (let i = 0; i < 12; i++) {
+    const wall = checkWall && LK.wall();
+    if (wall) return { kind: "page", title: document.title || null, url: location.href, wall };
     const record = LK.extract();
     if (record) return record;
     await new Promise(r => setTimeout(r, 250));
@@ -467,11 +471,13 @@ function tabSettled(tabId, timeout = 25000) {
   });
 }
 
-/* One link, start to finish: open it out of sight, read it, close it, store it. */
-async function captureUrl(url, note = "") {
+/* One link, start to finish: open it out of sight, read it, close it, store it. A wall in front of the
+ * page (a login, a captcha, a block) is not stored; `wall` names its kind for the capture queue. The
+ * queue passes its own window, so its tabs stay out of the tab strip. */
+async function captureUrl(url, note = "", windowId = undefined) {
   let tab;
   try {
-    tab = await browser.tabs.create({ url, active: false });
+    tab = await browser.tabs.create({ url, active: false, ...(windowId ? { windowId } : {}) });
   } catch (e) {
     return { ok: false, error: `could not open it: ${e.message || e}` };
   }
@@ -486,6 +492,7 @@ async function captureUrl(url, note = "") {
       return { ok: false, error: `no access to that site; grant it and retry (${e.message || e})` };
     }
     if (!record) return { ok: false, error: "nothing extractable on that page" };
+    if (record.wall) return { ok: false, wall: record.wall.kind, error: record.wall.reason };
 
     record.url = (record.url || record.canonical || url).split("#")[0];
     const visited = url.split("#")[0];
@@ -515,7 +522,7 @@ async function captureActive(note = "", withShot = false) {
   let record;
   try {
     await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["extractors.js"] });
-    const [result] = await browser.scripting.executeScript({ target: { tabId: tab.id }, func: runExtractor });
+    const [result] = await browser.scripting.executeScript({ target: { tabId: tab.id }, func: runExtractor, args: [false] });
     record = result?.result;
   } catch (e) {
     // Usually activeTab not granted for this tab — trigger again from the page itself.
@@ -2652,6 +2659,22 @@ async function handleMessage(msg) {
 
     case "capture-url":
       return captureUrl(msg.url, msg.note);
+
+    // The capture queue (capture-queue.js): Links starts it with the ticked links and drives it from its line.
+    case "capture-queue-start":
+      return captureQueue.start(msg.urls);
+    case "capture-queue-status":
+      return { ok: true, ...(await captureQueue.status()) };
+    case "capture-queue-pause":
+      return captureQueue.pause();
+    case "capture-queue-resume":
+      return captureQueue.resume();
+    case "capture-queue-stop":
+      return captureQueue.stop();
+    case "capture-queue-retry":
+      return captureQueue.retry();
+    case "capture-queue-dismiss":
+      return captureQueue.dismiss();
 
     case "export": {
       const tags = await read("linkTags", {});

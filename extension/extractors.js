@@ -581,6 +581,33 @@ const LK = (() => {
     };
   }
 
+  /* --- walls ------------------------------------------------------------------
+   * A page that stands in front of the one asked for: a login page a site sent us to, a captcha, or a
+   * block for too many requests. Kept as a capture it would pass for the page itself, so the capture
+   * is refused instead, and the capture queue stops visiting that site. Returns { kind, reason } or
+   * null; kind is "login", "captcha" or "blocked". A captcha widget or a block sentence counts only
+   * on a short page, since a real article can hold a form with a captcha or quote "too many requests". */
+  const LOGIN_PATH = /^\/(accounts\/login|i\/flow\/login|login|signin|sign-in|uas\/login|authwall|checkpoint|ServiceLogin|v3\/signin)(\/|$|\?)/i;
+  const CAPTCHA_TITLE = /^(just a moment|attention required|verifying you are human|checking your browser|are you a robot|security check|bot verification)/i;
+  const BLOCKED_TITLE = /^(access denied|403 forbidden|forbidden|429 too many requests|too many requests|rate limit)/i;
+  const BLOCKED_TEXT = /(you('ve| have) been blocked|unusual traffic|too many requests|rate.limited|temporarily (blocked|restricted))/i;
+
+  function wall() {
+    const host = location.hostname.toLowerCase();
+    const title = (document.title || "").trim();
+    const body = (document.body?.innerText || "").trim();
+    const short = body.length < 1500;
+    if (host === "accounts.google.com" || LOGIN_PATH.test(location.pathname)) return { kind: "login", reason: `${host} asked to log in` };
+    if (/(^|\.)google\.[a-z.]+$/.test(host) && location.pathname.startsWith("/sorry/")) return { kind: "captcha", reason: `${host} asked for a captcha` };
+    if (CAPTCHA_TITLE.test(title)) return { kind: "captcha", reason: `${host} asked for a captcha ("${title.slice(0, 60)}")` };
+    if (short && document.querySelector('#challenge-form, #cf-challenge-running, iframe[src*="challenges.cloudflare.com"], iframe[src*="recaptcha/api2/anchor"], iframe[src*="hcaptcha.com"]')) {
+      return { kind: "captcha", reason: `${host} asked for a captcha` };
+    }
+    if (BLOCKED_TITLE.test(title)) return { kind: "blocked", reason: `${host} refused the page ("${title.slice(0, 60)}")` };
+    if (short && BLOCKED_TEXT.test(body)) return { kind: "blocked", reason: `${host} refused the page: ${body.match(BLOCKED_TEXT)[0]}` };
+    return null;
+  }
+
   const REGISTRY = [
     { hosts: /(^|\.)(x|twitter)\.com$/, run: tweet },
     { hosts: /(^|\.)github\.com$/, run: github },
@@ -620,5 +647,5 @@ const LK = (() => {
     return merged;
   }
 
-  return { extract, startReplyWalk, noteReplies, endReplyWalk, hasHandler: () => REGISTRY.some(e => e.hosts.test(location.hostname.toLowerCase())) };
+  return { extract, wall, startReplyWalk, noteReplies, endReplyWalk, hasHandler: () => REGISTRY.some(e => e.hosts.test(location.hostname.toLowerCase())) };
 })();

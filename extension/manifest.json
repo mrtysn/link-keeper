@@ -37,6 +37,7 @@
     "scripts": [
       "links.js",
       "background.js",
+      "capture-queue.js",
       "bridge.js"
     ]
   },

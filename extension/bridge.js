@@ -190,7 +190,7 @@ async function bridgeStatus() {
 /* The pages' messages an agent may send. Reads answer as they are; changes are journaled. What is
  * left out opens, closes, captures or navigates tabs, which stays with the person at the browser. */
 const AGENT_READS = new Set(["status", "page-info", "filter-rules", "link-counts", "sessions", "links", "export",
-  "export-list", "stash-settings", "get-folder"]);
+  "export-list", "stash-settings", "get-folder", "capture-queue-status"]);
 const AGENT_WRITES = new Set(["set-tags", "set-tag-suggestions", "set-agent-tags", "tag-stash", "rename-tag", "delete-tag", "create-tag", "recolor-tag",
   "add", "remove", "restore-items", "rename-stash", "delete-stash", "move-stashed",
   "put-back", "set-filter-rules", "filter-out-page", "import-captures", "import-stashes",

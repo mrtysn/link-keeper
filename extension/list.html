@@ -203,6 +203,19 @@
     padding: 8px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
   }
   .selbar[hidden] { display: none; }
+  /* The capture queue's line: how far it is, what it waits on, and what failed. */
+  .capq {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 10px; padding: 8px 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: .8125rem; font-variant-numeric: tabular-nums;
+  }
+  .capq[hidden] { display: none; }
+  .capq .what { color: var(--ink); }
+  .capq .wait { color: var(--dim); }
+  .capq .acts { display: flex; gap: 6px; margin-left: auto; }
+  .capq details { flex-basis: 100%; color: var(--dim); }
+  .capq summary { cursor: pointer; }
+  .capq ul { max-height: 14rem; overflow: auto; margin: 6px 0 0; padding-left: 1.2em; }
+  .capq li { overflow-wrap: anywhere; }
   /* --- card mode: the detail pane as a stack of the group's cards --- */
   .cm-tally { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 14px; color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
   .cm-tally b { color: var(--ink); }
@@ -764,11 +777,13 @@
   <div class="selbar" id="selbar" hidden role="region" aria-label="Selected links">
     <span id="sel-count" aria-live="polite"></span>
     <button type="button" class="small" id="sel-tag">Tag…</button>
+    <button type="button" class="small" id="sel-capture" title="Capture the ticked links not captured yet, one after another in a minimised window">Capture</button>
     <button type="button" class="small" id="sel-all" title="Tick every link now shown">Select all shown</button>
     <button type="button" class="small" id="sel-clear">Clear</button>
     <button type="button" class="small primary" id="sel-done">Done</button>
   </div>
   <p id="msg" role="status"></p>
+  <div class="capq" id="capq" hidden role="region" aria-label="Capture queue"></div>
   <div class="domains" id="domains" role="group" aria-label="Domains; with none selected, all are shown"></div>
   <div class="domains" id="tagchips" role="group" aria-label="Tags; with none selected, all are shown"></div>
   <div class="tagbar" id="tagbar" hidden></div>

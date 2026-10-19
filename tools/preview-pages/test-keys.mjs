@@ -801,6 +801,38 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
+// Select: Capture hands the ticked links not captured to the capture queue, whose line then shows
+{
+  const p = await page("list.html");
+  ok(await p.$eval("#capq", e => e.hidden), "capture queue: no line while idle");
+  await p.click("#t-select");
+  ok(await p.$eval("#sel-capture", e => e.disabled), "capture queue: Capture waits for a tick");
+  await p.click("#f-captured"); await p.click("#f-captured"); await p.waitForTimeout(200);   // Not captured
+  const ticks = await p.$$("ul.rows > li .tick");
+  await ticks[0].click();
+  await ticks[2].click({ modifiers: ["Shift"] });
+  await p.click("#sel-capture"); await p.waitForTimeout(300);
+  ok(/^Queued 3 links to capture/.test(await p.$eval("#msg", e => e.textContent)), `capture queue: it says what it queued (${await p.$eval("#msg", e => e.textContent)})`);
+  ok(await p.$eval("#selbar", e => e.hidden), "capture queue: the selection ends");
+  const line = await p.$eval("#capq", e => (e.hidden ? "" : e.textContent));
+  ok(/^Capturing/.test(line) && /reading/.test(line), `capture queue: the line shows it reading (${line.slice(0, 80)})`);
+  await p.click("#capq button:text-is('Pause')"); await p.waitForTimeout(200);
+  ok(/^Capture paused/.test(await p.$eval("#capq", e => e.textContent)) && !!(await p.$("#capq button:text-is('Resume')")), "capture queue: Pause, then Resume offered");
+  ok(p.errs.length === 0, `capture queue: no errors ${p.errs.join()}`);
+  await p.close();
+}
+{
+  const p = await page("list.html?queue=done");
+  const line = await p.$eval("#capq", e => e.textContent);
+  ok(/^Capture finished/.test(line) && /3 failed/.test(line), `capture queue: a finished run counts its failures (${line.slice(0, 80)})`);
+  ok(/3 failed links · stopped instagram\.com/.test(await p.$eval("#capq summary", e => e.textContent)), "capture queue: the failed links, and the site it stopped");
+  ok(!!(await p.$("#capq button:text-is('Retry failed')")) && !!(await p.$("#capq button:text-is('Dismiss')")), "capture queue: Retry failed and Dismiss");
+  await p.click("#capq button:text-is('Dismiss')"); await p.waitForTimeout(200);
+  ok(await p.$eval("#capq", e => e.hidden), "capture queue: Dismiss clears the line");
+  ok(p.errs.length === 0, `capture queue done: no errors ${p.errs.join()}`);
+  await p.close();
+}
+
 // Cards: the stack is the cursor's group in list order, the sidebar mark follows, Shuffle mixes it
 {
   const p = await page("list.html?group=stash&cards");

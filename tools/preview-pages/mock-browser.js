@@ -15,6 +15,18 @@
   }
 
   const storageListeners = new Set();
+  // The capture queue as capture-queue.js reports it (its status message).
+  const idleQueue = () => ({ status: "idle", total: 0, captured: 0, skipped: 0, pending: 0, active: [], failed: [], stoppedSites: {}, next: null });
+  const mockQueue = idleQueue();
+  if (params.has("queue")) {
+    Object.assign(mockQueue, { status: params.get("queue") || "running", total: 1009, captured: 211, skipped: 3, pending: 788, active: [],
+      next: { host: "instagram.com", at: Date.now() + 22000 },
+      failed: [
+        { url: "https://www.instagram.com/p/DAbc123/", error: "www.instagram.com asked to log in" },
+        { url: "https://www.instagram.com/reel/DXyz789/", error: "not tried: www.instagram.com asked to log in" },
+        { url: "https://slow.example/post", error: "the page never finished loading" }],
+      stoppedSites: { "instagram.com": "www.instagram.com asked to log in" } });
+  }
   // Tags set by hand, keyed like the link; a few to start with so the chips and filters show.
   const mockTags = params.has("notags") ? {} : {};
   let tagsSeeded = params.has("notags");
@@ -401,6 +413,16 @@
             { name: "backup-2026-10-06.json", bytes: 798000, modified: "2026-10-06T09:12:00" }] };
           case "backup-now": return { ok: true, file: "~/backups/link-keeper/latest.json" };
           case "fetch-pending": return { ok: false, quiet: true };
+          // ?queue=running|paused|done shows the capture queue's line in that state; Capture starts one.
+          case "capture-queue-status": return { ok: true, ...mockQueue };
+          case "capture-queue-start":
+            Object.assign(mockQueue, { status: "running", total: mockQueue.total + msg.urls.length, active: msg.urls.slice(0, 2) });
+            return { ok: true, added: msg.urls.length, ...mockQueue };
+          case "capture-queue-pause": mockQueue.status = "paused"; mockQueue.active = []; return { ok: true, ...mockQueue };
+          case "capture-queue-resume": mockQueue.status = "running"; return { ok: true, ...mockQueue };
+          case "capture-queue-stop": mockQueue.status = "stopped"; mockQueue.active = []; return { ok: true, ...mockQueue };
+          case "capture-queue-retry": mockQueue.failed = []; mockQueue.status = "running"; return { ok: true, ...mockQueue };
+          case "capture-queue-dismiss": Object.assign(mockQueue, idleQueue()); return { ok: true, ...mockQueue };
           default: return { ok: true, remaining: 0, added: 0, total: M.status.total };
         }
       },

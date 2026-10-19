@@ -282,9 +282,10 @@ function cursorRow(li, target) {
   li.addEventListener("pointerdown", () => setCursor(id, false));
 }
 
-/* --- selecting: tick links, tag them together --------------------------------------
+/* --- selecting: tick links, tag or capture them together ----------------------------
  * Select puts a checkbox on every row; shift-click ticks the run between two. A link is ticked by its
- * key, so it stays ticked in every stash that shows it. Tag… adds one tag to all of them. */
+ * key, so it stays ticked in every stash that shows it. Tag… adds one tag to all of them; Capture hands
+ * the ones not captured yet to the capture queue. */
 
 let selecting = false;
 const ticked = new Set();
@@ -294,8 +295,8 @@ function paintSelectBar() {
   $("selbar").hidden = !selecting;
   $("t-select").setAttribute("aria-pressed", String(selecting));
   document.body.classList.toggle("selecting", selecting);
-  $("sel-count").textContent = ticked.size ? `${plural(ticked.size, "link")} selected` : "Tick links to tag them";
-  $("sel-tag").disabled = $("sel-clear").disabled = !ticked.size;
+  $("sel-count").textContent = ticked.size ? `${plural(ticked.size, "link")} selected` : "Tick links to tag or capture them";
+  $("sel-tag").disabled = $("sel-capture").disabled = $("sel-clear").disabled = !ticked.size;
 }
 
 function paintTicks() {
@@ -329,6 +330,93 @@ function setSelecting(on) {
   lastTick = null;
   paintTicks();
 }
+
+/* Hands the ticked web links not captured yet to the capture queue, after asking for their sites: the
+ * permission prompt has to come straight from the click, so it is the first thing awaited. A pattern
+ * names a host without its port, which match patterns do not take. */
+async function captureTicked() {
+  const links = [...ticked].map(k => data.links.find(l => l.key === k)).filter(l => l && /^https?:/.test(l.url));
+  const urls = links.filter(l => !l.cap).map(l => l.url);
+  if (!urls.length) { say(links.length ? "Every ticked link is captured already" : "None of the ticked links is a web page"); return; }
+  const origins = [...new Set(urls.map(u => { try { const x = new URL(u); return `${x.protocol}//${x.hostname}/*`; } catch (e) { return null; } }).filter(Boolean))];
+  const granted = await browser.permissions.request({ origins }).catch(() => false);
+  if (!granted) { say(`Capturing them needs access to ${plural(origins.length, "site")}`); return; }
+  const res = await send({ type: "capture-queue-start", urls });
+  if (!res?.ok) { say(res?.error || "The capture queue did not start"); return; }
+  const done = links.length - urls.length;
+  say(`Queued ${plural(res.added, "link")} to capture${done ? `; ${done} captured already` : ""}`);
+  setSelecting(false);
+  showQueue(res);
+}
+
+/* --- the capture queue's line ----------------------------------------------------------
+ * capture-queue.js runs the queue; this line shows it while it runs and after, until dismissed: how far
+ * it is, the site it waits on and for how long, the sites it stopped, and each failed link with why. */
+let queue = null;
+let queueTick = null;
+
+function showQueue(q) {
+  queue = q?.ok === false ? queue : q;
+  paintQueue();
+}
+
+function queueText() {
+  const q = queue;
+  const failed = q.failed.length;
+  const done = q.captured + q.skipped + failed;
+  const head = { running: "Capturing", paused: "Capture paused", done: "Capture finished", stopped: "Capture stopped" }[q.status] || "Capture";
+  const parts = [`${done} of ${q.total} done`, `${q.captured} captured`];
+  if (q.skipped) parts.push(`${q.skipped} captured already`);
+  if (failed) parts.push(`${failed} failed`);
+  let wait = "";
+  if (q.status === "running") {
+    if (q.active.length) wait = `reading ${q.active.map(u => hostOf(u)).join(", ")}`;
+    else if (q.next) wait = `next ${q.next.host} in ${Math.max(0, Math.ceil((q.next.at - Date.now()) / 1000))} s`;
+  }
+  return [head, parts.join(" · "), wait];
+}
+
+function paintQueue() {
+  const box = $("capq");
+  clearInterval(queueTick);
+  queueTick = null;
+  const wasHidden = box.hidden;
+  if (!queue?.status || queue.status === "idle") {
+    box.hidden = true;
+    if (!wasHidden) fitPanes();
+    return;
+  }
+  const [head, counts, wait] = queueText();
+  const button = (label, type, title) => {
+    const b = el("button", { type: "button", className: "small", textContent: label, title });
+    b.onclick = async () => showQueue(await send({ type }));
+    return b;
+  };
+  const acts = el("span", { className: "acts" });
+  if (queue.status === "running") acts.append(button("Pause", "capture-queue-pause", "Finish the pages loading now, then wait"));
+  if (queue.status === "paused") acts.append(button("Resume", "capture-queue-resume", "Carry on with the links still waiting"));
+  if (["running", "paused"].includes(queue.status)) acts.append(button("Stop", "capture-queue-stop", "Drop the links still waiting; what was captured stays"));
+  if (queue.failed.length) acts.append(button("Retry failed", "capture-queue-retry", "Put the failed links back in line, their sites no longer stopped"));
+  if (["done", "stopped"].includes(queue.status)) acts.append(button("Dismiss", "capture-queue-dismiss", "Clear this line"));
+  const waitNode = el("span", { className: "wait", textContent: wait });
+  box.replaceChildren(el("b", { className: "what", textContent: head }), el("span", { textContent: counts }), waitNode, acts);
+  const stopped = Object.entries(queue.stoppedSites || {});
+  if (queue.failed.length) {
+    const list = el("ul");
+    for (const f of queue.failed) list.append(el("li", { textContent: `${f.url} — ${f.error}` }));
+    const sum = `${plural(queue.failed.length, "failed link")}${stopped.length ? ` · stopped ${stopped.map(([h]) => h).join(", ")}` : ""}`;
+    box.append(el("details", {}, el("summary", { textContent: sum }), list));
+  }
+  box.hidden = false;
+  if (wasHidden) fitPanes();
+  // The wait counts down between the queue's own changes.
+  if (queue.status === "running" && !queue.active.length && queue.next) queueTick = setInterval(() => { waitNode.textContent = queueText()[2]; }, 1000);
+}
+
+async function loadQueue() {
+  showQueue(await send({ type: "capture-queue-status" }));
+}
+browser.storage.onChanged.addListener((changes, area) => { if (area === "session" && changes.captureQueue) loadQueue(); });
 
 function bulkTagPopover(anchor) {
   const urls = [...ticked].map(k => data.links.find(l => l.key === k)?.url).filter(Boolean);
@@ -2449,6 +2537,7 @@ $("sel-done").onclick = () => setSelecting(false);
 $("sel-clear").onclick = () => { ticked.clear(); lastTick = null; paintTicks(); };
 $("sel-all").onclick = () => { for (const r of rowsOnPage) ticked.add(r.target.link.key); paintTicks(); };
 $("sel-tag").onclick = () => bulkTagPopover($("sel-tag"));
+$("sel-capture").onclick = captureTicked;
 $("t-cards").onclick = () => setCardMode(!cardMode);
 $("t-cards").setAttribute("aria-pressed", String(cardMode));
 $("t-compact").onclick = () => { setPref(pane ? COMPACT_PANE_KEY : COMPACT_KEY, !compactNow()); applyView(); };
@@ -2458,3 +2547,4 @@ if (location.hash === "#import") { openPanel("import-panel"); previewImport(); }
 takePendingRefresh();
 reloadOnChanges(load, () => !!(renaming || dragging));
 load();
+loadQueue();
