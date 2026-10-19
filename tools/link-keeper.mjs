@@ -22,7 +22,9 @@ const HELP = `link-keeper — Link Keeper's data from the shell (live from Firef
 Reading
   status                          live or backup, counts, last backup
   links [filters] [--json]        the links, newest first; filters:
-      --filter all|captured|uncaptured|local|filtered   (all = the pile, without filtered-out)
+      --filter all|captured|uncaptured|failed|local|filtered   (all = the pile, without filtered-out; as Links
+                                    counts them: a capture that read almost nothing is not captured, and a
+                                    link whose capture failed, with why, is under failed, not uncaptured)
       --tag T (repeatable, any of)  --untagged  --stash ID  --site HOST  --search TEXT
       --limit N (default 50)  --all (no limit)
   link URL [--text] [--json]      one link: tags, every copy and its stash, list entry, capture
@@ -185,7 +187,10 @@ const replyLine = r => {
 
 const suggestedText = l => (l.suggested?.length ? `suggested: ${l.suggested.map(s => `${s.tag} ${Math.round(s.p * 100)}%`).join(", ")}` : "");
 const agentText = l => (l.agentTags?.length ? `agent${l.agentBy ? `(${l.agentBy})` : ""}: ${l.agentTags.join(", ")}` : "");
-const linkLine = l => [day(l.date), l.tags.length ? `[${l.tags.join(",")}]` : "[]", suggestedText(l), agentText(l), l.cap ? "captured" : "",
+// Captured as Links counts it (list.js hasRead): a capture that read its page.
+const hasRead = l => !!l.cap && !l.cap.thin;
+const linkLine = l => [day(l.date), l.tags.length ? `[${l.tags.join(",")}]` : "[]", suggestedText(l), agentText(l),
+  hasRead(l) ? "captured" : l.fail ? `capture failed: ${l.fail.error}` : "",
   l.copies.length > 1 ? `×${l.copies.length}` : "", l.title || l.cap?.title || "", l.url].filter(Boolean).join("  ");
 function note() { if (source && source !== "live") process.stderr.write(`(from the ${source}; Firefox is not running Link Keeper)\n`); }
 
@@ -215,13 +220,14 @@ const commands = {
   async links({ opt }) {
     const d = await getData();
     const f = opt.filter || "all";
-    if (!["all", "captured", "uncaptured", "local", "filtered"].includes(f)) throw new Error(`no filter ${f}`);
+    if (!["all", "captured", "uncaptured", "failed", "local", "filtered"].includes(f)) throw new Error(`no filter ${f}`);
     const term = String(opt.search || "").toLowerCase();
     const hits = d.links.filter(l => {
       const out = l.tags.includes(FILTER_TAG);
       if (f === "filtered" ? !out : out) return false;
-      if (f === "captured" && !(isWeb(l.url) && l.cap)) return false;
-      if (f === "uncaptured" && !(isWeb(l.url) && !l.cap)) return false;
+      if (f === "captured" && !(isWeb(l.url) && hasRead(l))) return false;
+      if (f === "uncaptured" && !(isWeb(l.url) && !hasRead(l) && !l.fail)) return false;
+      if (f === "failed" && !(isWeb(l.url) && !hasRead(l) && l.fail)) return false;
       if (f === "local" && isWeb(l.url)) return false;
       if (opt.untagged && l.tags.length) return false;
       if (opt.tag && !opt.tag.some(t => l.tags.includes(t))) return false;
