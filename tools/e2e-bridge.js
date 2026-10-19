@@ -20,6 +20,9 @@ await check("a fresh profile with no backup gets a storageId and nothing restore
   if ((await browser.storage.local.get("restoredFrom")).restoredFrom) throw new Error("it restored something");
 });
 
+// The one-time data patches run on install and wait for the helper; one of them moves reading-list
+// entries into stashes. Seeded before they finish, the test's own entry was sometimes moved under it.
+await applyDataPatches();
 await browser.storage.local.set({
   captures: [{ url: CAP, title: "Cap", text: "captured text", captured_at: "2026-10-01T10:00:00Z" }],
   items: [{ url: "https://example.org/listed", status: "pending", added_at: "2026-10-01T10:00:00Z" }],
