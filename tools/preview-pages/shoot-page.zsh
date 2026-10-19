@@ -1,10 +1,11 @@
 #!/bin/zsh
 # DESC: Screenshot a preview page (Cards, List, ...) at chosen widths into the gitignored out/ folder.
 #
-# Usage: shoot-page.zsh PAGE [--widths 600,1200] [--name NAME] [--deal VALUE] [--until SELECTOR] [--port 8768]
+# Usage: shoot-page.zsh PAGE [--widths 600,1200] [--name NAME] [--deal VALUE] [--until SELECTOR] [--click SELECTOR]... [--port 8768]
 #   PAGE      page path with its query flags, e.g. "cards.html?suggest" (see preview.zsh --help)
 #   --deal    Cards only: the deck selector's option: "suggested" (the Suggested deck), else its value
 #   --until   Cards only: press S until this CSS selector matches, e.g. ".card.top .suggestrow .src"
+#   --click   click this CSS selector before the shot; repeat it to click several, in order
 # Writes out/NAME-WIDTH.png beside the preview and prints each path. Playwright and its Chromium
 # are installed once into .deps/ beside this script (gitignored).
 
@@ -12,7 +13,7 @@ set -euo pipefail
 
 here=${0:A:h}
 if [[ ${1:-} == -h || ${1:-} == --help || $# -eq 0 ]]; then
-  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 page=$1; shift
@@ -27,6 +28,7 @@ while (( $# )); do
     --port) port=${2:?--port needs a number}; shift 2 ;;
     --deal) extra+=(--deal "${2:?--deal needs a value}"); shift 2 ;;
     --until) extra+=(--until "${2:?--until needs a selector}"); shift 2 ;;
+    --click) extra+=(--click "${2:?--click needs a selector}"); shift 2 ;;
     *) print -u2 "unknown argument: $1 (see --help)"; exit 2 ;;
   esac
 done
