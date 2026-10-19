@@ -12,6 +12,9 @@ Needs WEB_EXT_API_KEY and WEB_EXT_API_SECRET in the environment, so run it under
     ... -- tools/fetch-signed-xpi.py --version 5.6
 
 The add-on id and, by default, the version come from extension/manifest.json.
+
+Exit 0 with the file's path; 3 when AMO holds the version but has not signed it yet (wait and run again);
+4 when AMO has no such version (nothing was submitted); 2 without the keys.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
@@ -58,11 +62,17 @@ def main() -> int:
     def get(url: str):
         return urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"JWT {jwt(key, secret)}"}))
 
-    info = json.load(get(f"https://addons.mozilla.org/api/v5/addons/addon/{addon}/versions/v{args.version}/"))
+    try:
+        info = json.load(get(f"https://addons.mozilla.org/api/v5/addons/addon/{addon}/versions/v{args.version}/"))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"{args.version}: AMO has no such version; nothing was submitted", file=sys.stderr)
+            return 4
+        raise
     file = info.get("file") or {}
     if file.get("status") != "public" or not file.get("url"):
-        print(f"{args.version}: not signed yet (status {file.get('status')}); try again shortly", file=sys.stderr)
-        return 1
+        print(f"{args.version}: submitted, not signed yet (status {file.get('status')})", file=sys.stderr)
+        return 3
     out = EXT / "web-ext-artifacts" / file["url"].rsplit("/", 1)[-1]
     out.parent.mkdir(exist_ok=True)
     out.write_bytes(get(file["url"]).read())
