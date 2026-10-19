@@ -194,10 +194,10 @@ const AGENT_READS = new Set(["status", "page-info", "filter-rules", "link-counts
 const AGENT_WRITES = new Set(["set-tags", "set-tag-suggestions", "set-agent-tags", "tag-stash", "rename-tag", "delete-tag", "create-tag", "recolor-tag",
   "add", "remove", "restore-items", "rename-stash", "delete-stash", "move-stashed",
   "put-back", "set-filter-rules", "filter-out-page", "import-captures", "import-stashes",
-  "set-stash-settings", "toggle-excluded", "set-folder"]);
+  "set-stash-settings", "toggle-excluded", "set-folder", "set-capture-fails"]);
 // What an agent's change can touch in storage; the journal keeps the ones it did.
 const JOURNAL_KEYS = ["items", "captures", "linkTags", "tagSuggestions", "agentTags", "tagDefs", "filterRules", "filteredAuto", "stashMeta",
-  "stashSettings", "folder"];
+  "stashSettings", "folder", "captureFails"];
 
 const agentQueue = serial();
 

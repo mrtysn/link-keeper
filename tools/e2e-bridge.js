@@ -89,6 +89,16 @@ await check("agent-set tag suggestions show on links, step aside for tags, and u
   if ((await browser.storage.local.get("tagSuggestions")).tagSuggestions) throw new Error("undo left suggestions in storage");
 });
 
+await check("an agent records why captures failed, merged per link, and undo takes it back", async () => {
+  const listed = "https://example.org/listed";
+  const res = await agentRequest("call", { message: { type: "set-capture-fails", fails: { [listed]: { error: "example.org asked to log in", kind: "wall" } } } });
+  if (!res.ok || res.count !== 1 || !res.undo) throw new Error(JSON.stringify(res));
+  const link = (await getLinks()).links.find(l => l.key === keyOf(listed));
+  if (link?.fail?.kind !== "wall" || !/log in/.test(link.fail.error)) throw new Error(JSON.stringify(link?.fail));
+  const u = await agentRequest("undo", {});
+  if (!u.ok || (await browser.storage.local.get("captureFails")).captureFails?.[keyOf(listed)]) throw new Error("undo left the record");
+});
+
 await check("agent tags: merged, replaced and removed per link, apart from tags, and undo reverts them", async () => {
   const agentOf = async url => (await getLinks()).links.find(l => l.key === keyOf(url));
   const set = (tags, replace = false, by = "haiku") => agentRequest("call", { message: { type: "set-agent-tags", tags, by, replace } });

@@ -2673,6 +2673,20 @@ async function handleMessage(msg) {
     case "set-tag-suggestions":
       return setTagSuggestions(msg.suggestions, !!msg.replace);
 
+    // Failure records from outside a run (a run on an older version, kept by an agent): { url: { error, kind } },
+    // merged; null clears a link's. Recording one never opens or loads anything.
+    case "set-capture-fails": {
+      const given = msg.fails && typeof msg.fails === "object" ? Object.entries(msg.fails) : [];
+      const KINDS = ["wall", "thin", "skipped", "error"];
+      await editCaptureFails(f => {
+        for (const [url, v] of given) {
+          if (v === null) delete f[keyOf(url)];
+          else if (v?.error) f[keyOf(url)] = { error: String(v.error).slice(0, 300), kind: KINDS.includes(v.kind) ? v.kind : "error", at: v.at || new Date().toISOString() };
+        }
+      });
+      return { ok: true, count: given.length };
+    }
+
     case "set-agent-tags":
       return setAgentTags(msg.tags, msg.by, !!msg.replace);
 
