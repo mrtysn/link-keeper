@@ -547,9 +547,12 @@ next launch. Site chips count captured of all (`12/132`) while a site has links 
 
 `capture-queue.js` runs it in the background page. Each link is read the way **Capture** reads one, in a
 window of the queue's own that opens minimised and closes when the run ends or pauses, two links at a
-time and never two of one site at once. A site waits between its pages: 30 s (give or take) for
-Instagram, x.com, LinkedIn and the other sites a login belongs to, 8 s for Reddit, YouTube and Google,
-2 s for the rest, so a run of a thousand takes hours, as a person reading would.
+time and never two of one site at once. Sites take turns: of the sites ready to load, the one served
+longest ago goes next, so a hundred Instagram posts at the top of the line never hold the rest back. A
+site waits between its pages: 30 s (give or take) for Instagram, x.com, LinkedIn and the other sites a
+login belongs to, 8 s for Reddit, YouTube and Google, 2 s for the rest, so a run of a thousand takes
+hours, as a person reading would. The wait adapts: each failure on a site doubles it, up to 16 times,
+and each success halves it back.
 
 A capture refuses a page that stands in front of the one asked for — a login page the site sent it to,
 a captcha, or a block for too many requests (`LK.wall()` in `extractors.js`) — rather than store it as

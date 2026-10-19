@@ -2,9 +2,11 @@
  *
  * Links' selection bar starts it with the ticked links; everything after runs here, in the background
  * page, so closing Links does not stop it. Each link is read by captureUrl in a minimised window of its
- * own, two at a time, never two of one site at once. A site waits between its pages (SITE_GAPS: half a
- * minute for the sites a login belongs to), so a run looks like a person reading, not a crawler. A site
- * that answers with a wall (a login page, a captcha, a block) or fails three times in a row is stopped:
+ * own, two at a time, never two of one site at once. Sites take turns: of the sites ready to load, the
+ * one served longest ago goes next, so a pile of one site never holds the others back. A site waits
+ * between its pages (SITE_GAPS: half a minute for the sites a login belongs to), so a run looks like a
+ * person reading, not a crawler, and the wait adapts: each failure doubles it (up to SITE_BACKOFF_MAX
+ * times), each success halves it back toward the site's own. A site that answers with a wall (a login page, a captcha, a block) or fails three times in a row is stopped:
  * its remaining links are set aside as failed, with the reason, and the rest carry on. Retry failed puts
  * them back.
  *
@@ -24,6 +26,7 @@ const SITE_GAPS = [
   [/(^|\.)(reddit\.com|youtube\.com|google\.[a-z.]+)$/, 8],
 ];
 const DEFAULT_GAP = 2;
+const SITE_BACKOFF_MAX = 16;   // the most a site's wait grows by after failures
 
 const siteKey = url => {
   try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ""); } catch (e) { return ""; }
@@ -37,7 +40,7 @@ function makeCaptureQueue(fx) {
   const busy = new Set();   // sites with a page loading now
   let timer = null;
 
-  const blank = () => ({ status: "idle", total: 0, captured: 0, skipped: 0, pending: [], active: [], failed: [], stoppedSites: {}, streaks: {}, nextAt: {}, windowId: null, started_at: null });
+  const blank = () => ({ status: "idle", total: 0, captured: 0, skipped: 0, pending: [], active: [], failed: [], stoppedSites: {}, streaks: {}, nextAt: {}, servedAt: {}, backoff: {}, windowId: null, started_at: null });
   const save = () => fx.save(state);
   const view = () => ({ ...state, pending: state.pending.length, next: nextWait() });
 
@@ -58,6 +61,8 @@ function makeCaptureQueue(fx) {
     state = (await fx.load()) || blank();
     // A page put to sleep mid-capture: what was loading goes back to the front of the line.
     if (state.active.length) { state.pending.unshift(...state.active); state.active = []; await save(); }
+    state.servedAt ||= {};
+    state.backoff ||= {};
     if (state.status === "running") pump();
   }
 
@@ -85,13 +90,28 @@ function makeCaptureQueue(fx) {
     for (const url of left) state.failed.push({ url, error: `not tried: ${reason}` });
   }
 
+  // The first waiting link of the ready site served longest ago (never served counts as longest).
+  function nextReady() {
+    const now = fx.now();
+    let best = -1, bestServed = Infinity;
+    const seen = new Set();
+    for (let i = 0; i < state.pending.length; i++) {
+      const h = siteKey(state.pending[i]);
+      if (seen.has(h)) continue;
+      seen.add(h);
+      if (busy.has(h) || (state.nextAt[h] || 0) > now) continue;
+      const served = state.servedAt[h] || 0;
+      if (served < bestServed) { best = i; bestServed = served; }
+    }
+    return best;
+  }
+
   function pump() {
     clearTimeout(timer);
     timer = null;
     if (state.status !== "running") return;
     while (state.active.length < CAPTURE_WORKERS) {
-      const now = fx.now();
-      const i = state.pending.findIndex(u => { const h = siteKey(u); return !busy.has(h) && (state.nextAt[h] || 0) <= now; });
+      const i = nextReady();
       if (i === -1) break;
       const [url] = state.pending.splice(i, 1);
       work(url);
@@ -104,6 +124,7 @@ function makeCaptureQueue(fx) {
   async function work(url) {
     const host = siteKey(url);
     busy.add(host);
+    state.servedAt[host] = fx.now();
     state.active.push(url);
     save();   // Links shows what is loading; a page put to sleep now picks it up again
     let res;
@@ -117,7 +138,12 @@ function makeCaptureQueue(fx) {
     busy.delete(host);
     state.active = state.active.filter(u => u !== url);
     if (state.status === "idle") return;   // dismissed while it loaded
-    if (loaded) state.nextAt[host] = fx.now() + siteGap(host) * (0.8 + 0.6 * fx.random());
+    if (loaded) {
+      const scale = state.backoff[host] || 1;
+      state.backoff[host] = res.ok ? Math.max(1, scale / 2) : Math.min(SITE_BACKOFF_MAX, scale * 2);
+      if (state.backoff[host] === 1) delete state.backoff[host];
+      state.nextAt[host] = fx.now() + siteGap(host) * (state.backoff[host] || 1) * (0.8 + 0.6 * fx.random());
+    }
     if (res.ok) {
       res.skipped ? state.skipped++ : state.captured++;
       delete state.streaks[host];
@@ -201,6 +227,7 @@ function makeCaptureQueue(fx) {
       state.failed = [];
       state.stoppedSites = {};
       state.streaks = {};
+      state.backoff = {};
       if (!["running", "paused"].includes(state.status)) state.status = "running";
       state.pending.push(...urls.filter(u => !state.pending.includes(u)));
       await save();

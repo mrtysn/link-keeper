@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DESC: Run the capture queue against a fake capture and clock, and check its pacing and stopping.
+// DESC: Run the capture queue against a fake capture and clock, and check its turns, pacing and stopping.
 //
 // Loads extension/capture-queue.js into a VM and drives makeCaptureQueue with fakes: a capture that
 // answers from a table, a clock that only moves when the test advances it, and a window counter. It
@@ -123,6 +123,43 @@ await check("a site waits its gap between pages: 2 s for most, 30 s for a login 
   assert.deepEqual(w.loadingNow(), [], "instagram not before 33 s");
   await w.advance(3000);
   assert.deepEqual(w.loadingNow(), [IG(2)], "instagram at 33 s");
+});
+
+const A = n => `https://a.example/${n}`, B = n => `https://b.example/${n}`, C = n => `https://c.example/${n}`;
+
+await check("sites take turns: the ready site served longest ago goes next, whatever the line's order", async () => {
+  const w = world();
+  await w.q.start([A(1), A(2), A(3), B(1), B(2), C(1)]);
+  await w.flush();
+  assert.deepEqual(w.loadingNow(), [A(1), B(1)]);
+  await w.finish(A(1));
+  assert.deepEqual(w.loadingNow(), [B(1), C(1)], "c, never served, before a waits out its gap");
+  await w.finish(B(1));
+  await w.finish(C(1));
+  await w.advance(3000);
+  assert.deepEqual(w.loadingNow(), [A(2), B(2)], "then a and b again, a first as served longer ago");
+});
+
+await check("a failure doubles its site's wait and a success halves it back", async () => {
+  const bad = { ok: false, error: "the page never finished loading" };
+  const w = world({ answers: { [A(1)]: bad, [A(2)]: bad } });
+  await w.q.start([A(1), A(2), A(3), A(4)]);
+  await w.flush();
+  await w.finish();
+  await w.advance(4000);
+  assert.deepEqual(w.loadingNow(), [], "not at 4 s: one failure makes 2 s × 2 × 1.1");
+  await w.advance(500);
+  assert.deepEqual(w.loadingNow(), [A(2)], "at 4.4 s");
+  await w.finish();
+  await w.advance(8700);
+  assert.deepEqual(w.loadingNow(), [], "not at 8.7 s after a second failure");
+  await w.advance(100);
+  assert.deepEqual(w.loadingNow(), [A(3)], "at 8.8 s");
+  await w.finish();
+  await w.advance(4300);
+  assert.deepEqual(w.loadingNow(), [], "a success halves it to 4.4 s, not straight back to 2.2");
+  await w.advance(200);
+  assert.deepEqual(w.loadingNow(), [A(4)]);
 });
 
 await check("a finished queue counts its captures and closes its window", async () => {
