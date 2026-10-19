@@ -55,6 +55,7 @@
 .lk-read, .lk-unread, .lk-verdict { padding: 0 7px; border-radius: 999px; font-size: .6875rem; line-height: 1.6; white-space: nowrap; }
 .lk-read { color: var(--accent); background: var(--chip); }
 .lk-unread { color: var(--dim); border: 1px dashed var(--line); line-height: calc(1.6em - 2px); }
+.lk-unread.lk-failed { color: var(--bad); border-color: var(--bad); }
 .lk-verdict { background: var(--chip); font-weight: 600; }
 .lk-verdict.keep { color: var(--ok, var(--keep)); }
 .lk-verdict.drop { color: var(--bad, var(--skip)); }

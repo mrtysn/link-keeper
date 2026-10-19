@@ -401,23 +401,23 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
     // Clicking a switch never moves anything else in the bar: each keeps its widest state's width.
     const layout = () => p.$$eval(".bar > *, .bar .chip", l => l.map(e => { const r = e.getBoundingClientRect(); return `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)}`; }).join(" "));
     await p.setViewportSize({ width: 1000, height: 900 });   // the owner's window, where the bar is full
-    await p.click("#f-captured"); await p.waitForTimeout(200);   // back to any
+    await p.click("#f-captured"); await p.click("#f-captured"); await p.waitForTimeout(200);   // Not captured → Capture failed → any
     const before = await layout();
-    for (const id of ["#f-captured", "#f-captured", "#f-local", "#f-dups"]) {
+    for (const id of ["#f-captured", "#f-captured", "#f-captured", "#f-local", "#f-dups"]) {
       await p.click(id); await p.waitForTimeout(150);
       ok(await layout() === before, `filters: clicking ${id} leaves the bar where it was`);
     }
     await p.click("#f-local"); await p.click("#f-local"); await p.click("#f-dups"); await p.click("#f-dups"); await p.waitForTimeout(200);
-    await p.setViewportSize({ width: 1300, height: 900 });   // Captured ends where it started, on Not captured
+    await p.setViewportSize({ width: 1300, height: 900 });   // Captured ends on Capture failed
   }
-  await p.click("#f-captured"); await p.waitForTimeout(200);
+  await p.click("#f-captured"); await p.waitForTimeout(200);   // back to any
   const all = +(await p.$eval("#sub", e => e.textContent)).match(/^(\d+) link/)[1];
   ok(captured + uncaptured + await n("local") === all,
     `filters: Captured + Not captured + Local & browser make the pile (${captured} + ${uncaptured} + ${await n("local")} = ${all})`);
   // They combine: only not captured, and local left out, is the not-captured web pages.
   await p.click("#f-captured"); await p.click("#f-captured"); await p.click("#f-local"); await p.click("#f-local"); await p.waitForTimeout(250);
   ok(await rows() === uncaptured && await p.$eval("#f-local", e => e.dataset.state) === "out", `filters: switches combine (${await rows()} rows)`);
-  await p.click("#f-captured"); await p.click("#f-local"); await p.waitForTimeout(250);
+  await p.click("#f-captured"); await p.click("#f-captured"); await p.click("#f-local"); await p.waitForTimeout(250);
   // A site chip: once only it, twice everything except it, three times off.
   const site = p.locator("#domains .chip", { hasText: "x.com" }).first();
   // A site with links left to capture counts captured of all: 1/12.
@@ -857,6 +857,23 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.click("#capq button:text-is('Dismiss')"); await p.waitForTimeout(200);
   ok(await p.$eval("#capq", e => e.hidden), "capture queue: Dismiss clears the line");
   ok(p.errs.length === 0, `capture queue done: no errors ${p.errs.join()}`);
+  await p.close();
+}
+
+// Failed captures: a fourth state of the Captured switch, apart from Not captured, each with its reason
+{
+  const p = await page("list.html?fails");
+  const n = async () => p.$eval("#f-captured .face:not(.ghost) .n", e => +e.textContent);
+  await p.click("#f-captured"); await p.click("#f-captured"); await p.waitForTimeout(200);
+  const notCaptured = await n();
+  await p.click("#f-captured"); await p.waitForTimeout(200);
+  ok(await p.$eval("#f-captured .face:not(.ghost) .lbl", e => e.textContent) === "Capture failed" && await n() === 2, `failed: the switch's fourth state shows the two failed links (${await n()})`);
+  ok(await p.$$eval("ul.rows > li", l => l.length) >= 2, "failed: their rows show");
+  const fact = await p.$eval("#detail .facts li.fail", e => e.textContent).catch(() => "");
+  ok(/^Capture failed .*: (www\.example\.com asked to log in|kept, but the page showed almost no text)$/.test(fact), `failed: the pane says why (${fact})`);
+  await p.click("#f-captured"); await p.click("#f-captured"); await p.click("#f-captured"); await p.waitForTimeout(200);
+  ok(await n() === notCaptured, "failed: Not captured leaves them out");
+  ok(p.errs.length === 0, `failed: no errors ${p.errs.join()}`);
   await p.close();
 }
 

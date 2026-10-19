@@ -155,7 +155,7 @@ function capView(c, thumbs = {}) {
 
 /* items and captures as stored, sessions as getSessions gives them, currentKey the reading list's
  * current entry. Returns { links, stashes }, stashes in their own order with each tab's link key. */
-function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {}, suggestions = {}, agentTags = {}, previews = {} }) {
+function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {}, suggestions = {}, agentTags = {}, previews = {}, fails = {} }) {
   const capBy = new Map();
   for (const c of captures) {
     if (c.source_url) capBy.set(keyOf(c.source_url), c);
@@ -227,6 +227,8 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     const agent = agentTagsFor(agentTags, link.key);
     link.agentTags = agent.tags;
     link.agentBy = agent.by;
+    // Why a capture of it failed (background.js, captureFails), or a capture that read almost nothing.
+    link.fail = fails[link.key] || (link.cap?.thin ? { error: "the page showed almost no text", kind: "thin", at: link.cap.captured_at } : null);
     link.kinds = guessTags(link.url, link.cap);
     link.guessed = link.tags.length ? [] : link.kinds;
   }

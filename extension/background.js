@@ -549,6 +549,7 @@ async function captureIn(url, note, windowId, opened) {
 
     const captures = await getCaptures();
     await setCaptures(replaceCapture(captures, record));
+    if (!capThin(record)) await clearCaptureFail(url);
 
     return { ok: true, record };
   } finally {
@@ -1731,11 +1732,28 @@ allowPreviewFrames().catch(e => console.error("preview frames:", e));
 
 /* Every source joined into one dataset for the pages; joinLinks in links.js does the joining. */
 async function getLinks() {
-  const [items, captures, sessions, thumbs, current, tags, suggestions, agentTags, previews] =
+  const [items, captures, sessions, thumbs, current, tags, suggestions, agentTags, previews, fails] =
     [await getItems(), await getCaptures(), await getSessions(), await read("thumbs", {}), await getCurrent(), await read("linkTags", {}),
-      await read("tagSuggestions", {}), await read("agentTags", {}), await read("previews", {})];
-  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags, suggestions, agentTags, previews });
+      await read("tagSuggestions", {}), await read("agentTags", {}), await read("previews", {}), await read("captureFails", {})];
+  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags, suggestions, agentTags, previews, fails });
 }
+
+/* --- failed captures --------------------------------------------------------------
+ * Why the capture queue could not capture a link: captureFails, { [link key]: { error, kind, at } } with
+ * kind "wall" (a login, captcha or block), "thin" (kept, but almost no text), "skipped" (its site was
+ * stopped first) or "error". Links shows them under Failed, apart from Not captured, so a run never
+ * tries them again by itself; capturing one from Failed, or by hand, clears its entry. Writes go one at
+ * a time: the queue's two workers would otherwise overwrite each other's. */
+let failWrites = Promise.resolve();
+function editCaptureFails(change) {
+  failWrites = failWrites.then(async () => {
+    const fails = await read("captureFails", {});
+    if (change(fails) !== false) await browser.storage.local.set({ captureFails: fails });
+  }).catch(() => {});
+  return failWrites;
+}
+const recordCaptureFail = (url, error, kind) => editCaptureFails(f => { f[keyOf(url)] = { error: String(error || "failed").slice(0, 300), kind, at: new Date().toISOString() }; });
+const clearCaptureFail = url => editCaptureFails(f => (keyOf(url) in f ? void delete f[keyOf(url)] : false));
 
 /* --- previews -------------------------------------------------------------------
  * A picture and a line for every link, as a chat app shows under a link: previews: { [link key]:

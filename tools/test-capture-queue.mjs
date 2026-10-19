@@ -32,6 +32,7 @@ function world({ answers = {}, captured = [], saved = null } = {}) {
   const loading = [];   // [{ url, resolve }]
   const log = [];       // [url, at] per capture started
   const windows = { opened: 0, closed: 0, open: new Set() };
+  const recorded = {};   // url → the kind of failure kept on the link
   let store = saved;
   const fx = {
     capture: (url, windowId) => {
@@ -49,12 +50,13 @@ function world({ answers = {}, captured = [], saved = null } = {}) {
     setTimer: (fn, ms) => { const t = { at: clock + ms, fn }; timers.push(t); return t; },
     random: () => 0.5,   // gaps are exactly 1.1 × the site's
     thin: r => !!r.thin,
+    recordFail: (url, error, kind) => { recorded[url] = kind; },
   };
   // Its answers come from the VM's realm; structuredClone brings them into this one for deepEqual.
   const q = ctx.makeCaptureQueue(fx);
   const settle = () => new Promise(r => setImmediate(r));
   return {
-    q, log, windows, loading, store: () => store,
+    q, log, windows, loading, recorded, store: () => store,
     async flush() { for (let i = 0; i < 10; i++) await settle(); },
     // Finishes the oldest loading page (or the one for url).
     async finish(url) {
@@ -217,6 +219,7 @@ await check("a wall stops its site: the site's other links are set aside, other 
   assert.match(s.failed[1].error, /^not tried: www.instagram.com asked to log in/);
   assert.deepEqual(Object.keys(s.stoppedSites), ["instagram.com"]);
   assert.equal(s.captured, 2);
+  assert.deepEqual({ ...w.recorded }, { [IG(1)]: "wall", [IG(2)]: "skipped", [IG(3)]: "skipped" }, "each failure kept on its link");
 });
 
 await check("three failures in a row stop a site; one success in between does not", async () => {

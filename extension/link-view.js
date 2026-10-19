@@ -72,6 +72,7 @@ const shortDay = iso => {
 function readBadge(link) {
   const at = readAt(link);
   if (at) return el("span", { className: "lk-read", textContent: `captured ${shortDay(at)}`.trim(), title: `Captured ${whenOf(at)}: its text, images and links are saved` });
+  if (link.fail && isWeb(link.url)) return el("span", { className: "lk-unread lk-failed", textContent: "capture failed", title: `${link.fail.error}${link.fail.at ? ` (${whenOf(link.fail.at)})` : ""}` });
   if (link.cap) return el("span", { className: "lk-read", textContent: "captured", title: "Its text, images and links are saved" });
   return isWeb(link.url) ? el("span", { className: "lk-unread", textContent: "not captured", title: "Press 3 to capture its text, images and links" }) : null;
 }
@@ -137,7 +138,7 @@ function reloadOnChanges(load, busy = () => false) {
     timer = setTimeout(() => (busy() || editing() ? soon() : load()), 150);
   };
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagSuggestions", "agentTags", "tagDefs", "favicons"].some(k => changes[k])) soon();
+    if (area === "local" && ["stashMeta", "stashSettings", "captures", "items", "current", "thumbs", "linkTags", "tagSuggestions", "agentTags", "tagDefs", "favicons", "captureFails"].some(k => changes[k])) soon();
   });
   for (const ev of ["onCreated", "onRemoved", "onChanged", "onMoved"]) browser.bookmarks?.[ev].addListener(soon);
   window.LinkSources.onChange(load);

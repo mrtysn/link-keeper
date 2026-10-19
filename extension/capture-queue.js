@@ -8,7 +8,8 @@
  * person reading, not a crawler, and the wait adapts: each failure doubles it (up to SITE_BACKOFF_MAX
  * times), each success halves it back toward the site's own. A site that answers with a wall (a login page, a captcha, a block) or fails three times in a row is stopped:
  * its remaining links are set aside as failed, with the reason, and the rest carry on. Retry failed puts
- * them back. A speed (SPEEDS) scales it all: Gentle loads one link at a time and doubles every wait, Fast
+ * them back. Each failure is also kept on its link (background.js, captureFails), where Links lists it
+ * under Failed instead of Not captured, so a later run does not try it again unless asked. A speed (SPEEDS) scales it all: Gentle loads one link at a time and doubles every wait, Fast
  * loads three and halves them.
  *
  * The state lives in storage.session: it outlives the background page being put to sleep and Links being
@@ -110,7 +111,10 @@ function makeCaptureQueue(fx) {
     state.stoppedSites[host] = reason;
     const left = state.pending.filter(u => siteKey(u) === host);
     state.pending = state.pending.filter(u => siteKey(u) !== host);
-    for (const url of left) state.failed.push({ url, error: `not tried: ${reason}` });
+    for (const url of left) {
+      state.failed.push({ url, error: `not tried: ${reason}` });
+      fx.recordFail?.(url, `not tried: ${reason}`, "skipped");
+    }
     (state.perSite[host] ||= { captured: 0, failed: 0 }).failed += left.length;
   }
 
@@ -179,6 +183,7 @@ function makeCaptureQueue(fx) {
     if (res.ok && res.record && fx.thin?.(res.record)) {
       tally.failed++;
       state.failed.push({ url, error: "kept, but the page showed almost no text", thin: true });
+      fx.recordFail?.(url, "kept, but the page showed almost no text", "thin");
       delete state.streaks[host];
     } else if (res.ok) {
       res.skipped ? state.skipped++ : state.captured++;
@@ -186,6 +191,7 @@ function makeCaptureQueue(fx) {
       delete state.streaks[host];
     } else {
       state.failed.push({ url, error: res.error || "failed" });
+      fx.recordFail?.(url, res.error || "failed", res.wall ? "wall" : "error");
       tally.failed++;
       state.streaks[host] = (state.streaks[host] || 0) + 1;
       if (res.wall) stopSite(host, res.error || `${host} put up a ${res.wall} page`);
@@ -313,6 +319,8 @@ if (typeof browser !== "undefined" && typeof captureUrl === "function") {
     setTimer: (fn, ms) => setTimeout(fn, ms),
     random: Math.random,
     thin: capThin,
+    // Remembered on the link, so Links lists it under Failed and the next run leaves it be.
+    recordFail: recordCaptureFail,
   });
   captureQueue.init();
 }

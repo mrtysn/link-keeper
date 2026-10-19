@@ -238,7 +238,11 @@
             const pic = (h, c) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="hsl(${h} 45% 45%)"/><circle cx="${c}" cy="90" r="46" fill="hsl(${h} 60% 75%)"/></svg>`);
             const previews = params.has("nopreviews") ? {} : Object.fromEntries(items.filter(i => !captures.some(c => keyOf(c.url) === keyOf(i.url)))
               .map((i, n) => [keyOf(i.url), { title: `Preview title of ${new URL(i.url).hostname}${new URL(i.url).pathname}`, text: "What the page says it is about, from its preview tags, cut to one line or two.", image: pic(n * 47 % 360, 80 + n * 30 % 160) }]));
-            return joinLinks({ items, captures, sessions, tags: mockTags, suggestions, agentTags, previews,
+            // ?fails: two links not captured carry a recorded failure, as the capture queue leaves them.
+            const capKeys = new Set(captures.map(c => keyOf(c.url)));
+            const fails = !params.has("fails") ? {} : Object.fromEntries(items.filter(i => /^https?:/.test(i.url) && !capKeys.has(keyOf(i.url))).slice(0, 2)
+              .map((i, n) => [keyOf(i.url), n ? { error: "www.example.com asked to log in", kind: "wall", at: "2026-10-20T01:30:00Z" } : { error: "kept, but the page showed almost no text", kind: "thin", at: "2026-10-20T01:31:00Z" }]));
+            return joinLinks({ items, captures, sessions, tags: mockTags, suggestions, agentTags, previews, fails,
               currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
           }
           // Filtered out, as the background keeps it: rules on a page's address, tagging what matches.

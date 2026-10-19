@@ -20,10 +20,11 @@
 const GROUPS = ["stash", "domain", "tag", "chat", "day", "month", "newest", "oldest"];
 const GROUP_KEY = "listGroup";
 /* Three switches that combine, each cycling through three states on a click (the first is off):
- * Captured: any web page, only captured ones, only ones not captured yet. Local & browser: included,
+ * Captured: any web page, only captured ones, only ones not captured yet, only ones whose capture failed
+ * (with the reason kept, so a run leaves them be). Local & browser: included,
  * only them, left out. Filtered out: left out of the pile (as the rules in Settings say), included,
  * only them. */
-const BAR = { captured: ["any", "only", "out"], local: ["in", "only", "out"], filtered: ["out", "in", "only"], dups: ["any", "only", "out"] };
+const BAR = { captured: ["any", "only", "out", "failed"], local: ["in", "only", "out"], filtered: ["out", "in", "only"], dups: ["any", "only", "out"] };
 // Links held in more than one place (duplicateSets), worked out on each render for the Duplicates switch.
 let dupKeys = new Set();
 
@@ -192,7 +193,8 @@ const siteOf = url => ({ web: () => hostOf(url), file: () => "Local files", othe
 function matches(link, term) {
   if (stashOnly === "list" ? !link.list : stashOnly && !link.copies.some(c => c.stash === stashOnly)) return false;
   if (bar.captured === "only" && !(isWeb(link.url) && hasRead(link))) return false;
-  if (bar.captured === "out" && !(isWeb(link.url) && !hasRead(link))) return false;
+  if (bar.captured === "out" && !(isWeb(link.url) && !hasRead(link) && !link.fail)) return false;
+  if (bar.captured === "failed" && !(isWeb(link.url) && !hasRead(link) && link.fail)) return false;
   if (bar.local === "only" && isWeb(link.url)) return false;
   if (bar.local === "out" && !isWeb(link.url)) return false;
   if (bar.dups === "only" && !dupKeys.has(link.key)) return false;
@@ -542,7 +544,7 @@ LinkActions.setup({
     // In card mode, accepting a card's suggested tags deals the next card, as removing does.
     const leaves = ["move", "remove", ...(cardMode ? ["accept"] : [])].includes(cmd);
     const i = cursorAt();
-    if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (leaves || (cmd === "read" && bar.captured === "out"))) {
+    if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (leaves || (cmd === "read" && ["out", "failed"].includes(bar.captured)))) {
       const next = cardMode ? cardAfter(rowsOnPage[i]) : rowsOnPage[i + 1] || rowsOnPage[i - 1];
       if (next) cursorId = next.id;
       if (cardMode && cmd === "remove") cardTally.removed++;
@@ -1144,7 +1146,8 @@ const MARKS = { only: "✓", in: "+", out: "✕" };
 function drawBar(counts) {
   const look = {
     captured: { any: ["", "Captured", counts.captured, "Show only captured pages"], only: ["only", "Captured", counts.captured, "Show only pages not captured yet"],
-      out: ["only", "Not captured", counts.uncaptured, "Show every page again"] },
+      out: ["only", "Not captured", counts.uncaptured, "Show only pages whose capture failed, with why"],
+      failed: ["only", "Capture failed", counts.failed, "Show every page again"] },
     local: { in: ["", "Local & browser", counts.local, "Show only local files and browser pages"], only: ["only", "Local & browser", counts.local, "Leave local files and browser pages out"],
       out: ["out", "Local & browser", counts.local, "Bring local files and browser pages back"] },
     filtered: { out: ["", "Filtered out", counts.filtered, "Include the filtered-out pages too"], in: ["in", "Filtered out", counts.filtered, "Show only the filtered-out pages"],
@@ -1323,7 +1326,8 @@ function renderRows() {
   const total = data.links.length;
   const counts = {
     all: total,
-    uncaptured: data.links.filter(l => isWeb(l.url) && !hasRead(l)).length,
+    uncaptured: data.links.filter(l => isWeb(l.url) && !hasRead(l) && !l.fail).length,
+    failed: data.links.filter(l => isWeb(l.url) && !hasRead(l) && l.fail).length,
     local: data.links.filter(l => !isWeb(l.url)).length,
     filtered: data.filteredLinks.length,
     captured: data.links.filter(l => isWeb(l.url) && hasRead(l)).length,
@@ -1648,6 +1652,7 @@ function knownBox(row) {
 
   const facts = el("ul", { className: "facts" });
   if (c?.captured_at) facts.append(el("li", { textContent: `Captured ${whenOf(c.captured_at)}` }));
+  if (link.fail && !hasRead(link)) facts.append(el("li", { className: "fail", textContent: `Capture failed${link.fail.at ? ` ${whenOf(link.fail.at)}` : ""}: ${link.fail.error}` }));
   // What Open does differently for this link.
   if (tab?.container) facts.append(el("li", { textContent: "Opens in its Firefox container, signed in as it was" }));
   if (kind === "other") facts.append(el("li", { textContent: "Firefox will not let Link Keeper open this address: Open shows a page with it to copy into the address bar" }));

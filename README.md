@@ -548,6 +548,12 @@ with its reason, with **Pause**, **Resume**, **Stop**, **Retry failed** and **Di
 **Gentle** (one link at a time, every wait doubled), **Normal** (two) or **Fast** (three, waits halved)
 — changes from the next page and is remembered for the next run.
 
+A link the queue could not capture keeps why on the link: a login, captcha or block, a page that showed
+almost no text, a site stopped before its turn, or an error. Links lists such links under **Capture
+failed**, the Captured switch's fourth state, apart from **Not captured**, with the reason in the detail
+pane and on its badge, so a later run does not try them again by itself. To retry, pick them there and
+press Capture; a capture that works clears the reason.
+
 A page read out of sight may be an app still drawing itself when it reports it has loaded, so a plain
 page with little text is read again until its text appears (up to 8 s). A capture that still got almost
 nothing (under 40 characters of a plain page's text, or cut short) is kept but counts as **Not
