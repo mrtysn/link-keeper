@@ -454,13 +454,16 @@ function tabSettled(tabId, timeout = 25000) {
       clearTimeout(timer);
       resolve(ok);
     };
-    const onUpdated = (id, changed) => {
-      if (id === tabId && changed.status === "complete") finish(true);
+    // A new tab reports "complete" for its first about:blank before the page asked for starts; that
+    // is not the page, and reading it fails for want of a host permission.
+    const ready = t => t.status === "complete" && t.url !== "about:blank";
+    const onUpdated = (id, changed, t) => {
+      if (id === tabId && ready(t)) finish(true);
     };
     const timer = setTimeout(() => finish(false), timeout);
     browser.tabs.onUpdated.addListener(onUpdated);
     // It may already be loaded by the time we start listening.
-    browser.tabs.get(tabId).then(t => { if (t.status === "complete") finish(true); }).catch(() => finish(false));
+    browser.tabs.get(tabId).then(t => { if (ready(t)) finish(true); }).catch(() => finish(false));
   });
 }
 
