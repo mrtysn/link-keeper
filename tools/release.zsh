@@ -11,6 +11,7 @@
 #   tools/release.zsh --no-open  # the same release, the signed xpi's path printed instead of opened
 #   tools/release.zsh --finish   # a version already submitted but not yet signed: fetch it, open it, commit it
 #
+# Refuses while a capture run is going or paused: installing the release would reset it.
 # Needs a clean tree (the batch committed) and Doppler's firefox-signing project for AMO's keys.
 # If AMO's approval outlasts web-ext's wait, the version is submitted but not downloaded: the script
 # then waits for it (up to 15 minutes) and fetches it with tools/fetch-signed-xpi.py. Still unsigned
@@ -25,7 +26,7 @@ ext=$repo/extension
 manifest=$ext/manifest.json
 
 if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-  sed -n '4,20p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '4,19p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 dry=0
@@ -34,6 +35,18 @@ finish=0
 [[ ${1:-} == --dry-run ]] && dry=1
 [[ ${1:-} == --no-open ]] && no_open=1
 [[ ${1:-} == --finish ]] && finish=1
+
+# Installing a release reloads the add-on, which drops a capture run in progress (its state is in
+# storage.session). On 2026-10-20 releases shipped mid-run reset the owner's run four times; a run that is
+# going or paused holds every release until it ends, is stopped, or is dismissed.
+queue=$(node "$repo/tools/link-keeper.mjs" call capture-queue-status 2>/dev/null \
+  | python3 -c 'import json,sys; q=json.load(sys.stdin); print(q.get("status",""), q.get("captured",0)+q.get("skipped",0)+len(q.get("failed",[])), q.get("total",0))' 2>/dev/null || true)
+if [[ $queue == running* || $queue == paused* ]]; then
+  read -r qstatus qdone qtotal <<< "$queue"
+  print -u2 "a capture run is $qstatus ($qdone of $qtotal done); a release now would reset it."
+  print -u2 "Wait for it to finish, or Stop it on the Capture page, then release."
+  exit 1
+fi
 
 signing=(doppler run --project firefox-signing --config prd --)
 version_of() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$manifest" }
