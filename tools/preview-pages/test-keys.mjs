@@ -407,7 +407,10 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.click("#f-captured"); await p.click("#f-local"); await p.waitForTimeout(250);
   // A site chip: once only it, twice everything except it, three times off.
   const site = p.locator("#domains .chip", { hasText: "x.com" }).first();
-  const xs = +(await site.locator(".n").textContent());
+  // A site with links left to capture counts captured of all: 1/12.
+  const count = await site.locator(".n").textContent();
+  ok(/^\d+(\/\d+)?$/.test(count), `chips: a site counts its links, captured of all while some are left (${count})`);
+  const xs = +count.split("/").pop();
   await site.click(); await p.waitForTimeout(250);
   ok(await rows() === xs, `chips: one click shows only that site (${xs})`);
   await site.click(); await p.waitForTimeout(250);

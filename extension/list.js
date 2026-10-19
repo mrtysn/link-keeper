@@ -850,16 +850,23 @@ function renderDomainChips() {
   const box = $("domains");
   box.textContent = "";
   const counts = new Map();
+  const captured = new Map();   // per web site, how many of its links are captured
   for (const l of data.links) {
     const h = siteOf(l.url);
     counts.set(h, (counts.get(h) || 0) + 1);
+    if (isWeb(l.url) && l.cap) captured.set(h, (captured.get(h) || 0) + 1);
   }
   const rank = h => (domainSel.has(h) ? 2 : domainOut.has(h) ? 1 : 0);
   const hosts = [...counts.entries()].sort((a, b) => (rank(b[0]) - rank(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
   const chip = (host, n) => {
     const icon = host === "Local files" ? srcIcon("file:///") : host === "Browser pages" ? srcIcon("about:blank") : srcIcon(`https://${host}/`);
-    const b = el("button", { className: "chip" }, icon, el("span", { className: "lbl", textContent: host }), el("span", { className: "n", textContent: n }));
+    // A web site with links left to capture counts them as captured of all: 12/132.
+    const web = host !== "Local files" && host !== "Browser pages";
+    const c = captured.get(host) || 0;
+    const count = web && c < n ? `${c}/${n}` : String(n);
+    const b = el("button", { className: "chip" }, icon, el("span", { className: "lbl", textContent: host }), el("span", { className: "n", textContent: count }));
     markChip(b, host, domainSel, domainOut);
+    if (web) b.title = `${c} of ${plural(n, "link")} captured · ${b.title}`;
     Peek.mark(b, "site", host);
     b.onclick = () => { cycleChip(host, domainSel, domainOut); render(); };
     return b;
