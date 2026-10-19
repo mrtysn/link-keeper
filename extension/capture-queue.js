@@ -36,6 +36,7 @@ const SITE_GAPS = [
 ];
 const DEFAULT_GAP = 10;
 const CRAWL_DELAY_MAX = 300;   // seconds; a robots.txt asking for more is held to this
+const CRAWL_DELAY_UNKNOWN = 30;   // seconds, for a site whose robots.txt could not be read: not a licence to hurry
 
 /* The Crawl-delay robots.txt asks of every crawler (the "User-agent: *" groups), in seconds, or 0. */
 function crawlDelayOf(robots) {
@@ -187,7 +188,8 @@ function makeCaptureQueue(fx) {
       if (await fx.isCaptured(url)) { res = { ok: true, skipped: true }; loaded = false; }
       else {
         // A site's robots.txt, once, before its first page.
-        if (!(host in state.crawl)) state.crawl[host] = Math.max(0, Number(await fx.crawlDelay?.(url).catch(() => 0)) || 0);
+        // One that cannot be read (a timeout, a server error) leaves the site at CRAWL_DELAY_UNKNOWN.
+        if (!(host in state.crawl)) state.crawl[host] = fx.crawlDelay ? await fx.crawlDelay(url).then(n => Math.max(0, Number(n) || 0), () => CRAWL_DELAY_UNKNOWN) : 0;
         res = await fx.capture(url, await ensureWindow());
       }
     } catch (e) {
@@ -350,9 +352,12 @@ if (typeof browser !== "undefined" && typeof captureUrl === "function") {
     random: Math.random,
     thin: capThin,
     // Read once per site, as a crawler would, and kept for the run.
+    // No robots.txt (404, 410) asks nothing; any other failure throws, and the queue assumes the slow floor.
     crawlDelay: async url => {
       const res = await fetch(new URL("/robots.txt", url), { credentials: "omit", signal: AbortSignal.timeout(5000) });
-      return res.ok ? crawlDelayOf(await res.text()) : 0;
+      if (res.status === 404 || res.status === 410) return 0;
+      if (!res.ok) throw new Error(`robots.txt answered ${res.status}`);
+      return crawlDelayOf(await res.text());
     },
     // Remembered on the link, so Links lists it under Failed and the next run leaves it be.
     recordFail: recordCaptureFail,

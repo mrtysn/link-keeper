@@ -51,7 +51,12 @@ function world({ answers = {}, captured = [], saved = null, robots = {} } = {}) 
     setTimer: (fn, ms) => { const t = { at: clock + ms, fn }; timers.push(t); return t; },
     random: () => 0.5,   // gaps are exactly 1.1 × the site's
     thin: r => !!r.thin,
-    crawlDelay: async url => { robotsRead.push(new URL(url).hostname); return robots[new URL(url).hostname] || 0; },
+    crawlDelay: async url => {
+      const host = new URL(url).hostname;
+      robotsRead.push(host);
+      if (robots[host] === "unreadable") throw new Error("robots.txt answered 503");
+      return robots[host] || 0;
+    },
     recordFail: (url, error, kind) => { recorded[url] = kind; },
   };
   // Its answers come from the VM's realm; structuredClone brings them into this one for deepEqual.
@@ -181,6 +186,17 @@ await check("a site's robots.txt Crawl-delay is read once and is the least it wa
   assert.deepEqual(w.loadingNow(), [A(2)]);
   await w.drain();
   assert.deepEqual([...w.robotsRead], ["a.example"], "read once");
+});
+
+await check("a robots.txt that cannot be read leaves its site at 30 s, not at no floor", async () => {
+  const w = world({ robots: { "a.example": "unreadable" } });
+  await w.q.start([A(1), A(2)], "fast");
+  await w.flush();
+  await w.finish();
+  await w.advance(29_900);
+  assert.deepEqual(w.loadingNow(), [], "not before 30 s");
+  await w.advance(100);
+  assert.deepEqual(w.loadingNow(), [A(2)]);
 });
 
 await check("Crawl-delay is taken from the groups for every crawler, and held to 300 s", async () => {
