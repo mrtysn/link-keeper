@@ -182,13 +182,17 @@ const visibleStash = id => data.stashes.some(s => s.id === id);
 
 /* --- filtering ------------------------------------------------------------------ */
 
+/* Captured, for the filters and counts: a capture that read its page. A thin one (links.js capThin: almost
+ * no text) counts as not captured, so Not captured shows it and Capture reads it again. */
+const hasRead = l => !!l.cap && !l.cap.thin;
+
 /* A web page's site; local files and browser pages have none, so they group under a name. */
 const siteOf = url => ({ web: () => hostOf(url), file: () => "Local files", other: () => "Browser pages" })[kindOf(url)]();
 
 function matches(link, term) {
   if (stashOnly === "list" ? !link.list : stashOnly && !link.copies.some(c => c.stash === stashOnly)) return false;
-  if (bar.captured === "only" && !(isWeb(link.url) && link.cap)) return false;
-  if (bar.captured === "out" && !(isWeb(link.url) && !link.cap)) return false;
+  if (bar.captured === "only" && !(isWeb(link.url) && hasRead(link))) return false;
+  if (bar.captured === "out" && !(isWeb(link.url) && !hasRead(link))) return false;
   if (bar.local === "only" && isWeb(link.url)) return false;
   if (bar.local === "out" && !isWeb(link.url)) return false;
   if (bar.dups === "only" && !dupKeys.has(link.key)) return false;
@@ -342,16 +346,15 @@ function setSelecting(on) {
   paintTicks();
 }
 
-/* Hands the ticked web links not captured yet to the capture queue, after asking for their sites: the
- * permission prompt has to come straight from the click, so it is the first thing awaited. A pattern
- * names a host without its port, which match patterns do not take. */
+/* Hands the ticked web links not captured yet, or captured thin (links.js capThin), to the capture queue.
+ * It asks for every site first: a link may redirect anywhere, and reading the page it lands on needs
+ * that site too. The prompt has to come straight from the click, so it is the first thing awaited. */
 async function captureTicked() {
   const links = selectedKeys().map(k => data.links.find(l => l.key === k)).filter(l => l && /^https?:/.test(l.url));
-  const urls = links.filter(l => !l.cap).map(l => l.url);
+  const urls = links.filter(l => !hasRead(l)).map(l => l.url);
   if (!urls.length) { say(links.length ? "Every ticked link is captured already" : "None of the ticked links is a web page"); return; }
-  const origins = [...new Set(urls.map(u => { try { const x = new URL(u); return `${x.protocol}//${x.hostname}/*`; } catch (e) { return null; } }).filter(Boolean))];
-  const granted = await browser.permissions.request({ origins }).catch(() => false);
-  if (!granted) { say(`Capturing them needs access to ${plural(origins.length, "site")}`); return; }
+  const granted = await browser.permissions.request({ origins: ["*://*/*"] }).catch(() => false);
+  if (!granted) { say("Capturing needs access to the sites the links lead to; Firefox asks once"); return; }
   const res = await send({ type: "capture-queue-start", urls, speed: queueSpeed() });
   if (!res?.ok) { say(res?.error || "The capture queue did not start"); return; }
   const done = links.length - urls.length;
@@ -967,7 +970,7 @@ function renderDomainChips() {
   for (const l of data.links) {
     const h = siteOf(l.url);
     counts.set(h, (counts.get(h) || 0) + 1);
-    if (isWeb(l.url) && l.cap) captured.set(h, (captured.get(h) || 0) + 1);
+    if (isWeb(l.url) && hasRead(l)) captured.set(h, (captured.get(h) || 0) + 1);
   }
   const rank = h => (domainSel.has(h) ? 2 : domainOut.has(h) ? 1 : 0);
   const hosts = [...counts.entries()].sort((a, b) => (rank(b[0]) - rank(a[0])) || b[1] - a[1] || a[0].localeCompare(b[0]));
@@ -1335,10 +1338,10 @@ function renderRows() {
   const total = data.links.length;
   const counts = {
     all: total,
-    uncaptured: data.links.filter(l => isWeb(l.url) && !l.cap).length,
+    uncaptured: data.links.filter(l => isWeb(l.url) && !hasRead(l)).length,
     local: data.links.filter(l => !isWeb(l.url)).length,
     filtered: data.filteredLinks.length,
-    captured: data.links.filter(l => isWeb(l.url) && l.cap).length,
+    captured: data.links.filter(l => isWeb(l.url) && hasRead(l)).length,
     untagged: data.links.filter(l => !l.tags.length).length,
     dups: (dupKeys = new Set(duplicateSets().map(s => s.link.key))).size,
   };

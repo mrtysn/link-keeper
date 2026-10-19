@@ -191,16 +191,22 @@ async function addItems(entries, note = "", group = dayGroup()) {
 /* Injected into the target tab. extractors.js returns null while a single-page app is still
  * hydrating, so poll briefly rather than capture an empty shell. A login page, captcha or block
  * comes back as `wall`, which captureUrl refuses to store; the tab in front of you is read whatever
- * it is (checkWall false), since you chose it. */
-async function runExtractor(checkWall = true) {
-  for (let i = 0; i < 12; i++) {
+ * it is (checkWall false), since you chose it. A page read out of sight (patient) may still be an app
+ * drawing itself after "complete": a plain page with under 200 characters of text is read again until
+ * it has more or 8 s have passed, and the fullest read is kept. */
+async function runExtractor(checkWall = true, patient = false) {
+  const end = Date.now() + (patient ? 8000 : 3000);
+  let best = null;
+  for (;;) {
     const wall = checkWall && LK.wall();
     if (wall) return { kind: "page", title: document.title || null, url: location.href, wall };
     const record = LK.extract();
-    if (record) return record;
+    const size = r => (r?.text || "").trim().length;
+    if (record && (!patient || record.kind !== "page" || size(record) >= 200)) return record;
+    if (record && (!best || size(record) >= size(best))) best = record;
+    if (Date.now() >= end) return best || { kind: "page", title: document.title || null, url: location.href, incomplete: true };
     await new Promise(r => setTimeout(r, 250));
   }
-  return { kind: "page", title: document.title || null, url: location.href, incomplete: true };
 }
 
 /* t.co hides the destination, and the destination is half the reason to keep a tweet. */
@@ -444,7 +450,7 @@ async function hasSiteAccess() {
  */
 async function readTab(tabId) {
   await browser.scripting.executeScript({ target: { tabId }, files: ["extractors.js"] });
-  const [result] = await browser.scripting.executeScript({ target: { tabId }, func: runExtractor });
+  const [result] = await browser.scripting.executeScript({ target: { tabId }, func: runExtractor, args: [true, true] });
   return result?.result || null;
 }
 

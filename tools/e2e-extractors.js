@@ -278,6 +278,12 @@ await check("a capture of a link behind a wall is refused, says why, and stores 
   eq((await getCaptures()).length, before, "captures");
 });
 
+await check("a capture out of sight waits for an app to draw its text, and keeps all of it", async () => {
+  const res = await captureUrl(at("/app/late"));
+  if (!res.ok) throw new Error(res.error);
+  if (!/patient reader waits/.test(res.record.text || "")) throw new Error(`text ${JSON.stringify(res.record.text)}`);
+});
+
 const queueDone = async () => {
   for (let waited = 0; waited < 60000; waited += 250) {
     const s = await handleMessage({ type: "capture-queue-status" });

@@ -115,6 +115,11 @@ const hrefOf = l => (typeof l === "string" ? l : l?.resolved || l?.href) || null
  * its origin is kept. */
 const capHasContent = c => !!(c.text || c.title || c.images?.length || c.screenshot || c.links?.length || c.replies?.length || c.code_blocks?.length);
 
+/* A capture that read almost nothing of its page: a plain page under 40 characters of text, or one cut
+ * short (an app that had not drawn yet, a PDF, a mail inbox). A site reader's record (a tweet, a repo, a
+ * reel) is never thin, since its fields are the content. The capture queue reads such a link again. */
+const capThin = c => !!c && (!!c.incomplete || ((!c.kind || c.kind === "page") && (c.text || "").trim().length < 40));
+
 /* Where a DM link came from, when an importer recorded it, or null. */
 function originOf(c) {
   const o = {
@@ -144,6 +149,7 @@ function capView(c, thumbs = {}) {
     shotThumb: thumbs[c.screenshot?.filename] || null,
     shotId: c.screenshot?.downloadId ?? null,
     code_blocks: (c.code_blocks || []).length,
+    thin: capThin(c),
   };
 }
 

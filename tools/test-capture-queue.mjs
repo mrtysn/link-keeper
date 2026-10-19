@@ -48,6 +48,7 @@ function world({ answers = {}, captured = [], saved = null } = {}) {
     now: () => clock,
     setTimer: (fn, ms) => { const t = { at: clock + ms, fn }; timers.push(t); return t; },
     random: () => 0.5,   // gaps are exactly 1.1 × the site's
+    thin: r => !!r.thin,
   };
   // Its answers come from the VM's realm; structuredClone brings them into this one for deepEqual.
   const q = ctx.makeCaptureQueue(fx);
@@ -183,6 +184,16 @@ await check("a failure doubles its site's wait and a success halves it back", as
   assert.deepEqual(w.loadingNow(), [], "a success halves it to 4.4 s, not straight back to 2.2");
   await w.advance(200);
   assert.deepEqual(w.loadingNow(), [A(4)]);
+});
+
+await check("a capture that read almost nothing is kept but listed, and does not stop its site", async () => {
+  const thin = { ok: true, record: { thin: true } };
+  const w = world({ answers: { [A(1)]: thin, [A(2)]: thin, [A(3)]: thin } });
+  await w.q.start([A(1), A(2), A(3), A(4)]);
+  await w.drain();
+  const s = structuredClone(await w.q.status());
+  assert.deepEqual([s.captured, s.failed.length, Object.keys(s.stoppedSites).length], [1, 3, 0], "captured, listed, stopped sites");
+  assert.match(s.failed[0].error, /almost no text/);
 });
 
 await check("a finished queue counts its captures and closes its window", async () => {

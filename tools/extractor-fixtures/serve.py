@@ -30,6 +30,8 @@ OTHER = {
     "/reel/SomeOtherReel/": "instagram-reel.html",
     "/cdn-cgi/challenge": "cloudflare-challenge.html",
     "/accounts/login/": "login-page.html",
+    # An app that draws its text 1.5 s after load.
+    "/app/late": "app-late.html",
 }
 
 

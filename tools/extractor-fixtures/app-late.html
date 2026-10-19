@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Late App</title></head>
+<body>
+<div id="root"></div>
+<script>
+  // An app that draws its content well after the page reports it has loaded.
+  setTimeout(() => {
+    document.getElementById("root").innerHTML = "<main><h1>Late App</h1>" +
+      "<p>This text appears a second and a half after load, the way a single-page app draws itself once its data arrives. " +
+      "A reader that reads at load time sees an empty root and keeps nothing.</p>" +
+      "<p>A patient reader waits for the text to appear and keeps all of it, which is what a capture out of sight needs.</p></main>";
+  }, 1500);
+</script>
+</body>
+</html>

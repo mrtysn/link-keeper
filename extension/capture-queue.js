@@ -151,7 +151,12 @@ function makeCaptureQueue(fx) {
       if (state.backoff[host] === 1) delete state.backoff[host];
       state.nextAt[host] = fx.now() + siteGap(host) * speed().gap * (state.backoff[host] || 1) * (0.8 + 0.6 * fx.random());
     }
-    if (res.ok) {
+    // A thin read is kept, since it is all the page gave, but listed with the failures so it is seen and
+    // Retry failed reads it again; it is no refusal, so the site carries on.
+    if (res.ok && res.record && fx.thin?.(res.record)) {
+      state.failed.push({ url, error: "kept, but the page showed almost no text", thin: true });
+      delete state.streaks[host];
+    } else if (res.ok) {
       res.skipped ? state.skipped++ : state.captured++;
       delete state.streaks[host];
     } else {
@@ -269,7 +274,8 @@ function makeCaptureQueue(fx) {
 if (typeof browser !== "undefined" && typeof captureUrl === "function") {
   var captureQueue = makeCaptureQueue({
     capture: (url, windowId) => captureUrl(url, "", windowId),
-    isCaptured: async url => (await getCaptures()).some(c => keyOf(c.url) === keyOf(url)),
+    // A thin capture (links.js capThin) is read again.
+    isCaptured: async url => (await getCaptures()).some(c => keyOf(c.url) === keyOf(url) && !capThin(c)),
     load: async () => (await browser.storage.session.get("captureQueue")).captureQueue || null,
     save: state => browser.storage.session.set({ captureQueue: state }),
     // Minimised from the start, so it never takes focus; its blank tab keeps it open between pages.
@@ -279,6 +285,7 @@ if (typeof browser !== "undefined" && typeof captureUrl === "function") {
     now: () => Date.now(),
     setTimer: (fn, ms) => setTimeout(fn, ms),
     random: Math.random,
+    thin: capThin,
   });
   captureQueue.init();
 }
