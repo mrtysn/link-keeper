@@ -267,6 +267,7 @@ const wallOf = async path => {
 await check("a wall is told from a page: a login redirect and a Cloudflare challenge are walls, an article is not", async () => {
   eq((await wallOf("/reel/Walled/"))?.kind, "login", "redirected to a login page");
   eq((await wallOf("/cdn-cgi/challenge"))?.kind, "captcha", "a challenge page");
+  eq((await wallOf("/hn/item"))?.kind, "blocked", "Hacker News's rate-limit page");
   for (const path of ["/blog/rewrote-build", "/wiki/Suspension_bridge", "/docs/getting-started"]) eq(await wallOf(path), null, path);
 });
 

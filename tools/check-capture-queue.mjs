@@ -2,8 +2,8 @@
 // DESC: Check a running capture queue: each site's captures spaced at least its wait, and each capture looking like its page.
 //
 // Reads the queue's state and this run's captures through link-keeper (read-only), then prints one block: progress,
-// the busiest sites with their closest two captures, any pair closer than the site's wait (capture-queue.js
-// SITE_GAPS, at the run's speed, less the 20% jitter), and the captures that look wrong: no title, under 40
+// the busiest sites with their closest two captures, any pair closer than the site's wait (the queue's own
+// figure for it, robots.txt Crawl-delay included, less the 20% jitter), and the captures that look wrong: no title, under 40
 // characters of text, marked incomplete, a login or captcha title, or a page that moved to another site.
 //
 // Usage: node tools/check-capture-queue.mjs
@@ -18,10 +18,10 @@ const lk = (...a) => JSON.parse(execFileSync("node", [cli, ...a], { maxBuffer: 1
 const q = lk("call", "capture-queue-status");
 const caps = lk("call", "export").captures.filter(c => q.started_at && c.captured_at >= q.started_at && c.via === "list");
 const host = u => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return "?"; } };
-const SLOW = /(^|\.)(instagram\.com|x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.(net|com)|tiktok\.com)$/;
-const MED = /(^|\.)(reddit\.com|youtube\.com|google\.[a-z.]+)$/;
-const factor = { gentle: 2, normal: 1, fast: 0.5 }[q.speed] || 1;
-const gap = h => (SLOW.test(h) ? 30 : MED.test(h) ? 8 : 2) * factor;
+// The queue's own wait for each site (capture-queue.js waitOf), in seconds; a copy of its table here once
+// let a 2 s wait on Hacker News read as fine.
+const waits = new Map((q.sites || []).map(s => [s.host, s.gap / 1000]));
+const gap = h => waits.get(h) ?? 0;
 
 console.log(`${new Date().toISOString().slice(11, 19)}  ${q.status} · ${q.speed} · ${q.captured + q.skipped + q.failed.length}/${q.total} done · ${q.captured} captured · ${q.failed.length} failed · ${q.pending} waiting`);
 console.log(`  loading: ${q.active.map(host).join(", ") || "-"} · stopped: ${Object.keys(q.stoppedSites).join(", ") || "-"}`);

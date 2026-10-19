@@ -4,8 +4,11 @@
  * page, so closing Links does not stop it. Each link is read by captureUrl in a minimised window of its
  * own, two at a time, never two of one site at once. Sites take turns: of the sites ready to load, the
  * one served longest ago goes next, so a pile of one site never holds the others back. A site waits
- * between its pages (SITE_GAPS: half a minute for the sites a login belongs to), so a run looks like a
- * person reading, not a crawler, and the wait adapts: each failure doubles it (up to SITE_BACKOFF_MAX
+ * between its pages (SITE_GAPS: ten seconds, half a minute for the sites a login belongs to and for
+ * Hacker News), and never less than the Crawl-delay its robots.txt asks of every crawler, read once per
+ * site before its first page, at any speed. So a run looks like a person reading, not a crawler. On
+ * 2026-10-20 a 2 s wait got the owner's Hacker News account rate-limited: HN's robots.txt asks for 30 s.
+ * The wait adapts: each failure doubles it (up to SITE_BACKOFF_MAX
  * times), each success halves it back toward the site's own. A site that answers with a wall (a login page, a captcha, a block) or fails three times in a row is stopped:
  * its remaining links are set aside as failed, with the reason, and the rest carry on. Retry failed puts
  * them back. Each failure is also kept on its link (background.js, captureFails), where Links lists it
@@ -28,10 +31,30 @@ const SPEEDS = {
 const SITE_STOP_AFTER = 3;   // failures in a row that stop a site
 const SITE_GAPS = [
   // [host pattern, seconds between two pages of that site]
-  [/(^|\.)(instagram\.com|x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.(net|com)|tiktok\.com)$/, 30],
-  [/(^|\.)(reddit\.com|youtube\.com|google\.[a-z.]+)$/, 8],
+  [/(^|\.)(instagram\.com|x\.com|twitter\.com|linkedin\.com|facebook\.com|threads\.(net|com)|tiktok\.com|news\.ycombinator\.com)$/, 30],
+  [/(^|\.)(reddit\.com|youtube\.com|google\.[a-z.]+)$/, 15],
 ];
-const DEFAULT_GAP = 2;
+const DEFAULT_GAP = 10;
+const CRAWL_DELAY_MAX = 300;   // seconds; a robots.txt asking for more is held to this
+
+/* The Crawl-delay robots.txt asks of every crawler (the "User-agent: *" groups), in seconds, or 0. */
+function crawlDelayOf(robots) {
+  let delay = 0, agents = [], inRules = false;
+  for (const raw of String(robots || "").split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, "").trim();
+    const m = line.match(/^([a-z-]+)\s*:\s*(.*)$/i);
+    if (!m) continue;
+    const [, field, value] = [m[0], m[1].toLowerCase(), m[2].trim()];
+    if (field === "user-agent") {
+      if (inRules) { agents = []; inRules = false; }
+      agents.push(value);
+    } else {
+      inRules = true;
+      if (field === "crawl-delay" && agents.includes("*")) delay = Math.max(delay, Number(value) || 0);
+    }
+  }
+  return Math.min(delay, CRAWL_DELAY_MAX);
+}
 const SITE_BACKOFF_MAX = 16;   // the most a site's wait grows by after failures
 
 const siteKey = url => {
@@ -46,9 +69,11 @@ function makeCaptureQueue(fx) {
   const busy = new Set();   // sites with a page loading now
   let timer = null;
 
-  const blank = () => ({ status: "idle", speed: "normal", total: 0, captured: 0, skipped: 0, pending: [], active: [], failed: [], stoppedSites: {}, streaks: {}, nextAt: {}, servedAt: {}, backoff: {}, perSite: {}, recent: [], windowId: null, started_at: null });
+  const blank = () => ({ status: "idle", speed: "normal", crawl: {}, total: 0, captured: 0, skipped: 0, pending: [], active: [], failed: [], stoppedSites: {}, streaks: {}, nextAt: {}, servedAt: {}, backoff: {}, perSite: {}, recent: [], windowId: null, started_at: null });
   const save = () => fx.save(state);
   const speed = () => SPEEDS[state.speed] || SPEEDS.normal;
+  // A site's wait now: its own at this speed after backoff, never under its robots.txt Crawl-delay.
+  const waitOf = (host, jitter = 1) => Math.max(siteGap(host) * speed().gap * (state.backoff[host] || 1) * jitter, (state.crawl[host] || 0) * 1000);
   const view = () => ({ ...state, pending: state.pending.length, next: nextWait(), sites: sites() });
 
   // Each site the run touches: links waiting, captured and failed, when it may load next, its wait between
@@ -56,7 +81,7 @@ function makeCaptureQueue(fx) {
   function sites() {
     const by = {};
     const site = h => (by[h] ||= { host: h, waiting: 0, captured: 0, failed: 0, loading: false, nextAt: state.nextAt[h] || 0,
-      gap: siteGap(h) * speed().gap * (state.backoff[h] || 1), stopped: state.stoppedSites[h] || null });
+      gap: waitOf(h), stopped: state.stoppedSites[h] || null });
     for (const url of state.pending) site(siteKey(url)).waiting++;
     for (const url of state.active) site(siteKey(url)).loading = true;
     for (const [h, n] of Object.entries(state.perSite)) Object.assign(site(h), { captured: n.captured || 0, failed: n.failed || 0 });
@@ -85,6 +110,7 @@ function makeCaptureQueue(fx) {
     state.servedAt ||= {};
     state.backoff ||= {};
     state.speed ||= "normal";
+    state.crawl ||= {};
     state.perSite ||= {};
     state.recent ||= [];
     if (state.status === "running") pump();
@@ -159,7 +185,11 @@ function makeCaptureQueue(fx) {
     let loaded = true;
     try {
       if (await fx.isCaptured(url)) { res = { ok: true, skipped: true }; loaded = false; }
-      else res = await fx.capture(url, await ensureWindow());
+      else {
+        // A site's robots.txt, once, before its first page.
+        if (!(host in state.crawl)) state.crawl[host] = Math.max(0, Number(await fx.crawlDelay?.(url).catch(() => 0)) || 0);
+        res = await fx.capture(url, await ensureWindow());
+      }
     } catch (e) {
       res = { ok: false, error: String(e.message || e) };
     }
@@ -170,7 +200,7 @@ function makeCaptureQueue(fx) {
       const scale = state.backoff[host] || 1;
       state.backoff[host] = res.ok ? Math.max(1, scale / 2) : Math.min(SITE_BACKOFF_MAX, scale * 2);
       if (state.backoff[host] === 1) delete state.backoff[host];
-      state.nextAt[host] = fx.now() + siteGap(host) * speed().gap * (state.backoff[host] || 1) * (0.8 + 0.6 * fx.random());
+      state.nextAt[host] = fx.now() + waitOf(host, 0.8 + 0.6 * fx.random());
     }
     // A thin read is kept, since it is all the page gave, but listed with the failures so it is seen and
     // Retry failed reads it again; it is no refusal, so the site carries on.
@@ -319,6 +349,11 @@ if (typeof browser !== "undefined" && typeof captureUrl === "function") {
     setTimer: (fn, ms) => setTimeout(fn, ms),
     random: Math.random,
     thin: capThin,
+    // Read once per site, as a crawler would, and kept for the run.
+    crawlDelay: async url => {
+      const res = await fetch(new URL("/robots.txt", url), { credentials: "omit", signal: AbortSignal.timeout(5000) });
+      return res.ok ? crawlDelayOf(await res.text()) : 0;
+    },
     // Remembered on the link, so Links lists it under Failed and the next run leaves it be.
     recordFail: recordCaptureFail,
   });

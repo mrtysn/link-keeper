@@ -564,9 +564,12 @@ next launch. Site chips count captured of all (`12/132`) while a site has links 
 window of the queue's own that opens minimised and closes when the run ends or pauses, two links at a
 time and never two of one site at once. Sites take turns: of the sites ready to load, the one served
 longest ago goes next, so a hundred Instagram posts at the top of the line never hold the rest back. A
-site waits between its pages: 30 s (give or take) for Instagram, x.com, LinkedIn and the other sites a
-login belongs to, 8 s for Reddit, YouTube and Google, 2 s for the rest, so a run of a thousand takes
-hours, as a person reading would. The wait adapts: each failure on a site doubles it, up to 16 times,
+site waits between its pages: 30 s (give or take) for Instagram, x.com, LinkedIn, the other sites a login
+belongs to and Hacker News, 15 s for Reddit, YouTube and Google, 10 s for the rest, and never less than
+the Crawl-delay its robots.txt asks of every crawler (read once per site, at any speed). A run of a
+thousand takes hours, as a person reading would. A 2 s wait once got Hacker News to rate-limit the
+owner; its robots.txt asks for 30 s, and its "not able to serve your requests this quickly" page now
+stops the site like any other block. The wait adapts: each failure on a site doubles it, up to 16 times,
 and each success halves it back.
 
 A capture refuses a page that stands in front of the one asked for — a login page the site sent it to,

@@ -36,6 +36,8 @@ OTHER = {
     "/app/listing": "app-listing.html",
     # A page that holds its main thread for 15 s after load, so a read of it gets no answer.
     "/app/busy": "app-busy.html",
+    # Hacker News's rate-limit page, as it answers once requests come too fast.
+    "/hn/item": "hn-rate-limit.html",
 }
 
 

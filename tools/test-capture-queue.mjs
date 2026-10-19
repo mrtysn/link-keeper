@@ -22,11 +22,12 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
 
 const source = readFileSync(new URL("../extension/capture-queue.js", import.meta.url), "utf8");
 const ctx = vm.createContext({ URL, setTimeout, clearTimeout, console });
-vm.runInContext(`${source}\nthis.makeCaptureQueue = makeCaptureQueue;`, ctx);
+vm.runInContext(`${source}\nthis.makeCaptureQueue = makeCaptureQueue; this.crawlDelayOf = crawlDelayOf;`, ctx);
 
 /* A world for one queue: answers[url] is what capturing it returns (default ok); every capture resolves
  * only when the test lets it, so what is loading at once can be seen. */
-function world({ answers = {}, captured = [], saved = null } = {}) {
+function world({ answers = {}, captured = [], saved = null, robots = {} } = {}) {
+  const robotsRead = [];   // hosts whose robots.txt was read
   let clock = 1_000_000;
   const timers = [];
   const loading = [];   // [{ url, resolve }]
@@ -50,13 +51,14 @@ function world({ answers = {}, captured = [], saved = null } = {}) {
     setTimer: (fn, ms) => { const t = { at: clock + ms, fn }; timers.push(t); return t; },
     random: () => 0.5,   // gaps are exactly 1.1 × the site's
     thin: r => !!r.thin,
+    crawlDelay: async url => { robotsRead.push(new URL(url).hostname); return robots[new URL(url).hostname] || 0; },
     recordFail: (url, error, kind) => { recorded[url] = kind; },
   };
   // Its answers come from the VM's realm; structuredClone brings them into this one for deepEqual.
   const q = ctx.makeCaptureQueue(fx);
   const settle = () => new Promise(r => setImmediate(r));
   return {
-    q, log, windows, loading, recorded, store: () => store,
+    q, log, windows, loading, recorded, robotsRead, store: () => store,
     async flush() { for (let i = 0; i < 10; i++) await settle(); },
     // Finishes the oldest loading page (or the one for url).
     async finish(url) {
@@ -112,19 +114,21 @@ await check("two links load at once, never two of one site", async () => {
   assert.equal(w.windows.opened, 1, "one window for both");
 });
 
-await check("a site waits its gap between pages: 2 s for most, 30 s for a login site", async () => {
+await check("a site waits its gap between pages: 10 s for most, 30 s for a login site", async () => {
   const w = world();
   await w.q.start([IG(1), IG(2), GH(1), GH(2)]);
   await w.flush();
   await w.finish(GH(1));
   await w.finish(IG(1));
   assert.deepEqual(w.loadingNow(), [], "both sites wait");
-  await w.advance(2200);
-  assert.deepEqual(w.loadingNow(), [GH(2)], "github after 2.2 s");
+  await w.advance(10_900);
+  assert.deepEqual(w.loadingNow(), [], "github not before 11 s");
+  await w.advance(100);
+  assert.deepEqual(w.loadingNow(), [GH(2)], "github after 11 s");
   await w.finish();
-  await w.advance(30_000);
+  await w.advance(21_900);
   assert.deepEqual(w.loadingNow(), [], "instagram not before 33 s");
-  await w.advance(3000);
+  await w.advance(100);
   assert.deepEqual(w.loadingNow(), [IG(2)], "instagram at 33 s");
 });
 
@@ -139,7 +143,7 @@ await check("sites take turns: the ready site served longest ago goes next, what
   assert.deepEqual(w.loadingNow(), [B(1), C(1)], "c, never served, before a waits out its gap");
   await w.finish(B(1));
   await w.finish(C(1));
-  await w.advance(3000);
+  await w.advance(12_000);
   assert.deepEqual(w.loadingNow(), [A(2), B(2)], "then a and b again, a first as served longer ago");
 });
 
@@ -151,9 +155,9 @@ await check("speed: Gentle loads one at a time and doubles waits, Fast three at 
   await w.finish();
   await w.finish();
   await w.finish();
-  await w.advance(4300);
-  assert.deepEqual(w.loadingNow(), [], "gentle: a's wait is 4.4 s, not 2.2");
-  await w.advance(200);
+  await w.advance(21_900);
+  assert.deepEqual(w.loadingNow(), [], "gentle: a's wait is 22 s, not 11");
+  await w.advance(100);
   assert.deepEqual(w.loadingNow(), [A(2)]);
   const f = world();
   await f.q.start([A(1), A(2), B(1), C(1)]);
@@ -161,9 +165,30 @@ await check("speed: Gentle loads one at a time and doubles waits, Fast three at 
   await f.flush();
   assert.deepEqual(f.loadingNow(), [A(1), B(1), C(1)], "fast: three at a time");
   await f.finish(A(1));
-  await f.advance(1200);
-  assert.deepEqual(f.loadingNow(), [B(1), C(1), A(2)], "fast: a's wait is 1.1 s");
+  await f.advance(5600);
+  assert.deepEqual(f.loadingNow(), [B(1), C(1), A(2)], "fast: a's wait is 5.5 s");
   assert.equal((await f.q.setSpeed("warp")).ok, false, "an unknown speed is refused");
+});
+
+await check("a site's robots.txt Crawl-delay is read once and is the least it waits, at any speed", async () => {
+  const w = world({ robots: { "a.example": 45 } });
+  await w.q.start([A(1), A(2), A(3)], "fast");
+  await w.flush();
+  await w.finish();
+  await w.advance(44_900);
+  assert.deepEqual(w.loadingNow(), [], "not before 45 s, though fast would wait 5.5");
+  await w.advance(100);
+  assert.deepEqual(w.loadingNow(), [A(2)]);
+  await w.drain();
+  assert.deepEqual([...w.robotsRead], ["a.example"], "read once");
+});
+
+await check("Crawl-delay is taken from the groups for every crawler, and held to 300 s", async () => {
+  assert.equal(ctx.crawlDelayOf("User-agent: *\nDisallow: /x?\nCrawl-delay: 30\n"), 30, "Hacker News's");
+  assert.equal(ctx.crawlDelayOf("User-agent: Googlebot\nCrawl-delay: 99\n\nUser-agent: *\nDisallow:\n"), 0, "another crawler's only");
+  assert.equal(ctx.crawlDelayOf("User-agent: bingbot\nUser-agent: *\nCrawl-delay: 5 # be kind\n"), 5, "a group naming several");
+  assert.equal(ctx.crawlDelayOf("User-agent: *\nCrawl-delay: 3600\n"), 300, "held to 300");
+  assert.equal(ctx.crawlDelayOf(""), 0, "none");
 });
 
 await check("a failure doubles its site's wait and a success halves it back", async () => {
@@ -172,19 +197,19 @@ await check("a failure doubles its site's wait and a success halves it back", as
   await w.q.start([A(1), A(2), A(3), A(4)]);
   await w.flush();
   await w.finish();
-  await w.advance(4000);
-  assert.deepEqual(w.loadingNow(), [], "not at 4 s: one failure makes 2 s × 2 × 1.1");
-  await w.advance(500);
-  assert.deepEqual(w.loadingNow(), [A(2)], "at 4.4 s");
-  await w.finish();
-  await w.advance(8700);
-  assert.deepEqual(w.loadingNow(), [], "not at 8.7 s after a second failure");
+  await w.advance(21_900);
+  assert.deepEqual(w.loadingNow(), [], "not before 22 s: one failure makes 10 s × 2 × 1.1");
   await w.advance(100);
-  assert.deepEqual(w.loadingNow(), [A(3)], "at 8.8 s");
+  assert.deepEqual(w.loadingNow(), [A(2)], "at 22 s");
   await w.finish();
-  await w.advance(4300);
-  assert.deepEqual(w.loadingNow(), [], "a success halves it to 4.4 s, not straight back to 2.2");
-  await w.advance(200);
+  await w.advance(43_900);
+  assert.deepEqual(w.loadingNow(), [], "not before 44 s after a second failure");
+  await w.advance(100);
+  assert.deepEqual(w.loadingNow(), [A(3)], "at 44 s");
+  await w.finish();
+  await w.advance(21_900);
+  assert.deepEqual(w.loadingNow(), [], "a success halves it to 22 s, not straight back to 11");
+  await w.advance(100);
   assert.deepEqual(w.loadingNow(), [A(4)]);
 });
 

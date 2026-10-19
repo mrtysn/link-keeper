@@ -590,7 +590,8 @@ const LK = (() => {
   const LOGIN_PATH = /^\/(accounts\/login|i\/flow\/login|login|signin|sign-in|uas\/login|authwall|checkpoint|ServiceLogin|v3\/signin)(\/|$|\?)/i;
   const CAPTCHA_TITLE = /^(just a moment|attention required|verifying you are human|checking your browser|are you a robot|security check|bot verification)/i;
   const BLOCKED_TITLE = /^(access denied|403 forbidden|forbidden|429 too many requests|too many requests|rate limit)/i;
-  const BLOCKED_TEXT = /(you('ve| have) been blocked|unusual traffic|too many requests|rate.limited|temporarily (blocked|restricted))/i;
+  // "...requests this quickly" is Hacker News's rate limit, a page of one line.
+  const BLOCKED_TEXT = /(you('ve| have) been blocked|unusual traffic|too many requests|rate.limited|temporarily (blocked|restricted)|not able to serve your requests this quickly)/i;
 
   function wall() {
     const host = location.hostname.toLowerCase();
