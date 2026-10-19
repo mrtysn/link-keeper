@@ -1138,7 +1138,10 @@ function newTagChip() {
 }
 
 /* Each switch shows its state: its name and count, ticked when narrowing to it, struck through when
- * leaving it out; the title says what the next click does. */
+ * leaving it out; the title says what the next click does. A switch keeps the width of its widest
+ * state (every state is drawn in one cell, all but the current one hidden), so clicking it never
+ * reflows the bar: "Not captured", bold and ticked, would push the view toggles onto a second row. */
+const MARKS = { only: "✓", in: "+", out: "✕" };
 function drawBar(counts) {
   const look = {
     captured: { any: ["", "Captured", counts.captured, "Show only captured pages"], only: ["only", "Captured", counts.captured, "Show only pages not captured yet"],
@@ -1156,7 +1159,16 @@ function drawBar(counts) {
     b.dataset.state = state || "0";
     b.setAttribute("aria-pressed", String(!!state));
     b.title = `Next click: ${next.charAt(0).toLowerCase()}${next.slice(1)}`;
-    b.replaceChildren(el("span", { className: "lbl", textContent: label }), " ", el("span", { className: "n", textContent: n }), stateDots(BAR[k].indexOf(bar[k])));
+    const face = (st, lbl, count) => el("span", { className: "face" },
+      ...(MARKS[st] ? [el("span", { className: "mark", textContent: MARKS[st] }), " "] : []),
+      el("span", { className: "lbl", textContent: lbl }), " ", el("span", { className: "n", textContent: count }));
+    const ghosts = Object.values(look[k]).map(([st, lbl, count]) => {
+      const g = face(st, lbl, count);
+      g.classList.add("ghost");
+      g.setAttribute("aria-hidden", "true");
+      return g;
+    });
+    b.replaceChildren(el("span", { className: "faces" }, face(state, label, n), ...ghosts), stateDots(BAR[k].indexOf(bar[k])));
   }
 }
 

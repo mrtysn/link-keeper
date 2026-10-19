@@ -397,6 +397,19 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.click("#f-captured"); await p.click("#f-captured"); await p.waitForTimeout(200);
   const uncaptured = await n("captured");
   ok(await p.$eval("#f-captured .lbl", e => e.textContent) === "Not captured", "filters: Captured's third state is Not captured");
+  {
+    // Clicking a switch never moves anything else in the bar: each keeps its widest state's width.
+    const layout = () => p.$$eval(".bar > *, .bar .chip", l => l.map(e => { const r = e.getBoundingClientRect(); return `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)}`; }).join(" "));
+    await p.setViewportSize({ width: 1000, height: 900 });   // the owner's window, where the bar is full
+    await p.click("#f-captured"); await p.waitForTimeout(200);   // back to any
+    const before = await layout();
+    for (const id of ["#f-captured", "#f-captured", "#f-local", "#f-dups"]) {
+      await p.click(id); await p.waitForTimeout(150);
+      ok(await layout() === before, `filters: clicking ${id} leaves the bar where it was`);
+    }
+    await p.click("#f-local"); await p.click("#f-local"); await p.click("#f-dups"); await p.click("#f-dups"); await p.waitForTimeout(200);
+    await p.setViewportSize({ width: 1300, height: 900 });   // Captured ends where it started, on Not captured
+  }
   await p.click("#f-captured"); await p.waitForTimeout(200);
   const all = +(await p.$eval("#sub", e => e.textContent)).match(/^(\d+) link/)[1];
   ok(captured + uncaptured + await n("local") === all,

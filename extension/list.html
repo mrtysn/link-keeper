@@ -98,6 +98,15 @@
      is plain; narrowing to it is outlined with a tick; leaving it out is struck through with a cross.
      The same look marks a Sites or Tags chip that is picked (✓) or excluded (✕). */
   .filters.tri { display: flex; flex-wrap: nowrap; gap: 2px; }
+  /* A switch draws all its states in one cell, the current one shown, so it is as wide as its widest
+     (bold, with its mark) whatever state it is in, and nothing beside it moves (list.js drawBar). */
+  .filters.tri .faces { display: inline-grid; }
+  .filters.tri .face { grid-area: 1 / 1; justify-self: center; white-space: nowrap; }
+  .filters.tri .face.ghost { visibility: hidden; font-weight: 600; }
+  .filters.tri .chip::before { content: none; }
+  .filters.tri .mark { font-weight: 700; color: var(--accent); }
+  .filters.tri .chip[data-state="out"] .mark { color: var(--bad); }
+  .filters.tri .chip[data-state="out"] .face .lbl { text-decoration: line-through; }
   /* Three dots on a filter switch, its state filled (list.js stateDots), shown only on hover or focus.
      Site and tag chips have none: their look is their state (gray off, outlined only, struck out left out). */
   /* Drawn over the control's bottom edge rather than beside its text, so showing them on hover never
