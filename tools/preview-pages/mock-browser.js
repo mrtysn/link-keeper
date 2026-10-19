@@ -456,11 +456,15 @@
       removeListener(fn) { bookmarkListeners[k]?.delete(fn); },
     }])),
     permissions: { request: async () => true, contains: async () => true },
+    windows: { update: async () => {} },
     tabs: {
-      update: async () => {}, create: async () => {},
+      // What the pages open is kept on window.openedTabs, for the tests to read.
+      update: async () => {}, create: async props => { (window.openedTabs ||= []).push(props.url); },
+      getCurrent: async () => ({ id: 1, index: 0, windowId: 1 }),
       // The popup's active tab: ?tab=new for a page held nowhere, ?tab=about for a browser page,
-      // ?tab=<url> for that one; otherwise a link held in two stashes.
-      query: async () => {
+      // ?tab=<url> for that one; otherwise a link held in two stashes. No other extension page is open.
+      query: async q => {
+        if (q?.url) return [];
         const want = params.get("tab");
         if (want === "new") return [{ id: 1, url: "https://new.example/an-article", title: "An article not saved yet" }];
         if (want === "about") return [{ id: 1, url: "about:preferences", title: "Settings" }];

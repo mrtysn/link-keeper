@@ -841,6 +841,7 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.click("#sel-capture"); await p.waitForTimeout(300);
   ok(/^Queued 3 links to capture/.test(await p.$eval("#msg", e => e.textContent)), `capture queue: it says what it queued (${await p.$eval("#msg", e => e.textContent)})`);
   ok(await p.$eval("#selbar", e => e.hidden), "capture queue: the selection ends");
+  ok((await p.evaluate(() => window.openedTabs || [])).some(u => /capture\.html$/.test(u)), "capture queue: it opens the Capture page");
   const line = await p.$eval("#capq", e => (e.hidden ? "" : e.textContent));
   ok(/^Capturing/.test(line) && /0 of 3 done/.test(line), `capture queue: Links keeps one line of it (${line.slice(0, 80)})`);
   ok(await p.$eval("#capq a", e => e.getAttribute("href")) === "capture.html", "capture queue: the line opens the Capture page");

@@ -51,7 +51,7 @@ for (const c of caps) {
   const why = [];
   const text = (c.text || "").trim();
   if (!c.title) why.push("no title");
-  if (text.length < 40) why.push(`text ${text.length} chars`);
+  if ((!c.kind || c.kind === "page") && text.length < 40) why.push(`text ${text.length} chars`);
   if (c.incomplete) why.push("incomplete");
   if (/^(log ?in|sign ?in|just a moment|access denied|attention required)/i.test(c.title || "")) why.push(`title "${c.title}"`);
   if (c.source_url && host(c.source_url) !== host(c.url)) why.push(`moved to ${host(c.url)}`);

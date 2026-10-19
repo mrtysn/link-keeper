@@ -18,10 +18,10 @@ const SPEED_KEY = "captureSpeed";   // Links remembers the speed under the same 
 
 let queue = null;
 
-/* "in 22 s", "in 3 min", or "now". */
+/* "in 22 s", "in 3 min", or "ready" when it waits only for a free slot. */
 function inTime(at) {
   const s = Math.ceil((at - Date.now()) / 1000);
-  if (s <= 0) return "now";
+  if (s <= 0) return "ready";
   return s < 90 ? `in ${s} s` : `in ${Math.round(s / 60)} min`;
 }
 
@@ -79,7 +79,7 @@ function drawProgress() {
 function drawNow() {
   const q = queue, box = $("now");
   if (q.active.length) box.replaceChildren(...q.active.map(u => el("span", {}, el("a", { href: u, textContent: u, target: "_blank", rel: "noreferrer" }))));
-  else if (q.status === "running" && q.next) box.replaceChildren(el("span", { className: "muted", textContent: `Waiting: ${q.next.host} ${inTime(q.next.at)}` }));
+  else if (q.status === "running" && q.next) box.replaceChildren(el("span", { className: "muted", textContent: `Next: ${q.next.host}, ${inTime(q.next.at)}` }));
   else box.replaceChildren(el("span", { className: "muted", textContent: q.status === "paused" ? "Nothing; paused" : "Nothing" }));
 }
 

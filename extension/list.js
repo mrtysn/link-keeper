@@ -361,6 +361,20 @@ async function captureTicked() {
   say(`Queued ${plural(res.added, "link")} to capture${done ? `; ${done} captured already` : ""}`);
   setSelecting(false);
   showQueue(res);
+  await openCapturePage();
+}
+
+/* Switches to the Capture page: the tab already showing it, else a new one beside this one. */
+async function openCapturePage() {
+  const url = browser.runtime.getURL("capture.html");
+  const [open] = await browser.tabs.query({ url }).catch(() => []);
+  if (open) {
+    await browser.tabs.update(open.id, { active: true });
+    await browser.windows.update(open.windowId, { focused: true }).catch(() => {});
+    return;
+  }
+  const here = await browser.tabs.getCurrent().catch(() => null);
+  await browser.tabs.create({ url, ...(here ? { index: here.index + 1, windowId: here.windowId } : {}) });
 }
 
 /* --- the capture queue's line ----------------------------------------------------------
