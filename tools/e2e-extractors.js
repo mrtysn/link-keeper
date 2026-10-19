@@ -291,6 +291,16 @@ await check("an app or listing with no paragraphs is kept by its visible text, w
   lacks(res.record.text || "", ["Sign in", "Privacy"], "text");
 });
 
+await check("a page that stops answering fails within seconds with the reason, and its tab is closed", async () => {
+  const before = (await browser.tabs.query({})).length;
+  const t0 = Date.now();
+  const res = await captureUrl(at("/app/busy"));
+  const took = (Date.now() - t0) / 1000;
+  if (res.ok || !/stopped answering/.test(res.error)) throw new Error(JSON.stringify(res).slice(0, 200));
+  if (took > 20) throw new Error(`took ${took} s`);
+  eq((await browser.tabs.query({})).length, before, "tabs after");
+});
+
 const queueDone = async () => {
   for (let waited = 0; waited < 60000; waited += 250) {
     const s = await handleMessage({ type: "capture-queue-status" });

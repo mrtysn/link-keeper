@@ -34,6 +34,8 @@ OTHER = {
     "/app/late": "app-late.html",
     # A listing with no paragraphs, as an app or a store front draws itself.
     "/app/listing": "app-listing.html",
+    # A page that holds its main thread for 15 s after load, so a read of it gets no answer.
+    "/app/busy": "app-busy.html",
 }
 
 

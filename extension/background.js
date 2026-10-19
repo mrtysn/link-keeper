@@ -188,25 +188,19 @@ async function addItems(entries, note = "", group = dayGroup()) {
 
 /* --- capture -------------------------------------------------------------------- */
 
-/* Injected into the target tab. extractors.js returns null while a single-page app is still
- * hydrating, so poll briefly rather than capture an empty shell. A login page, captcha or block
- * comes back as `wall`, which captureUrl refuses to store; the tab in front of you is read whatever
- * it is (checkWall false), since you chose it. A page read out of sight (patient) may still be an app
- * drawing itself after "complete": a plain page with under 200 characters of text is read again until
- * it has more or 8 s have passed, and the fullest read is kept. */
-async function runExtractor(checkWall = true, patient = false) {
-  const end = Date.now() + (patient ? 8000 : 3000);
-  let best = null;
-  for (;;) {
+/* Injected into the tab in front of you (a capture from the shortcut or the popup). extractors.js returns
+ * null while a single-page app is still hydrating, so poll briefly rather than capture an empty shell.
+ * The tab is shown, so its timers run; a tab out of sight is read by readTab instead. checkWall false
+ * reads a login page or captcha as it is, since you chose it. */
+async function runExtractor(checkWall = false) {
+  for (let i = 0; i < 12; i++) {
     const wall = checkWall && LK.wall();
     if (wall) return { kind: "page", title: document.title || null, url: location.href, wall };
     const record = LK.extract();
-    const size = r => (r?.text || "").trim().length;
-    if (record && (!patient || record.kind !== "page" || size(record) >= 200)) return record;
-    if (record && (!best || size(record) >= size(best))) best = record;
-    if (Date.now() >= end) return best || { kind: "page", title: document.title || null, url: location.href, incomplete: true };
+    if (record) return record;
     await new Promise(r => setTimeout(r, 250));
   }
+  return { kind: "page", title: document.title || null, url: location.href, incomplete: true };
 }
 
 /* t.co hides the destination, and the destination is half the reason to keep a tweet. */
@@ -218,7 +212,7 @@ async function resolveLinks(links) {
         return { ...link, resolved: link.resolved || link.href };
       }
       try {
-        const res = await fetch(link.href, { method: "HEAD", redirect: "follow" });
+        const res = await fetch(link.href, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(8000) });
         return { ...link, resolved: res.url || null };
       } catch (e) {
         return { ...link, resolved: null };
@@ -448,10 +442,37 @@ async function hasSiteAccess() {
  * that origin, because activeTab covers the tab you acted on and nothing else — the list page asks
  * for it per site, at the moment you click capture.
  */
+/* Injected: one read of the page, with no waiting in it. A page out of sight may have its timers
+ * throttled or frozen, so a wait inside it can last minutes; readTab waits out here instead. */
+function readOnce() {
+  const wall = LK.wall();
+  if (wall) return { kind: "page", title: document.title || null, url: location.href, wall };
+  return LK.extract();
+}
+
+/* Resolves to what p resolves to, or rejects with `why` after ms. */
+const withTimeout = (p, ms, why) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(why)), ms))]);
+
+/* Reads a page in a tab out of sight, as runExtractor does for the one in front of you, but polling from
+ * here: a site reader that is not ready yet, or a plain page with under 200 characters of text (an app
+ * still drawing itself), is read again every 250 ms for up to 8 s, and the fullest read is kept. */
 async function readTab(tabId) {
-  await browser.scripting.executeScript({ target: { tabId }, files: ["extractors.js"] });
-  const [result] = await browser.scripting.executeScript({ target: { tabId }, func: runExtractor, args: [true, true] });
-  return result?.result || null;
+  const once = async () => (await withTimeout(browser.scripting.executeScript({ target: { tabId }, func: readOnce }), 5000, "the page stopped answering"))[0]?.result || null;
+  await withTimeout(browser.scripting.executeScript({ target: { tabId }, files: ["extractors.js"] }), 5000, "the page stopped answering");
+  const size = r => (r?.text || "").trim().length;
+  const end = Date.now() + 8000;
+  let best = null;
+  for (;;) {
+    const record = await once();
+    if (record?.wall || (record && (record.kind !== "page" || size(record) >= 200))) return record;
+    if (record && (!best || size(record) >= size(best))) best = record;
+    if (Date.now() >= end) {
+      if (best) return best;
+      const tab = await browser.tabs.get(tabId).catch(() => null);
+      return { kind: "page", title: tab?.title || null, url: tab?.url || null, incomplete: true };
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
 }
 
 function tabSettled(tabId, timeout = 25000) {
@@ -479,11 +500,24 @@ function tabSettled(tabId, timeout = 25000) {
 
 /* One link, start to finish: open it out of sight, read it, close it, store it. A wall in front of the
  * page (a login, a captcha, a block) is not stored; `wall` names its kind for the capture queue. The
- * queue passes its own window, so its tabs stay out of the tab strip. */
+ * queue passes its own window, so its tabs stay out of the tab strip. A page that holds it past a
+ * minute fails, and its tab is closed, so one page can never hold up a queue. */
+const CAPTURE_LIMIT = 60000;
 async function captureUrl(url, note = "", windowId = undefined) {
+  const opened = {};
+  try {
+    return await withTimeout(captureIn(url, note, windowId, opened), CAPTURE_LIMIT, "the page took over a minute to read");
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  } finally {
+    if (opened.tab) await browser.tabs.remove(opened.tab.id).catch(() => {});
+  }
+}
+
+async function captureIn(url, note, windowId, opened) {
   let tab;
   try {
-    tab = await browser.tabs.create({ url, active: false, ...(windowId ? { windowId } : {}) });
+    tab = opened.tab = await browser.tabs.create({ url, active: false, ...(windowId ? { windowId } : {}) });
   } catch (e) {
     return { ok: false, error: `could not open it: ${e.message || e}` };
   }
@@ -495,7 +529,11 @@ async function captureUrl(url, note = "", windowId = undefined) {
     try {
       record = await readTab(tab.id);
     } catch (e) {
-      return { ok: false, error: `no access to that site; grant it and retry (${e.message || e})` };
+      // With every site granted, a refusal is Firefox's own: its PDF viewer, an error page, or a site it
+      // protects from every add-on (addons.mozilla.org).
+      const why = String(e.message || e);
+      if (/host permission/i.test(why) && await hasSiteAccess()) return { ok: false, error: "Firefox lets no add-on read this page (a PDF, an error page, or a protected site)" };
+      return { ok: false, error: /host permission/i.test(why) ? `no access to that site; grant it and retry (${why})` : why };
     }
     if (!record) return { ok: false, error: "nothing extractable on that page" };
     if (record.wall) return { ok: false, wall: record.wall.kind, error: record.wall.reason };
