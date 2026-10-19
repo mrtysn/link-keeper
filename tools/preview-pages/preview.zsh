@@ -25,7 +25,7 @@
 #   empty    nothing stashed
 #   settings, import, dups   list.html with that panel open
 #   import-run         list.html importing 300 tabs, slowly enough to see the progress
-#   queue=running|paused|done|stopped   list.html with the capture queue's line in that state
+#   queue=running|paused|done|stopped   list.html with the capture queue's line, and capture.html, in that state
 #   group=stash|domain|status|day|month|newest|oldest   list.html grouped that way
 #   sources=tabs,import,list                           the sources chosen in the top bar
 #
@@ -69,7 +69,7 @@ stamp=$(date +%s)
 # The fake API goes in ahead of the first script that calls it: nav.js on pages with the top bar,
 # the page's own script on the rest.
 mock="<script src=\"mock-data.js?v=$stamp\"></script><script src=\"links.js?v=$stamp\"></script><script src=\"mock-browser.js?v=$stamp\"></script>"
-for page in popup list cards standin stash-cards tags; do
+for page in popup list cards standin stash-cards tags capture; do
   if grep -q '<script src="nav.js"></script>' "$ext/$page.html"; then
     first='<script src="nav.js"></script>'
     swap="s#$first#$mock<script src=\"nav.js?v=$stamp\"></script>#"

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="nav.css">
+<title>Link Keeper: capture</title>
+<style>
+  /* The tokens list.html measured, so this page reads as the same app in both schemes. */
+  :root {
+    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --dim: #555555; --line: #e4e0da; --field: #95918b;
+    --accent: #6647e6; --on-accent: #fff; --ok: #107647; --bad: #b33a28; --seen: #8a7a3f; --chip: #f1eee9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a; --panel: #22252a; --ink: #e8e6e3; --dim: #c0bdb9; --line: #2c2f34; --field: #7d8289;
+      --accent: #c1b4fe; --on-accent: #16171a; --ok: #4fcf95; --bad: #ffa693; --seen: #d8c47a; --chip: #2a2e34;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; padding: 0 20px 80px; --gutter: 20px; --nav-gap: 12px; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  main { max-width: 72rem; margin: 0 auto; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  h1 { font-size: 1.5rem; line-height: 1.15; letter-spacing: -.02em; margin: 8px 0 4px; }
+  h2 { font-size: .8125rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 28px 0 8px; }
+  .sub { margin: 0; color: var(--dim); font-size: .875rem; font-variant-numeric: tabular-nums; }
+  a { color: var(--accent); }
+  button, select {
+    font: inherit; font-size: .875rem; line-height: 1.2; cursor: pointer; min-height: 34px; padding: 7px 12px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+  }
+  select { border-color: var(--field); padding-right: 8px; }
+  button:hover { border-color: var(--field); }
+  .top { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 16px; }
+  .top .heading { margin-right: auto; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+  /* Progress: a bar split by outcome, and the numbers under it. */
+  .bar { display: flex; height: 10px; margin: 18px 0 8px; border-radius: 999px; overflow: hidden; background: var(--chip); }
+  .bar i { display: block; height: 100%; }
+  .bar .ok { background: var(--ok); }
+  .bar .already { background: var(--field); }
+  .bar .bad { background: var(--bad); }
+  .stats { display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: .875rem; font-variant-numeric: tabular-nums; color: var(--dim); }
+  .stats b { color: var(--ink); font-weight: 600; }
+  .key { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+
+  .now { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .875rem; }
+  .now span { overflow-wrap: anywhere; }
+  .muted { color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .875rem; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: .8125rem; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.n, th.n { text-align: right; width: 5.5rem; }
+  td.site { overflow-wrap: anywhere; }
+  td.next { width: 16rem; color: var(--dim); }
+  td.next.stop { color: var(--bad); }
+  td.next.load { color: var(--ok); }
+  .scroll { max-height: 26rem; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  .scroll table th { position: sticky; top: 0; background: var(--panel); }
+
+  ul.feed { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); max-height: 26rem; overflow: auto; }
+  ul.feed li { display: grid; grid-template-columns: 4.5rem 1fr auto; gap: 12px; padding: 7px 12px; border-bottom: 1px solid var(--line); font-size: .875rem; }
+  ul.feed li:last-child { border-bottom: 0; }
+  ul.feed .when, ul.feed .size { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  ul.feed .what { min-width: 0; }
+  ul.feed .what a, ul.feed .what .t { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  ul.feed .why { color: var(--bad); }
+  ul.feed .size.thin { color: var(--bad); }
+  /* A failure is its address and why; the address names the site. */
+  ul.feed.fails li { grid-template-columns: 1fr; }
+  .empty { padding: 28px; text-align: center; color: var(--dim); border: 1px dashed var(--line); border-radius: 10px; margin-top: 18px; }
+
+  @media (max-width: 40rem) {
+    td.next { width: auto; }
+    td.n, th.n { width: 3.75rem; padding-left: 4px; padding-right: 4px; }
+    td.site { overflow-wrap: normal; word-break: normal; }
+    th, td { padding-left: 6px; padding-right: 6px; }
+    ul.feed li { grid-template-columns: 1fr auto; }
+    ul.feed .when { display: none; }
+  }
+</style>
+</head>
+<body>
+<script src="nav.js"></script>
+<main>
+  <div class="top">
+    <div class="heading">
+      <h1>Capture</h1>
+      <p class="sub" id="sub">The capture queue reads links out of sight, one site at a time.</p>
+    </div>
+    <div class="acts" id="acts"></div>
+  </div>
+
+  <div id="idle" class="empty" hidden>
+    No capture is running. In <a href="list.html">Links</a>, press Select, tick links (Select all shown takes the current
+    filter, Not captured for instance), then Capture.
+  </div>
+
+  <section id="run" hidden>
+    <div class="bar" id="bar" role="img"></div>
+    <div class="stats" id="stats"></div>
+
+    <h2>Loading now</h2>
+    <div class="now" id="now"></div>
+
+    <h2 id="sites-h">Sites</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Site</th><th class="n">Waiting</th><th class="n">Captured</th><th class="n">Failed</th><th>Next</th></tr></thead>
+        <tbody id="sites"></tbody>
+      </table>
+    </div>
+
+    <h2 id="recent-h">Latest captures</h2>
+    <ul class="feed" id="recent"></ul>
+
+    <h2 id="failed-h">Failed</h2>
+    <ul class="feed fails" id="failed"></ul>
+  </section>
+</main>
+<script src="capture.js"></script>
+</body>
+</html>

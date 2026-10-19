@@ -67,7 +67,7 @@
   button:disabled { opacity: .5; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
   button.danger, .danger { color: var(--bad); }
-  button.small { font-size: .8125rem; min-height: 28px; padding: 4px 10px; }
+  button.small, .btn.small { font-size: .8125rem; min-height: 28px; padding: 4px 10px; }
   button.ghost { background: none; border-color: transparent; color: var(--dim); }
   button.ghost.danger { color: var(--bad); }
   @media (hover: hover) {
@@ -219,13 +219,7 @@
   }
   .capq[hidden] { display: none; }
   .capq .what { color: var(--ink); }
-  .capq .wait { color: var(--dim); }
   .capq .acts { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-  .capq select { min-height: 28px; padding: 2px 8px; font-size: .8125rem; }
-  .capq details { flex-basis: 100%; color: var(--dim); }
-  .capq summary { cursor: pointer; }
-  .capq ul { max-height: 14rem; overflow: auto; margin: 6px 0 0; padding-left: 1.2em; }
-  .capq li { overflow-wrap: anywhere; }
   /* --- card mode: the detail pane as a stack of the group's cards --- */
   .cm-tally { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 14px; color: var(--dim); font-size: .8125rem; font-variant-numeric: tabular-nums; }
   .cm-tally b { color: var(--ink); }

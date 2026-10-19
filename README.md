@@ -539,11 +539,19 @@ already exist.
 
 The capture queue reads a pile of links one after another, out of sight. In Links, filter to **Not
 captured** (narrow by site if you like), press **Select**, then **Select all shown** or tick some, and
-**Capture**. Firefox asks once for the sites involved; the links already captured are left out. A line
-under the filters then shows how far it is, what it is reading, or which site it waits on and for how
-long, with **Pause**, **Resume**, **Stop**, **Retry failed** and **Dismiss**, and a list of the links that
-failed and why. Its speed — **Gentle** (one link at a time, every wait doubled), **Normal** (two) or
-**Fast** (three, waits halved) — changes from the next page and is remembered for the next run. Closing Links does not stop it; quitting Firefox does, and nothing starts by itself at the
+**Capture**. Firefox asks once for access to every site, since a link may redirect anywhere; the links
+already captured are left out. Links then keeps one line of it (how far, **Pause**, **Open progress**),
+and the **Capture** page beside Links in the top bar shows the run in full, live: a progress bar and a
+rough time left, the links loading now, each site with its links waiting, captured and failed and when
+it loads next (or why it stopped), the latest captures with how much text each got, and every failure
+with its reason, with **Pause**, **Resume**, **Stop**, **Retry failed** and **Dismiss**. Its speed —
+**Gentle** (one link at a time, every wait doubled), **Normal** (two) or **Fast** (three, waits halved)
+— changes from the next page and is remembered for the next run.
+
+A page read out of sight may be an app still drawing itself when it reports it has loaded, so a plain
+page with little text is read again until its text appears (up to 8 s). A capture that still got almost
+nothing (under 40 characters of a plain page's text, or cut short) is kept but counts as **Not
+captured**, and the queue lists it under failed: the next Capture reads it again. Closing Links does not stop it; quitting Firefox does, and nothing starts by itself at the
 next launch. Site chips count captured of all (`12/132`) while a site has links left to capture.
 
 `capture-queue.js` runs it in the background page. Each link is read the way **Capture** reads one, in a

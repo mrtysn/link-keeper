@@ -364,10 +364,9 @@ async function captureTicked() {
 }
 
 /* --- the capture queue's line ----------------------------------------------------------
- * capture-queue.js runs the queue; this line shows it while it runs and after, until dismissed: how far
- * it is, the site it waits on and for how long, the sites it stopped, and each failed link with why. */
+ * capture-queue.js runs the queue; this one line says how far it is, with Pause or Resume, while it
+ * runs and after, until dismissed. Everything else about it is on the Capture page (capture.html). */
 let queue = null;
-let queueTick = null;
 // The speed a queue runs at, remembered here for the next one: gentle, normal or fast (capture-queue.js, SPEEDS).
 const SPEED_KEY = "captureSpeed";
 const queueSpeed = () => { try { return localStorage.getItem(SPEED_KEY) || "normal"; } catch (e) { return "normal"; } };
@@ -385,60 +384,32 @@ function queueText() {
   const parts = [`${done} of ${q.total} done`, `${q.captured} captured`];
   if (q.skipped) parts.push(`${q.skipped} captured already`);
   if (failed) parts.push(`${failed} failed`);
-  let wait = "";
-  if (q.status === "running") {
-    if (q.active.length) wait = `reading ${q.active.map(u => hostOf(u)).join(", ")}`;
-    else if (q.next) wait = `next ${q.next.host} in ${Math.max(0, Math.ceil((q.next.at - Date.now()) / 1000))} s`;
-  }
-  return [head, parts.join(" · "), wait];
+  return [head, parts.join(" · ")];
 }
 
 function paintQueue() {
   const box = $("capq");
-  clearInterval(queueTick);
-  queueTick = null;
   const wasHidden = box.hidden;
   if (!queue?.status || queue.status === "idle") {
     box.hidden = true;
     if (!wasHidden) fitPanes();
     return;
   }
-  const [head, counts, wait] = queueText();
+  const [head, counts] = queueText();
   const button = (label, type, title) => {
     const b = el("button", { type: "button", className: "small", textContent: label, title });
     b.onclick = async () => showQueue(await send({ type }));
     return b;
   };
   const acts = el("span", { className: "acts" });
-  if (["running", "paused"].includes(queue.status)) {
-    const pace = el("select", { className: "small", title: "Gentle: one link at a time, every wait doubled. Fast: three at a time, waits halved" });
-    pace.setAttribute("aria-label", "Capture speed");
-    for (const [value, label] of [["gentle", "Gentle"], ["normal", "Normal"], ["fast", "Fast"]]) pace.append(el("option", { value, textContent: label }));
-    pace.value = queue.speed || "normal";
-    pace.onchange = async () => {
-      try { localStorage.setItem(SPEED_KEY, pace.value); } catch (e) { /* remembered for this run only */ }
-      showQueue(await send({ type: "capture-queue-speed", speed: pace.value }));
-    };
-    acts.append(pace);
-  }
   if (queue.status === "running") acts.append(button("Pause", "capture-queue-pause", "Finish the pages loading now, then wait"));
   if (queue.status === "paused") acts.append(button("Resume", "capture-queue-resume", "Carry on with the links still waiting"));
-  if (["running", "paused"].includes(queue.status)) acts.append(button("Stop", "capture-queue-stop", "Drop the links still waiting; what was captured stays"));
-  if (queue.failed.length) acts.append(button("Retry failed", "capture-queue-retry", "Put the failed links back in line, their sites no longer stopped"));
   if (["done", "stopped"].includes(queue.status)) acts.append(button("Dismiss", "capture-queue-dismiss", "Clear this line"));
-  const waitNode = el("span", { className: "wait", textContent: wait });
-  box.replaceChildren(el("b", { className: "what", textContent: head }), el("span", { textContent: counts }), waitNode, acts);
-  const stopped = Object.entries(queue.stoppedSites || {});
-  if (queue.failed.length) {
-    const list = el("ul");
-    for (const f of queue.failed) list.append(el("li", { textContent: `${f.url} — ${f.error}` }));
-    const sum = `${plural(queue.failed.length, "failed link")}${stopped.length ? ` · stopped ${stopped.map(([h]) => h).join(", ")}` : ""}`;
-    box.append(el("details", {}, el("summary", { textContent: sum }), list));
-  }
+  acts.append(el("a", { className: "btn small", href: "capture.html", target: "capture", textContent: "Open progress",
+    title: "The Capture page: each site, what is loading, the latest captures and every failure" }));
+  box.replaceChildren(el("b", { className: "what", textContent: head }), el("span", { textContent: counts }), acts);
   box.hidden = false;
   if (wasHidden) fitPanes();
-  // The wait counts down between the queue's own changes.
-  if (queue.status === "running" && !queue.active.length && queue.next) queueTick = setInterval(() => { waitNode.textContent = queueText()[2]; }, 1000);
 }
 
 async function loadQueue() {

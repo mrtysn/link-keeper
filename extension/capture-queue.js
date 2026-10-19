@@ -45,10 +45,24 @@ function makeCaptureQueue(fx) {
   const busy = new Set();   // sites with a page loading now
   let timer = null;
 
-  const blank = () => ({ status: "idle", speed: "normal", total: 0, captured: 0, skipped: 0, pending: [], active: [], failed: [], stoppedSites: {}, streaks: {}, nextAt: {}, servedAt: {}, backoff: {}, windowId: null, started_at: null });
+  const blank = () => ({ status: "idle", speed: "normal", total: 0, captured: 0, skipped: 0, pending: [], active: [], failed: [], stoppedSites: {}, streaks: {}, nextAt: {}, servedAt: {}, backoff: {}, perSite: {}, recent: [], windowId: null, started_at: null });
   const save = () => fx.save(state);
   const speed = () => SPEEDS[state.speed] || SPEEDS.normal;
-  const view = () => ({ ...state, pending: state.pending.length, next: nextWait() });
+  const view = () => ({ ...state, pending: state.pending.length, next: nextWait(), sites: sites() });
+
+  // Each site the run touches: links waiting, captured and failed, when it may load next, its wait between
+  // pages now (at this speed, after backoff), and why it stopped, for the Capture page's table.
+  function sites() {
+    const by = {};
+    const site = h => (by[h] ||= { host: h, waiting: 0, captured: 0, failed: 0, loading: false, nextAt: state.nextAt[h] || 0,
+      gap: siteGap(h) * speed().gap * (state.backoff[h] || 1), stopped: state.stoppedSites[h] || null });
+    for (const url of state.pending) site(siteKey(url)).waiting++;
+    for (const url of state.active) site(siteKey(url)).loading = true;
+    for (const [h, n] of Object.entries(state.perSite)) Object.assign(site(h), { captured: n.captured || 0, failed: n.failed || 0 });
+    for (const h of Object.keys(state.stoppedSites)) site(h);
+    return Object.values(by);
+  }
+  const RECENT = 60;   // captures the Capture page lists, newest first
 
   // The soonest moment a waiting link may start, with its site, for the progress line.
   function nextWait() {
@@ -70,6 +84,8 @@ function makeCaptureQueue(fx) {
     state.servedAt ||= {};
     state.backoff ||= {};
     state.speed ||= "normal";
+    state.perSite ||= {};
+    state.recent ||= [];
     if (state.status === "running") pump();
   }
 
@@ -95,6 +111,7 @@ function makeCaptureQueue(fx) {
     const left = state.pending.filter(u => siteKey(u) === host);
     state.pending = state.pending.filter(u => siteKey(u) !== host);
     for (const url of left) state.failed.push({ url, error: `not tried: ${reason}` });
+    (state.perSite[host] ||= { captured: 0, failed: 0 }).failed += left.length;
   }
 
   // The first waiting link of the ready site served longest ago (never served counts as longest).
@@ -153,14 +170,23 @@ function makeCaptureQueue(fx) {
     }
     // A thin read is kept, since it is all the page gave, but listed with the failures so it is seen and
     // Retry failed reads it again; it is no refusal, so the site carries on.
+    const tally = state.perSite[host] ||= { captured: 0, failed: 0 };
+    if (res.record) {
+      const r = res.record;
+      state.recent.unshift({ url, title: r.title || null, kind: r.kind || null, chars: (r.text || "").trim().length, thin: !!fx.thin?.(r), at: new Date(fx.now()).toISOString() });
+      state.recent.length = Math.min(state.recent.length, RECENT);
+    }
     if (res.ok && res.record && fx.thin?.(res.record)) {
+      tally.failed++;
       state.failed.push({ url, error: "kept, but the page showed almost no text", thin: true });
       delete state.streaks[host];
     } else if (res.ok) {
       res.skipped ? state.skipped++ : state.captured++;
+      if (!res.skipped) tally.captured++;
       delete state.streaks[host];
     } else {
       state.failed.push({ url, error: res.error || "failed" });
+      tally.failed++;
       state.streaks[host] = (state.streaks[host] || 0) + 1;
       if (res.wall) stopSite(host, res.error || `${host} put up a ${res.wall} page`);
       else if (state.streaks[host] >= SITE_STOP_AFTER) stopSite(host, `${host} failed ${SITE_STOP_AFTER} times in a row`);
@@ -247,6 +273,7 @@ function makeCaptureQueue(fx) {
       await init();
       const urls = state.failed.map(f => f.url);
       if (!urls.length) return { ok: false, error: "nothing failed" };
+      for (const f of state.failed) { const t = state.perSite[siteKey(f.url)]; if (t) t.failed = Math.max(0, t.failed - 1); }
       state.failed = [];
       state.stoppedSites = {};
       state.streaks = {};

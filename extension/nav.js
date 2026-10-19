@@ -7,8 +7,8 @@
  * window.LinkSources stays for the pages that read it, always every source. */
 
 (() => {
-  // One page now: Links, with card mode. The list stays for any page added later.
-  const PAGES = [];
+  // Links, with card mode, and Capture, the capture queue's progress in a tab of its own.
+  const PAGES = [["list.html", "Links", "Every link"], ["capture.html", "Capture", "The capture queue's progress"]];
   const ALL = ["tabs", "import", "list"];
   const here = location.pathname.split("/").pop() || "list.html";
 

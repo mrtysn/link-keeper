@@ -842,10 +842,8 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(/^Queued 3 links to capture/.test(await p.$eval("#msg", e => e.textContent)), `capture queue: it says what it queued (${await p.$eval("#msg", e => e.textContent)})`);
   ok(await p.$eval("#selbar", e => e.hidden), "capture queue: the selection ends");
   const line = await p.$eval("#capq", e => (e.hidden ? "" : e.textContent));
-  ok(/^Capturing/.test(line) && /reading/.test(line), `capture queue: the line shows it reading (${line.slice(0, 80)})`);
-  ok(await p.$eval("#capq select", e => e.value) === "normal", "capture queue: the speed starts at Normal");
-  await p.selectOption("#capq select", "gentle"); await p.waitForTimeout(200);
-  ok(await p.$eval("#capq select", e => e.value) === "gentle" && await p.evaluate(() => localStorage.getItem("captureSpeed")) === "gentle", "capture queue: Gentle is set and remembered for the next run");
+  ok(/^Capturing/.test(line) && /0 of 3 done/.test(line), `capture queue: Links keeps one line of it (${line.slice(0, 80)})`);
+  ok(await p.$eval("#capq a", e => e.getAttribute("href")) === "capture.html", "capture queue: the line opens the Capture page");
   await p.click("#capq button:text-is('Pause')"); await p.waitForTimeout(200);
   ok(/^Capture paused/.test(await p.$eval("#capq", e => e.textContent)) && !!(await p.$("#capq button:text-is('Resume')")), "capture queue: Pause, then Resume offered");
   ok(p.errs.length === 0, `capture queue: no errors ${p.errs.join()}`);
@@ -855,11 +853,34 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   const p = await page("list.html?queue=done");
   const line = await p.$eval("#capq", e => e.textContent);
   ok(/^Capture finished/.test(line) && /3 failed/.test(line), `capture queue: a finished run counts its failures (${line.slice(0, 80)})`);
-  ok(/3 failed links · stopped instagram\.com/.test(await p.$eval("#capq summary", e => e.textContent)), "capture queue: the failed links, and the site it stopped");
-  ok(!!(await p.$("#capq button:text-is('Retry failed')")) && !!(await p.$("#capq button:text-is('Dismiss')")), "capture queue: Retry failed and Dismiss");
   await p.click("#capq button:text-is('Dismiss')"); await p.waitForTimeout(200);
   ok(await p.$eval("#capq", e => e.hidden), "capture queue: Dismiss clears the line");
   ok(p.errs.length === 0, `capture queue done: no errors ${p.errs.join()}`);
+  await p.close();
+}
+
+// The Capture page: the run's progress, each site, what is loading, the latest captures and the failures
+{
+  const p = await page("capture.html?queue=running");
+  ok(await p.$eval(".app-pages a[aria-current=page]", e => e.textContent) === "Capture", "capture page: its own place in the nav");
+  ok(/^Capturing · 217 of 1,009 done · about \d/.test(await p.$eval("#sub", e => e.textContent)), `capture page: progress and time left (${await p.$eval("#sub", e => e.textContent)})`);
+  const sites = await p.$$eval("#sites tr", l => l.map(r => [...r.children].map(c => c.textContent)));
+  ok(sites[0][0] === "x.com" && sites[0][1] === "240" && /^in \d+ s · every 30 s$/.test(sites[0][4]), `capture page: sites with most waiting first, with their next load and wait (${sites[0].join(" | ")})`);
+  ok(sites.some(r => r[0] === "instagram.com" && /^stopped: .*log in/.test(r[4])), "capture page: a stopped site says why");
+  ok(await p.$$eval("#now a", l => l.length) === 2, "capture page: the links loading now");
+  ok(/almost empty/.test(await p.$eval("#recent", e => e.textContent)), "capture page: a near-empty capture is marked");
+  ok(await p.$$eval("#failed li", l => l.length) === 3, "capture page: every failure with its reason");
+  await p.selectOption("#acts select", "gentle"); await p.waitForTimeout(200);
+  ok(await p.evaluate(() => localStorage.getItem("captureSpeed")) === "gentle", "capture page: the speed is set and remembered for the next run");
+  await p.click("#acts button:text-is('Pause')"); await p.waitForTimeout(200);
+  ok(/^Paused/.test(await p.$eval("#sub", e => e.textContent)) && !!(await p.$("#acts button:text-is('Resume')")), "capture page: Pause, then Resume offered");
+  ok(p.errs.length === 0, `capture page: no errors ${p.errs.join()}`);
+  await p.close();
+}
+{
+  const p = await page("capture.html");
+  ok(!(await p.$eval("#idle", e => e.hidden)) && await p.$eval("#run", e => e.hidden), "capture page: with no run, it says how to start one");
+  ok(p.errs.length === 0, `capture page idle: no errors ${p.errs.join()}`);
   await p.close();
 }
 

@@ -16,7 +16,7 @@
 
   const storageListeners = new Set();
   // The capture queue as capture-queue.js reports it (its status message).
-  const idleQueue = () => ({ status: "idle", speed: "normal", total: 0, captured: 0, skipped: 0, pending: 0, active: [], failed: [], stoppedSites: {}, next: null });
+  const idleQueue = () => ({ status: "idle", speed: "normal", total: 0, captured: 0, skipped: 0, pending: 0, active: [], failed: [], stoppedSites: {}, next: null, sites: [], recent: [] });
   const mockQueue = idleQueue();
   if (params.has("queue")) {
     Object.assign(mockQueue, { status: params.get("queue") || "running", total: 1009, captured: 211, skipped: 3, pending: 788, active: [],
@@ -25,7 +25,19 @@
         { url: "https://www.instagram.com/p/DAbc123/", error: "www.instagram.com asked to log in" },
         { url: "https://www.instagram.com/reel/DXyz789/", error: "not tried: www.instagram.com asked to log in" },
         { url: "https://slow.example/post", error: "the page never finished loading" }],
-      stoppedSites: { "instagram.com": "www.instagram.com asked to log in" } });
+      stoppedSites: { "instagram.com": "www.instagram.com asked to log in" },
+      active: params.get("queue") === "running" || !params.get("queue") ? ["https://github.com/someone/repo42", "https://news.ycombinator.com/item?id=1"] : [],
+      sites: [
+        { host: "x.com", waiting: 240, captured: 58, failed: 0, loading: false, nextAt: Date.now() + 22000, gap: 30000, stopped: null },
+        { host: "github.com", waiting: 61, captured: 14, failed: 0, loading: true, nextAt: 0, gap: 2000, stopped: null },
+        { host: "youtube.com", waiting: 70, captured: 10, failed: 0, loading: false, nextAt: Date.now() + 5000, gap: 8000, stopped: null },
+        { host: "news.ycombinator.com", waiting: 30, captured: 12, failed: 0, loading: true, nextAt: 0, gap: 2000, stopped: null },
+        { host: "instagram.com", waiting: 0, captured: 0, failed: 2, loading: false, nextAt: 0, gap: 30000, stopped: "www.instagram.com asked to log in" },
+        { host: "slow.example", waiting: 0, captured: 3, failed: 1, loading: false, nextAt: 0, gap: 2000, stopped: null }],
+      recent: [
+        { url: "https://github.com/someone/repo41", title: "someone/repo41: A tool that does one thing well", kind: "repo", chars: 2140, thin: false, at: new Date(Date.now() - 4000).toISOString() },
+        { url: "https://pstream.org/", title: "P-Stream", kind: "page", chars: 0, thin: true, at: new Date(Date.now() - 9000).toISOString() },
+        { url: "https://x.com/someone/status/1", title: "Someone on X: a thread about capture queues", kind: "tweet", chars: 512, thin: false, at: new Date(Date.now() - 15000).toISOString() }] });
   }
   // Tags set by hand, keyed like the link; a few to start with so the chips and filters show.
   const mockTags = params.has("notags") ? {} : {};
