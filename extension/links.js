@@ -120,6 +120,17 @@ const capHasContent = c => !!(c.text || c.title || c.images?.length || c.screens
  * reel) is never thin, since its fields are the content. The capture queue reads such a link again. */
 const capThin = c => !!c && (!!c.incomplete || ((!c.kind || c.kind === "page") && (c.text || "").trim().length < 40));
 
+/* The reader: raised whenever what a capture reads or how it loads a page changes (extractors.js, and
+ * captureIn and readTab in background.js). Captures and failure records carry the reader that made them.
+ * A failure an older reader recorded, or an almost empty capture it made, is not final: the cause may be
+ * what changed, so the link counts as not captured and the next run tries it again. A wall is the site's
+ * answer, not the reader's, and stays a failure. Records from before readers were kept count as reader 1.
+ * 2: old Reddit, Reddit listings and YouTube searches read (5.78); a page still loading after 25 s read
+ *    anyway; a site that does not answer said so. */
+const READER = 2;
+const failWalled = f => f.kind === "wall" || !!f.wall || /asked to log in|asked for a captcha|refused the page/.test(f.error || "");
+const failFinal = f => !!f && ((f.reader || 1) >= READER || failWalled(f));
+
 /* Where a DM link came from, when an importer recorded it, or null. */
 function originOf(c) {
   const o = {
@@ -150,6 +161,7 @@ function capView(c, thumbs = {}) {
     shotId: c.screenshot?.downloadId ?? null,
     code_blocks: (c.code_blocks || []).length,
     thin: capThin(c),
+    reader: c.reader || 1,
   };
 }
 
@@ -228,7 +240,9 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     link.agentTags = agent.tags;
     link.agentBy = agent.by;
     // Why a capture of it failed (background.js, captureFails), or a capture that read almost nothing.
-    link.fail = fails[link.key] || (link.cap?.thin ? { error: "the page showed almost no text", kind: "thin", at: link.cap.captured_at } : null);
+    // One an older reader recorded is left out, so the link is tried again (READER).
+    const fail = fails[link.key] || (link.cap?.thin ? { error: "the page showed almost no text", kind: "thin", at: link.cap.captured_at, reader: link.cap.reader } : null);
+    link.fail = failFinal(fail) ? fail : null;
     link.kinds = guessTags(link.url, link.cap);
     link.guessed = link.tags.length ? [] : link.kinds;
   }

@@ -133,7 +133,7 @@ async function getData() {
   source = `backup of ${b.at}`;
   const s = b.storage;
   const joined = LINKS.joinLinks({ items: s.items || [], captures: s.captures || [], sessions: b.sessions || [],
-    thumbs: s.thumbs || {}, currentKey: s.current?.key || null, tags: s.linkTags || {}, suggestions: s.tagSuggestions || {}, agentTags: s.agentTags || {} });
+    thumbs: s.thumbs || {}, currentKey: s.current?.key || null, tags: s.linkTags || {}, suggestions: s.tagSuggestions || {}, agentTags: s.agentTags || {}, fails: s.captureFails || {} });
   return { ...JSON.parse(JSON.stringify(joined)), tagDefs: s.tagDefs, backup: b };
 }
 

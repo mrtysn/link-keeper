@@ -57,7 +57,7 @@ function world({ answers = {}, captured = [], saved = null, robots = {} } = {}) 
       if (robots[host] === "unreadable") throw new Error("robots.txt answered 503");
       return robots[host] || 0;
     },
-    recordFail: (url, error, kind) => { recorded[url] = kind; },
+    recordFail: (url, error, kind, walled) => { recorded[url] = walled ? `${kind}, walled` : kind; },
   };
   // Its answers come from the VM's realm; structuredClone brings them into this one for deepEqual.
   const q = ctx.makeCaptureQueue(fx);
@@ -260,7 +260,7 @@ await check("a wall stops its site: the site's other links are set aside, other 
   assert.match(s.failed[1].error, /^not tried: www.instagram.com asked to log in/);
   assert.deepEqual(Object.keys(s.stoppedSites), ["instagram.com"]);
   assert.equal(s.captured, 2);
-  assert.deepEqual({ ...w.recorded }, { [IG(1)]: "wall", [IG(2)]: "skipped", [IG(3)]: "skipped" }, "each failure kept on its link");
+  assert.deepEqual({ ...w.recorded }, { [IG(1)]: "wall", [IG(2)]: "skipped, walled", [IG(3)]: "skipped, walled" }, "each failure kept on its link, the set-aside ones marked as behind a wall");
 });
 
 await check("three failures in a row stop a site; one success in between does not", async () => {
@@ -272,6 +272,7 @@ await check("three failures in a row stop a site; one success in between does no
   assert.deepEqual(w.log.map(([u]) => u), [1, 2, 3, 4, 5, 6].map(GH), "the seventh is never loaded");
   assert.deepEqual(s.failed.map(f => f.url), [1, 2, 4, 5, 6, 7].map(GH));
   assert.match(s.stoppedSites["github.com"], /failed 3 times in a row/);
+  assert.equal(w.recorded[GH(7)], "skipped", "set aside after failures, not a wall, so a newer reader tries it again");
 });
 
 await check("retry puts the failed links back and lifts the stop", async () => {

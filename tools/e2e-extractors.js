@@ -326,6 +326,17 @@ await check("an app or listing with no paragraphs is kept by its visible text, w
   lacks(res.record.text || "", ["Sign in", "Privacy"], "text");
 });
 
+await check("a page that never finishes loading is read anyway once it has waited, and kept when it holds text", async () => {
+  const res = await captureUrl(at("/slow/page"));
+  if (!res.ok) throw new Error(res.error);
+  has(res.record.text || "", ["arrived in the first second"], "text");
+});
+
+await check("a site that does not answer fails saying so, not as a protected page", async () => {
+  const res = await captureUrl("http://127.0.0.1:9/");
+  if (res.ok || !/did not answer/.test(res.error)) throw new Error(JSON.stringify(res).slice(0, 300));
+});
+
 await check("a page that stops answering fails within seconds with the reason, and its tab is closed", async () => {
   const before = (await browser.tabs.query({})).length;
   const t0 = Date.now();

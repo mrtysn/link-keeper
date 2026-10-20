@@ -363,6 +363,29 @@ await check("with the bridge gone, the CLI reads the latest backup and refuses c
   assert(w.code === 1 && /not running/.test(w.out), w.out);
 });
 
+await check("a failure an older reader recorded is tried again; a wall, and one the current reader recorded, stay failures", async () => {
+  const R = vm.runInContext("READER", LINKS), at = "2026-10-20T00:00:00Z";
+  const url = n => `https://example.net/${n}`;
+  const captures = [
+    { url: url("thin-old"), title: "t", text: "", captured_at: at },
+    { url: url("thin-now"), title: "t", text: "", captured_at: at, reader: R },
+  ];
+  const fails = Object.fromEntries([
+    ["error-old", { error: "the page never finished loading", kind: "error", at }],
+    ["skipped-old", { error: "not tried: example.net failed 3 times in a row", kind: "skipped", at }],
+    ["wall-old", { error: "example.net asked to log in", kind: "wall", at }],
+    ["skipped-after-wall-old", { error: "not tried: example.net asked for a captcha (\"Just a moment...\")", kind: "skipped", at }],
+    ["error-now", { error: "the site did not answer", kind: "error", at, reader: R }],
+    ["skipped-walled-now", { error: "not tried: example.net put up a login page", kind: "skipped", at, reader: R, wall: true }],
+  ].map(([n, f]) => [LINKS.keyOf(url(n)), f]));
+  const items = Object.keys(fails).map((_, i) => ({ url: url(["error-old", "skipped-old", "wall-old", "skipped-after-wall-old", "error-now", "skipped-walled-now"][i]), status: "pending", added_at: at }));
+  const { links } = LINKS.joinLinks({ items, captures, fails });
+  const failedOf = n => !!links.find(l => l.url === url(n)).fail;
+  const got = Object.fromEntries(["thin-old", "thin-now", "error-old", "skipped-old", "wall-old", "skipped-after-wall-old", "error-now", "skipped-walled-now"].map(n => [n, failedOf(n)]));
+  assert(JSON.stringify(got) === JSON.stringify({ "thin-old": false, "thin-now": true, "error-old": false, "skipped-old": false, "wall-old": true,
+    "skipped-after-wall-old": true, "error-now": true, "skipped-walled-now": true }), JSON.stringify(got));
+});
+
 fs.rmSync(work, { recursive: true, force: true });
 console.log(failed ? `\n${failed} failed` : "\nall bridge checks passed");
 process.exit(failed ? 1 : 0);

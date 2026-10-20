@@ -7,6 +7,7 @@ redirects to an Instagram-shaped login page under /accounts/login/, and /cdn-cgi
 Usage: serve.py <port>
 """
 import http.server
+import time
 import pathlib
 import re
 import sys
@@ -42,6 +43,8 @@ OTHER = {
     "/r/godot/comments/1su9f83/how_would_i_achieve_this_in_godot_cant_wrap_my/": "reddit-old-post.html",
     "/r/slopsmith/": "reddit-old-listing.html",
     "/r/firefox/comments/1s3t2iu/x/": "reddit-new-post.html",
+    # A page whose image (/hang) never arrives, so it never finishes loading.
+    "/slow/page": "slow-page.html",
     # A YouTube search with its results only in the page's data.
     "/results": "youtube-results.html",
 }
@@ -49,6 +52,9 @@ OTHER = {
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == "/hang":
+            time.sleep(90)
+            return
         if self.path == "/reel/Walled/":
             self.send_response(302)
             self.send_header("Location", "/accounts/login/?next=%2Freel%2FWalled%2F")

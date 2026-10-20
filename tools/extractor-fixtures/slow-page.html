@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A page that never finishes loading</title></head>
+<!-- Its text is there at once, but an image it asks for never arrives, so the tab never reports
+     "complete", as with a page that keeps a request open. -->
+<body>
+<main>
+  <h1>Slow but readable</h1>
+  <p>Everything worth keeping on this page arrived in the first second; only the picture below is still on its way.</p>
+  <img src="/hang" alt="">
+</main>
+</body>
+</html>
