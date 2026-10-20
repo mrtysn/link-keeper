@@ -421,6 +421,30 @@ def watch_status(after: int) -> dict:
             "records": records, "next": len(lines)}
 
 
+# --- phone inbox -----------------------------------------------------------------------------------
+# Links pulls the phone-share inbox when it opens: tools/pull-phone-inbox.zsh mirrors it over ssh and
+# prints the lines new since the last mirror (by Links or by an import), which the page adds.
+def inbox_pull() -> dict:
+    script = REPO / "tools" / "pull-phone-inbox.zsh"
+    if not script.exists():
+        return {"ok": False, "error": f"no inbox script at {script}"}
+    try:
+        done = subprocess.run(["/bin/zsh", str(script), "--print-new"], capture_output=True, text=True, timeout=30,
+                              cwd=str(REPO), env=dict(os.environ, PATH=TOOL_PATH))
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "the phone inbox did not answer in 30 s"}
+    if done.returncode == 3:
+        return {"ok": True, "configured": False, "new": []}
+    if done.returncode != 0:
+        return {"ok": False, "error": done.stderr.strip() or f"exit {done.returncode}"}
+    new = []
+    for line in done.stdout.splitlines():
+        url, _, day = line.partition("\t")
+        if url.startswith(("http://", "https://")):
+            new.append({"url": url, "saved_at": day or None})
+    return {"ok": True, "configured": True, "new": new}
+
+
 HOST_OPS = {
     "backup": lambda m: write_backup(m.get("data") or {}, m.get("reason") or "change"),
     "list-backups": lambda m: list_backups(),
@@ -434,6 +458,7 @@ HOST_OPS = {
     # The names before 5.79; an add-on not yet updated still sends them.
     "refresh-start": lambda m: import_start(bool(m.get("offline")), m.get("watch") is not False),
     "refresh-status": lambda m: import_status(),
+    "inbox-pull": lambda m: inbox_pull(),
     "watch-start": lambda m: watch_start(m.get("urls") or []),
     "watch-status": lambda m: watch_status(int(m.get("after") or 0)),
 }

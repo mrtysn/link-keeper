@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -94,6 +95,43 @@ with tempfile.TemporaryDirectory() as tmp:
           not st["running"] and st["queued"] == 0 and len(st["records"]) == 2 and st["next"] == 2, str(st))
     check("a cursor returns only the records after it", bridge.watch_status(1)["records"] == st["records"][1:])
     check("a cursor past the end starts from the top", len(bridge.watch_status(9)["records"]) == 2)
+
+    # The phone inbox: the helper hands back what its script prints as new; exit 3 is "not set up".
+    puller = fake / "tools" / "pull-phone-inbox.zsh"
+    puller.write_text('#!/bin/zsh\nprint "https://a.example/1\\t2026-10-20"\nprint "not a url"\nprint "https://b.example/2\\t"\n')
+    puller.chmod(0o755)
+    res = bridge.inbox_pull()
+    check("inbox-pull returns the new links with their day, and only links",
+          res == {"ok": True, "configured": True, "new": [{"url": "https://a.example/1", "saved_at": "2026-10-20"},
+                                                          {"url": "https://b.example/2", "saved_at": None}]}, str(res))
+    puller.write_text("#!/bin/zsh\nexit 3\n")
+    check("an inbox that is not set up is not an error", bridge.inbox_pull() == {"ok": True, "configured": False, "new": []})
+    puller.write_text('#!/bin/zsh\nprint -u2 "  ! could not reach box"\nexit 2\n')
+    res = bridge.inbox_pull()
+    check("an unreachable inbox says so", not res["ok"] and "could not reach box" in res["error"], str(res))
+
+# The real script against a stand-in ssh: the mirror is written, and only lines new since it are printed.
+with tempfile.TemporaryDirectory() as tmp:
+    tmp = Path(tmp)
+    stubs = tmp / "bin"
+    stubs.mkdir()
+    served = tmp / "server-inbox.tsv"
+    (stubs / "ssh").write_text(f'#!/bin/zsh\ncat {served}\n')
+    (stubs / "ssh").chmod(0o755)
+    env = dict(os.environ, PATH=f"{stubs}:{os.environ['PATH']}", DATA_DIR=str(tmp / "data"), LINK_INBOX_REMOTE="box:/srv/inbox.tsv")
+    run = lambda *a: subprocess.run([str(repo / "tools" / "pull-phone-inbox.zsh"), *a], env=env, capture_output=True, text=True)
+    served.write_text("https://a.example/1\t2026-10-19\tphone\n")
+    first = run("--print-new")
+    check("the first pull prints every line as new, URL and day", first.returncode == 0 and first.stdout == "https://a.example/1\t2026-10-19\n", first.stdout + first.stderr)
+    served.write_text("https://a.example/1\t2026-10-19\tphone\nhttps://b.example/2\t2026-10-20\tphone\n")
+    second = run("--print-new")
+    check("the next pull prints only what arrived since", second.stdout == "https://b.example/2\t2026-10-20\n", second.stdout)
+    check("...and the mirror holds the whole inbox", (tmp / "data" / "link-inbox.tsv").read_text() == served.read_text())
+    check("a summary run says how many are new", "2 in the inbox (mirror of box), 0 new" in run().stdout)
+    (stubs / "ssh").write_text("#!/bin/zsh\nexit 255\n")
+    down = run("--print-new")
+    check("an unreachable server keeps the last mirror and exits 2",
+          down.returncode == 2 and (tmp / "data" / "link-inbox.tsv").read_text() == served.read_text(), down.stderr)
 
 if failed:
     sys.exit("\nsome checks failed")

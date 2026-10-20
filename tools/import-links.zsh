@@ -182,14 +182,7 @@ if (( offline )); then
   print "--offline: no internet steps (phone inbox, Saved Messages, lookups, reel downloads)"
 elif [[ -n ${LINK_INBOX_REMOTE:-} ]]; then
   print "0/7  links shared from the phone"
-  r_host=${LINK_INBOX_REMOTE%%:*} r_path=${LINK_INBOX_REMOTE#*:}
-  if ssh -o ConnectTimeout=6 -o BatchMode=yes "$r_host" cat "$r_path" > "$inbox.tmp" 2>/dev/null; then
-    mv "$inbox.tmp" "$inbox"
-    print "  $(grep -c . "$inbox") in the inbox (mirror of $r_host)"
-  else
-    rm -f "$inbox.tmp"
-    print "  ! could not reach $r_host — using the last mirror"
-  fi
+  DATA_DIR=$outdir LINK_INBOX_REMOTE=$LINK_INBOX_REMOTE "$repo/tools/pull-phone-inbox.zsh" || true
 fi
 
 # --- pull straight from Saved Messages, when a session exists ---------------------

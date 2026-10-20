@@ -1329,6 +1329,24 @@ async function watchCollect() {
   return { ok: true, running: st.running, queued: st.queued, imported: st.records.length };
 }
 
+/* --- the phone inbox -------------------------------------------------------------------------------- */
+
+/* Links shared from the phone wait in an inbox on an always-on box. Opening Links pulls it through the
+ * helper (tools/pull-phone-inbox.zsh), at most every INBOX_EVERY, and adds what is new as one group.
+ * An import mirrors it too; a link it already brought in is held and skipped here. */
+const INBOX_EVERY = 10 * 60e3;
+async function inboxPull(force = false) {
+  const last = await read("inboxPulledAt", 0);
+  if (!force && Date.now() - last < INBOX_EVERY) return { ok: true, skipped: "pulled recently", added: 0 };
+  await browser.storage.local.set({ inboxPulledAt: Date.now() });
+  const res = await hostCall("inbox-pull");
+  if (!res?.ok) return res;
+  if (!res.new?.length) return { ok: true, configured: res.configured, added: 0 };
+  const day = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const added = await addItems(res.new, "", { name: `Shared from your phone · ${day}`, group_key: `phone:${dayOf()}` });
+  return { ok: true, configured: true, added: added.added, skipped: added.skipped };
+}
+
 /* A reel read by a page capture is queued once, when its record first appears or is read again. Only a
  * page capture: its record has via "list" (Links, the queue) or none (the popup). An imported record
  * names its source, and Import watches its own reels when asked to. */
@@ -2607,6 +2625,10 @@ async function handleMessage(msg) {
       return watchStart((msg.urls || []).map(String)).catch(e => ({ ok: false, error: String(e.message || e) }));
     case "watch-status":
       return watchCollect().catch(e => ({ ok: false, error: String(e.message || e) }));
+    // Links opening: the links shared from the phone since the last pull.
+    case "inbox-pull":
+      return inboxPull(!!msg.force).catch(e => ({ ok: false, error: String(e.message || e) }));
+
     case "watch-settings":
       if (typeof msg.onCapture === "boolean") await browser.storage.local.set({ watchOnCapture: msg.onCapture });
       return { ok: true, onCapture: await getWatchOnCapture() };

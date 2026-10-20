@@ -202,6 +202,8 @@
             return { ok: true, onCapture: store.watchOnCapture !== false };
           case "watch-status":
             return params.get("watch") === "running" ? { ok: true, running: true, queued: 2, imported: 0 } : { ok: true, running: false, queued: 0, imported: 0 };
+          case "inbox-pull":
+            return { ok: true, configured: true, added: 0 };
           case "watch-start":
             return { ok: true, added: 1, queued: 1, running: true };
           case "grab-chat":

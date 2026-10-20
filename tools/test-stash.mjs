@@ -884,6 +884,21 @@ await check("a page capture of a reel asks the helper to watch it; an imported r
   assert.equal(plain(await browser.handle({ type: "watch-settings" })).onCapture, false, "and the setting reads back");
 });
 
+await check("opening Links adds the phone inbox's new links as one group, at most every 10 minutes", async () => {
+  const { browser } = makeBrowser([]);
+  const bg = await load(browser);
+  let calls = 0;
+  bg.hostCall = async op => { calls++; return { ok: true, configured: true, new: [{ url: "https://a.example/1", saved_at: "2026-10-20" }, { url: "https://b.example/2", saved_at: null }] }; };
+  const first = plain(await browser.handle({ type: "inbox-pull" }));
+  assert.deepEqual([first.ok, first.added, calls], [true, 2, 1], JSON.stringify(first));
+  const links = plain(await browser.handle({ type: "links" })).links.filter(l => l.url.includes(".example/"));
+  assert.equal(links.length, 2, "both links are held");
+  const again = plain(await browser.handle({ type: "inbox-pull" }));
+  assert.deepEqual([again.added, calls], [0, 1], "a second open within 10 minutes does not ask the helper");
+  const forced = plain(await browser.handle({ type: "inbox-pull", force: true }));
+  assert.deepEqual([forced.added, forced.skipped, calls], [0, 2, 2], "forced, it asks again, and links already held are skipped");
+});
+
 await check("a chat grab: one record per link with every sender and the first sending, merged into what is held", async () => {
   const { browser, store } = makeBrowser([]);
   const bg = await load(browser);

@@ -2464,6 +2464,13 @@ $("exports-go").onclick = async () => {
   importTimer = setTimeout(watchImport, 800);
 };
 
+/* Opening Links brings in what was shared from the phone since the last pull (at most every 10 minutes;
+ * quiet when there is nothing, or no inbox is set up). The new links arrive as their own group. */
+async function pullPhoneInbox() {
+  const res = await send({ type: "inbox-pull" });
+  if (res?.ok && res.added) say(`${plural(res.added, "link")} shared from your phone`);
+}
+
 /* A batch brought in from this page is one group, named for what it is and the day: "Pasted links ·
  * Oct 15, 2026". Its key keeps one batch's several calls (an import's captures and queue) together. */
 const batchGroup = label => ({ name: `${label} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`, key: `batch:${label}:${Date.now()}` });
@@ -2590,6 +2597,7 @@ applyView();
 
 if (location.hash === "#import") { openPanel("import-panel"); previewImport(); }
 takePendingImport();
+pullPhoneInbox();
 reloadOnChanges(load, () => !!(renaming || dragging));
 load();
 loadQueue();

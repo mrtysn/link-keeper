@@ -23,7 +23,7 @@ every script with its purpose; every script's second line is `# DESC:`.
 
 Pipeline, in order:
 
-1. **In:** phone share sheet (`android/` to `receiver/` inbox), Telegram (export or `importers/telegram-pull.py`
+1. **In:** phone share sheet (`android/` to `receiver/` inbox, pulled by `tools/pull-phone-inbox.zsh` when Links opens and on import), Telegram (export or `importers/telegram-pull.py`
    for Saved Messages), Instagram "Download your information" export, X archive DMs, and the browser itself
    (stash import, popup, chat grab in `extension/chat-grab.js`).
 2. **`tools/import-links.zsh`:** finds the newest exports; mirrors the phone inbox; runs the importers and the
