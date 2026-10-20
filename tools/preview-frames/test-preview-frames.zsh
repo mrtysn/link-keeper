@@ -15,6 +15,12 @@ if [[ ${1:-} == -h || ${1:-} == --help ]]; then
   exit 0
 fi
 [[ ${1:-} == --port ]] && port=$2
+# Another session's server may hold the port (a studio server took 8791 on 2026-10-20, and every check
+# then failed as if framing were broken): move to the next free one.
+while lsof -nP -iTCP:$port -sTCP:LISTEN >/dev/null 2>&1; do
+  print -u2 "port $port is taken; trying $(( port + 1 ))"
+  port=$(( port + 1 ))
+done
 
 python3 "$here/serve-framing-headers.py" "$port" &
 server=$!
