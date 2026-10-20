@@ -204,11 +204,19 @@ function matches(link, term) {
   const hasTag = t => (t === UNTAGGED ? !link.tags.length : t === SUGGESTED ? hasSuggestions(link) : shownTags(link).tags.includes(t));
   if (tagSel.size && ![...tagSel].some(hasTag)) return false;
   if ([...tagOut].some(hasTag)) return false;
-  if (!term) return true;
-  const cap = link.cap;
-  const hay = [link.url, link.title, labelOf(link), cap?.text, link.note, cap?.screenshot, link.date, ...shownTags(link).tags,
-    ...(cap?.links || []), ...(cap?.reply_links || []).map(l => l.href)].filter(Boolean).join(" ").toLowerCase();
-  return hay.includes(term);
+  return !term || searchScores.has(link);
+}
+
+/* The filter box's words, matched and ranked by link-search.js over the whole pool at once; matches() then
+ * only asks whether a link is among them. */
+let searchScores = new Map();
+const searchFields = link => ({
+  title: [link.title, labelOf(link)], url: link.url, tags: shownTags(link).tags, note: link.note,
+  text: [link.cap?.text, link.cap?.screenshot, link.date],
+  links: [...(link.cap?.links || []), ...(link.cap?.reply_links || []).map(l => l.href)],
+});
+function searchPool(pool, term) {
+  searchScores = new Map(LinkSearch.rank(pool, term, searchFields).map(r => [r.link, r.score]));
 }
 
 /* --- rows ----------------------------------------------------------------------- */
@@ -858,7 +866,7 @@ function renderByStash(out, visible, term) {
 const NO_CHAT = "Not from a chat";
 
 function bucketsOf(visible) {
-  if (group === "newest") return [["", [...visible].sort(byNewest)]];
+  if (group === "newest") return [["", [...visible].sort(searchScores.size ? (a, b) => searchScores.get(b) - searchScores.get(a) || byNewest(a, b) : byNewest)]];
   if (group === "oldest") return [["", [...visible].sort(byNewest).reverse()]];
   if (group === "tag") {
     // A link shows under each of its tags; one with none set by hand goes under Untagged.
@@ -1344,6 +1352,8 @@ function renderRows() {
   const out = $("out");
   out.textContent = "";
   const pool = bar.filtered === "only" ? data.filteredLinks : bar.filtered === "in" ? data.links.concat(data.filteredLinks) : data.links;
+  if (term) searchPool(pool, term);
+  else searchScores = new Map();
   const visible = pool.filter(l => matches(l, term));
 
   if (!total) {

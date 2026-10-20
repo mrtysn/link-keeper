@@ -992,6 +992,28 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
+// The filter box: every word must match, wherever it sits, and a miss leaves nothing
+{
+  const p = await page("list.html?group=newest");
+  const titles = () => p.$$eval("#out ul.rows > li .ttl", l => l.map(e => e.textContent));
+  const all = await titles();
+  const words = all.join(" ").split(/[^A-Za-z]+/).filter(w => w.length > 4);
+  const [one, two] = [words[0], words.find(w => w !== words[0])];
+  await p.fill("#q", one); await p.waitForTimeout(300);
+  const byOne = await titles();
+  ok(byOne.length >= 1 && byOne.length <= all.length, `filter: "${one}" keeps ${byOne.length} of ${all.length} rows`);
+  await p.fill("#q", `${two} ${one}`); await p.waitForTimeout(300);
+  const byTwo = await titles();
+  await p.fill("#q", `${one} ${two}`); await p.waitForTimeout(300);
+  ok(JSON.stringify(await titles()) === JSON.stringify(byTwo), "filter: the order of the words does not matter");
+  await p.fill("#q", `${one} zzzqqqxx`); await p.waitForTimeout(300);
+  ok((await titles()).length === 0, "filter: a word nothing holds leaves no rows");
+  await p.fill("#q", ""); await p.waitForTimeout(300);
+  ok((await titles()).length === all.length, "filter: clearing it brings every row back");
+  ok(!p.errs.length, "filter: no errors " + p.errs.join("; "));
+  await p.close();
+}
+
 await b.close();
 console.log(fails ? `${fails} FAILED` : "all passed");
 process.exit(fails ? 1 : 0);

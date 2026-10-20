@@ -69,7 +69,7 @@ release, not a release per change.
 
 ## Before a release
 
-Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tools/test-stash.mjs`, `tools/test-extractors.zsh` (for the extractors or a capture), `node tools/test-capture-queue.mjs` (for the capture queue), `tools/test-instagram-export.py` and
+Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tools/test-stash.mjs`, `node tools/test-link-search.mjs` (for `extension/link-search.js` or the Links filter box), `tools/test-extractors.zsh` (for the extractors or a capture), `node tools/test-capture-queue.mjs` (for the capture queue), `tools/test-instagram-export.py` and
 `tools/test-import-instagram-accounts.zsh` (for the Instagram importer, `attach-dm-origin.py` or the import), `tools/test-x-archive.py` (for the X archive importer), `tools/test-source-pages.py` (for the safe-to-delete and link-triage pages), `node tools/test-chat-grab.mjs` (for grabbing links from a chat page), `tools/test-bridge-import.py` (for the helper's import), `tools/test-reel-resources.py` (for watch-reel's OCR, `extract-reel-resources.py` or `reels-to-captures.py`), `tools/test-bridge-socket.py` (for the helper's shell socket), `tools/test-bridge-owner.py` (for which profile owns the backups),
 `node tools/test-bridge.mjs`, for stashing or the live preview `tools/run-in-headless-firefox.zsh
 --extension extension tools/e2e-stash.js` and `tools/preview-frames/test-preview-frames.zsh`, and
@@ -86,5 +86,8 @@ stand-in script.
 ## Reading the owner's links
 
 Use `link-keeper` (tools/link-keeper.mjs; `--help`), never the Firefox profile's files: it reads
-the live add-on, or the latest backup when Firefox is closed. A change through it is journaled;
+the live add-on, or the latest backup when Firefox is closed.
+To search the saved links' content, use `tools/search-saved-links.mjs WORDS` (ranked, every word must
+match, reel transcripts and on-screen text included), not `link-keeper links --search`, which is one
+literal substring with no ranking. A change through it is journaled;
 `link-keeper undo` reverts the last one. Remove one copy at a time unless the owner asks for more.
