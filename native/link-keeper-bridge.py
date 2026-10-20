@@ -318,7 +318,8 @@ def refresh_start(offline: bool) -> dict:
     flags = "--no-open" + (" --offline" if offline else "")
     with REFRESH_LOG.open("a") as log:
         log.write(f"--- refresh {started}{' (offline)' if offline else ''}\n")
-    env = dict(os.environ, PATH=f"{Path.home()}/.asdf/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")
+    # ~/.local/bin holds uv's tools: watch-reel.zsh needs mlx_whisper from there.
+    env = dict(os.environ, PATH=f"{Path.home()}/.asdf/shims:{Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")
     proc = subprocess.Popen(
         ["/bin/zsh", "-c", f'"$0" {flags}; print -- "--- exit $?"', str(script)],
         stdin=subprocess.DEVNULL, stdout=REFRESH_LOG.open("a"), stderr=subprocess.STDOUT,
