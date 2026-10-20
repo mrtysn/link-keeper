@@ -12,6 +12,11 @@
 # slides/NN.jpg, video slides as slides/NN.mp4 with their frames and transcript. The caption is
 # in video.info.json either way.
 #
+# YouTube videos and X posts with a video are watched the same way (packs yt-<id> and x-<id>; the
+# names come from video-pack-id.zsh). A YouTube video's own captions are its transcript when it has
+# them, so only a 360p picture is downloaded for the frames; without captions, whisper transcribes it as
+# a reel. A video over 10 minutes gets 600 frames spread over its length instead of one a second.
+#
 # Usage:
 #   watch-reel.zsh <url>...                    # one pack per reel or post URL
 #   watch-reel.zsh --from captures.jsonl       # every kind:"reel"/"ig-post" record in the file
@@ -313,20 +318,40 @@ done
 (( $#urls )) || { print "nothing to fetch"; exit 0 }
 mkdir -p "$REELS_DIR"
 
-# --- one pack per shortcode -----------------------------------------------------
+# --- one pack per video ---------------------------------------------------------
 
-shortcode() {
-  print -r -- "$1" | sed -nE 's#.*instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+).*#\2#p'
-}
+pack_id() { "$here/video-pack-id.zsh" "$1" 2>/dev/null }
 
 built=0 skipped=0 failed=0
 
-# frames + transcript for one video; $2 prefixes the frame names and heads the transcript section
+# A YouTube caption file (WebVTT) as plain lines: cue text only, and the rolling repeats auto-captions
+# carry (each cue restating the last) dropped.
+vtt_text() {
+  python3 - "$1" <<'PY'
+import re, sys
+out = []
+for line in open(sys.argv[1], encoding="utf-8").read().splitlines():
+    if not line.strip() or "-->" in line or re.match(r"^(WEBVTT|Kind:|Language:|NOTE|\d+$)", line):
+        continue
+    line = re.sub(r"<[^>]+>", "", line).strip()
+    if line and (not out or line != out[-1]):
+        out.append(line)
+print("\n".join(out))
+PY
+}
+
+# frames + transcript for one video; $2 prefixes the frame names and heads the transcript section;
+# $3, when given, is a caption file that stands in for whisper. A frame a second, or 600 over the
+# length of a video longer than 10 minutes, so a frame number is still its second only up to there.
 watch_video() {
-  local mp4=$1 prefix=$2 txt
-  ffmpeg -y -loglevel error -i "$mp4" -vf "fps=1,scale=640:-2" "$pack/frames/${prefix}f%04d.jpg"
+  local mp4=$1 prefix=$2 captions=${3:-} txt dur rate=1
+  dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$mp4" 2>/dev/null || print 0)
+  (( ${dur%.*} > 600 )) && rate="600/${dur%.*}"
+  ffmpeg -y -loglevel error -i "$mp4" -vf "fps=$rate,scale=640:-2" "$pack/frames/${prefix}f%04d.jpg"
+  if [[ -n $captions ]]; then
+    txt=$(vtt_text "$captions")
   # Silent reels are common — probe before extracting, or ffmpeg dies on a stream-less wav.
-  if ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$mp4" | grep -q .; then
+  elif ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$mp4" | grep -q .; then
     ffmpeg -y -loglevel error -i "$mp4" -ar 16000 -ac 1 "$pack/audio.wav"
     mlx_whisper "$pack/audio.wav" --model "$WHISPER_MODEL" \
                 --output-dir "$pack" --output-name part --output-format txt >/dev/null
@@ -344,10 +369,13 @@ watch_video() {
 # Everything after the download, from files on disk: frames and transcript per video, meta.json, the
 # sheet, OCR and summary (which drops the MP4s). Runs in the background while the next pack downloads.
 process_pack() {
-  local pack=$1 url=$2 kind=$3 code=$4 duration=0 slides=0 mp4 rc=0
-  local -a files
-  if [[ $kind == reel ]]; then
-    watch_video "$pack/video.mp4" ""
+  local pack=$1 url=$2 kind=$3 code=$4 duration=0 slides=0 mp4 rc=0 captions
+  local -a files subs
+  if [[ $kind != carousel ]]; then
+    subs=($pack/subs*.vtt(N))
+    captions=${subs[1]:-}
+    watch_video "$pack/video.mp4" "" "$captions"
+    rm -f $subs
     duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$pack/video.mp4")
   else
     for mp4 in $pack/slides/*.mp4(N); do
@@ -360,7 +388,9 @@ process_pack() {
   python3 - "$pack/meta.json" "$url" "${duration:-0}" "$kind" "$slides" <<'PY'
 import json, sys, datetime
 out, url, duration, kind, slides = sys.argv[1:6]
-meta = {"url": url, "kind": kind, "duration_s": round(float(duration or 0), 1),
+platform = "youtube" if kind == "youtube" else "x" if kind == "x" else "instagram"
+meta = {"url": url, "kind": "video" if platform != "instagram" else kind, "platform": platform,
+        "duration_s": round(float(duration or 0), 1),
         "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
 if kind == "carousel":
     meta["slides"] = int(slides)
@@ -376,8 +406,8 @@ PY
 
 processing=0
 for url in $urls; do
-  code=$(shortcode "$url")
-  [[ -n $code ]] || { print "  ? not a reel/post url, skipping: $url"; continue }
+  code=$(pack_id "$url") || code=""
+  [[ -n $code ]] || { print "  ? not a video link this watches (Instagram, YouTube, X), skipping: $url"; continue }
   pack=$REELS_DIR/$code
 
   if [[ -s $pack/meta.json ]]; then
@@ -408,9 +438,27 @@ for url in $urls; do
   fi
   sleep 3   # be a polite client; instagram bans hasty ones
 
-  kind=$(python3 -c 'import json,sys; print("carousel" if json.load(open(sys.argv[1])).get("_type") == "playlist" else "reel")' "$pack/video.info.json")
+  case $code in
+    yt-*) kind=youtube ;;
+    x-*) kind=x ;;
+    *) kind=$(python3 -c 'import json,sys; print("carousel" if json.load(open(sys.argv[1])).get("_type") == "playlist" else "reel")' "$pack/video.info.json") ;;
+  esac
 
-  if [[ $kind == reel ]]; then
+  if [[ $kind == youtube ]]; then
+    # Its own captions (the uploader's, else YouTube's automatic ones) are the transcript; with them, a
+    # 360p picture with no sound is all the frames need. Without, a 360p file with sound for whisper.
+    yt-dlp --no-progress --skip-download --write-subs --write-auto-subs --sub-langs "en.*,tr.*,-live_chat" \
+           --sub-format vtt --load-info-json "$pack/video.info.json" -o "$pack/subs" >/dev/null 2>&1 || true
+    caps=($pack/subs*.vtt(N))
+    if (( $#caps )); then fmt="bv*[height<=360]/b[height<=360]/worst"
+    else fmt="b[height<=360]/bv*[height<=360]+ba/worst"; fi
+    if [[ ! -s $pack/video.mp4 ]] && ! yt-dlp --no-progress --load-info-json "$pack/video.info.json" -f "$fmt" \
+         --merge-output-format mp4 -o "$pack/video.mp4" >/dev/null 2>"$pack/yt-dlp.err"; then
+      print "  ! download failed — $(grep ERROR "$pack/yt-dlp.err" | tail -1 | head -c 100)"
+      failed=$(( failed + 1 ))
+      continue
+    fi
+  elif [[ $kind == reel || $kind == x ]]; then
     if [[ ! -s $pack/video.mp4 ]] && ! yt-dlp --no-progress --load-info-json "$pack/video.info.json" \
          -o "$pack/video.mp4" >/dev/null 2>"$pack/yt-dlp.err"; then
       print "  ! download failed — $(grep ERROR "$pack/yt-dlp.err" | tail -1 | head -c 100)"

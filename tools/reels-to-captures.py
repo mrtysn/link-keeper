@@ -130,13 +130,26 @@ def record(pack: Path) -> dict | None:
     # line, which identifies a reel far better than who posted it.
     first_line = caption.splitlines()[0][:100] if caption else None
     is_reel = "/reel/" in meta["url"] or "/reels/" in meta["url"] or "/tv/" in meta["url"]
+    platform = meta.get("platform", "instagram")
+    # YouTube: the video's own title, by its channel. X: the post's text, by its @handle (yt-dlp's
+    # uploader_id there is the handle).
+    if platform == "youtube":
+        kind, site, title = "video", "YouTube", info.get("title")
+        author = {"name": info.get("channel") or info.get("uploader"), "handle": info.get("uploader_id") or None}
+    elif platform == "x":
+        kind, site, title = "tweet", "X", first_line
+        handle = info.get("uploader_id")
+        author = {"name": info.get("uploader"), "handle": f"@{handle}" if handle else None}
+    else:
+        kind, site, title = ("reel" if is_reel else "ig-post"), "Instagram", first_line
+        author = {"name": info.get("uploader"), "handle": info.get("channel") or None}
     return {
-        "kind": "reel" if is_reel else "ig-post",
+        "kind": kind,
         "url": meta["url"],
         "source_url": None,
-        "title": first_line or info.get("uploader") or pack.name,
+        "title": title or info.get("uploader") or pack.name,
         "text": text or None,
-        "author": {"name": info.get("uploader"), "handle": info.get("channel") or None},
+        "author": author,
         "saved_at": None,
         "posted_at": posted,
         "duration_s": meta.get("duration_s"),
@@ -144,7 +157,7 @@ def record(pack: Path) -> dict | None:
         "images": [],
         "captured_at": meta.get("fetched_at") or datetime.now(timezone.utc).isoformat(),
         "via": "watch-reel",
-        "site": "Instagram",
+        "site": site,
     }
 
 

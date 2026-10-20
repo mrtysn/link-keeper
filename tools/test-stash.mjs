@@ -878,6 +878,12 @@ await check("a page capture of a reel asks the helper to watch it; an imported r
   assert.equal(asked.length, 2, "an unchanged record is not asked again");
   await fire([reel], [{ ...reel, captured_at: "2" }]);
   assert.equal(asked.length, 3, "capturing it again asks again");
+  await fire([], [{ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", via: "list", captured_at: "1" },
+    { url: "https://x.com/a/status/1", via: "list", captured_at: "1", images: ["https://pbs.twimg.com/media/x.jpg"] },
+    { url: "https://x.com/a/status/2", via: "list", captured_at: "1", images: ["https://video.twimg.com/amplify_video/1/vid/a.mp4?tag=1"] }]);
+  assert.deepEqual(asked.slice(3), ["https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://x.com/a/status/2"],
+    "a YouTube video is watched, and an X post only when its capture shows a video");
+  asked.length = 3;
   await browser.handle({ type: "watch-settings", onCapture: false });
   await fire([], [{ ...reel, captured_at: "3" }]);
   assert.equal(asked.length, 3, "with the setting off, nothing is asked");

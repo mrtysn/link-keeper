@@ -353,7 +353,21 @@ def import_status() -> dict:
 # each pack, its resource list and its capture record, appended to records.jsonl. watch-status hands the
 # records past the page's cursor back to the extension, which imports them.
 WATCH_LOG = Path.home() / "Library/Logs/link-watch.log"
-WATCHABLE = re.compile(r"^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+)")
+# The pack name of a video link, as tools/video-pack-id.zsh gives it: the queue file is named after it.
+WATCHABLE = [
+    (re.compile(r"^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+)"), "{3}"),
+    (re.compile(r"^https?://((www|m)\.)?youtube\.com/(watch\?(.*&)?v=|shorts/)([A-Za-z0-9_-]{11})"), "yt-{5}"),
+    (re.compile(r"^https?://youtu\.be/([A-Za-z0-9_-]{11})"), "yt-{1}"),
+    (re.compile(r"^https?://((www|mobile)\.)?(x|twitter)\.com/[A-Za-z0-9_]+/status/([0-9]+)"), "x-{4}"),
+]
+
+
+def video_pack_id(url: str) -> str | None:
+    for pattern, name in WATCHABLE:
+        m = pattern.match(url)
+        if m:
+            return name.format(*([None] + list(m.groups())))
+    return None
 
 
 def watch_dir() -> Path:
@@ -380,10 +394,10 @@ def watch_start(urls: list) -> dict:
     queue.mkdir(parents=True, exist_ok=True)
     added = 0
     for url in urls if isinstance(urls, list) else []:
-        m = WATCHABLE.match(str(url))
-        if not m:
+        name = video_pack_id(str(url))
+        if not name:
             continue
-        job = queue / f"{m.group(3)}.url"
+        job = queue / f"{name}.url"
         if not job.exists():
             job.write_text(str(url).split("#")[0])
             added += 1

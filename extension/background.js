@@ -1118,7 +1118,7 @@ async function rekeyStored(prefixes) {
 }
 
 // Where a loose link came from, by the importer that wrote its capture.
-const SOURCE_LABELS = { "instagram-export": "Instagram export", "watch-reel": "Instagram reels", "x-archive": "X archive",
+const SOURCE_LABELS = { "instagram-export": "Instagram export", "watch-reel": "Watched videos", "x-archive": "X archive",
   fxtwitter: "Refresh", web: "Refresh", api: "Refresh", exa: "Refresh", redirect: "Refresh" };
 
 async function groupLooseLinks() {
@@ -1317,12 +1317,19 @@ browser.runtime.onInstalled.addListener(() => applyFilterRules().catch(() => {})
 /* --- watching videos ------------------------------------------------------------------------------ */
 
 /* Watching a video — download, transcript, on-screen text, the list of what it points to — runs on this
- * Mac through the helper (tools/watch-links.zsh). It is asked for three ways: a page capture of a reel
+ * Mac through the helper (tools/watch-links.zsh), for an Instagram reel or post, a YouTube video, or an X
+ * post. It is asked for three ways: a page capture of one
  * when "Watch videos when captured" is on (watchOnCapture, on unless switched off), the Watch item on
  * a link, and Import. The finished records come back through watch-status and are imported like any
  * other: a watch-reel record replaces the caption-only read of the same reel. watchCursor is how far
  * into the helper's records file this profile has read. */
-const WATCHABLE = /^https?:\/\/(www\.)?instagram\.com\/(reel|reels|p|tv)\/[A-Za-z0-9_-]+/;
+// The links tools/video-pack-id.zsh names a pack for (the helper keeps the same patterns).
+const WATCHABLE = /^https?:\/\/((www\.)?instagram\.com\/(reel|reels|p|tv)\/[A-Za-z0-9_-]+|((www|m)\.)?youtube\.com\/(watch\?(.*&)?v=|shorts\/)[A-Za-z0-9_-]{11}|youtu\.be\/[A-Za-z0-9_-]{11}|((www|mobile)\.)?(x|twitter)\.com\/[A-Za-z0-9_]+\/status\/\d+)/;
+/* Watched on capture: every reel and YouTube video, but an X post only when its capture shows a video
+ * (most X posts are text, and asking for a video that is not there is a request to X for nothing). */
+const XPOST = /^https?:\/\/((www|mobile)\.)?(x|twitter)\.com\//;
+const hasVideo = r => /video\.twimg\.com|\.mp4(\?|$)/.test(JSON.stringify([r.images, r.media, r.video].filter(Boolean)));
+const watchOnCaptureWants = r => WATCHABLE.test(r.url || "") && (!XPOST.test(r.url) || hasVideo(r));
 const getWatchOnCapture = async () => (await read("watchOnCapture", true)) !== false;
 
 async function watchStart(urls) {
@@ -1418,7 +1425,7 @@ async function captureLink(url, note = "", windowId = undefined) {
 browser.storage.onChanged.addListener(async (changes, area) => {
   if (area !== "local" || !changes.captures?.newValue) return;
   const before = new Map((changes.captures.oldValue || []).map(r => [keyOf(r.url), r.captured_at]));
-  const fresh = changes.captures.newValue.filter(r => (!r.via || r.via === "list") && WATCHABLE.test(r.url || "")
+  const fresh = changes.captures.newValue.filter(r => (!r.via || r.via === "list" || r.via === "agent") && watchOnCaptureWants(r)
     && before.get(keyOf(r.url)) !== r.captured_at);
   if (!fresh.length || !(await getWatchOnCapture())) return;
   watchStart(fresh.map(r => r.url)).catch(() => {});

@@ -250,8 +250,9 @@ const LinkActions = (() => {
   }
 
   /* Watch: the helper downloads the video and builds its pack; the record comes back into the capture
-   * by itself, a minute or so later (background.js, watchCollect). Instagram reels and posts for now. */
-  const WATCHABLE_VIDEO = /^https?:\/\/(www\.)?instagram\.com\/(reel|reels|p|tv)\/[A-Za-z0-9_-]+/;
+   * by itself, a minute or so later (background.js, watchCollect). */
+  // Instagram reels and posts, YouTube videos, X posts (as background.js WATCHABLE).
+  const WATCHABLE_VIDEO = /^https?:\/\/((www\.)?instagram\.com\/(reel|reels|p|tv)\/[A-Za-z0-9_-]+|((www|m)\.)?youtube\.com\/(watch\?(.*&)?v=|shorts\/)[A-Za-z0-9_-]{11}|youtu\.be\/[A-Za-z0-9_-]{11}|((www|mobile)\.)?(x|twitter)\.com\/[A-Za-z0-9_]+\/status\/\d+)/;
   async function watch(t) {
     const res = await send({ type: "watch-start", urls: [t.link.url] });
     page.say(!res?.ok ? res?.error || "Unable to watch it"

@@ -32,7 +32,8 @@ Pipeline, in order:
    `tools/build-link-triage-page.py`, every source, only when their input changed); then serves the
    result on loopback. `--offline` skips everything that touches the network.
 3. **Watch-packs:** `tools/watch-reel.zsh` downloads a reel or carousel and builds a pack (video, whisper
-   transcript, keyframes, contact sheet, slides) under `REELS_DIR` (default `data/reels`). It is Instagram only.
+   transcript, keyframes, contact sheet, slides) under `REELS_DIR` (default `data/reels`): Instagram reels and posts, YouTube videos (`yt-<id>`, from their
+   captions when they have them) and X posts with a video (`x-<id>`); `tools/video-pack-id.zsh` names the packs.
    Each pack gets `onscreen.txt` (OCR of the distinct frames); `tools/extract-reel-resources.py` (Claude Haiku,
    full import only) writes `resources.json`, what the reel is about and the tools and links it points to.
    `tools/reels-to-captures.py` folds the packs into capture records (`link-captures-reels.jsonl`).
@@ -43,7 +44,7 @@ Pipeline, in order:
    reads and edits it for agents.
 
 Video, transcript, on-screen text and resource extraction live in `tools/watch-reel.zsh`,
-`tools/extract-reel-resources.py` and `tools/reels-to-captures.py` (Instagram only today). Grep `tools/` and `importers/` as well as `extension/` before telling the owner something
+`tools/extract-reel-resources.py` and `tools/reels-to-captures.py` (Instagram, YouTube and X). Grep `tools/` and `importers/` as well as `extension/` before telling the owner something
 does not exist.
 
 ## Releases: once per finished batch

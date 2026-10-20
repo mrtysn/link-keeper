@@ -11,7 +11,7 @@
 # Usage:
 #   watch-links.zsh --queue DIR --out FILE
 #
-# Instagram reels and posts only, as watch-reel.zsh. No login anywhere; the resource list spends Claude
+# Instagram reels and posts, YouTube videos and X posts with a video, as watch-reel.zsh. No login anywhere; the resource list spends Claude
 # tokens (set WATCH_NO_RESOURCES=1 to skip it).
 
 set -euo pipefail
@@ -31,9 +31,6 @@ done
 [[ -d $queue && -n $out ]] || { print -u2 "usage: watch-links.zsh --queue DIR --out FILE"; exit 1 }
 queue=${queue:A} out=${out:A}
 
-shortcode() {
-  print -r -- "$1" | sed -nE 's#.*instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+).*#\2#p'
-}
 
 done_n=0
 while true; do
@@ -41,7 +38,7 @@ while true; do
   (( $#jobs_left )) || break
   job=$jobs_left[1]
   url=$(<$job)
-  code=$(shortcode "$url")
+  code=$("$here/video-pack-id.zsh" "$url" 2>/dev/null) || code=""
   print -- "--- $url"
   if [[ -n $code ]]; then
     "$here/watch-reel.zsh" "$url" || print "  ! watch-reel failed for $code"

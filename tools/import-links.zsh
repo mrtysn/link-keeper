@@ -277,7 +277,7 @@ else
   : > "$xdm_jsonl"
 fi
 
-print "\n4/7  reels — packs for new instagram links, records from all of them"
+print "\n4/7  videos — packs for new reels, YouTube videos and X videos, records from all of them"
 reels_dir=${REELS_DIR:-$outdir/reels}
 reels_jsonl=$outdir/link-captures-reels.jsonl
 # The worklist holds only Telegram and phone reels: instagram.py --other leaves instagram.com links
@@ -292,20 +292,31 @@ for line in open(sys.argv[1], encoding="utf-8"):
     if r.get("kind") in ("reel", "ig-post"): print(r["url"])
 ' "$ig_jsonl"
 } | grep -E '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' | sort -u || true)
+# YouTube videos from the worklist, and X posts whose record (FxTwitter's) carries a video.
+video_urls=$( {
+  print -r -- "$reel_urls"
+  print -r -- "$worklist" | cut -f1 | grep -E '^https?://(((www|m)\.)?youtube\.com/(watch\?|shorts/)|youtu\.be/)' || true
+  [[ -s $x_jsonl ]] && python3 -c '
+import json, sys
+for line in open(sys.argv[1], encoding="utf-8"):
+    r = json.loads(line) if line.strip() else {}
+    if "video.twimg.com" in json.dumps(r.get("images") or []): print(r["url"])
+' "$x_jsonl"
+} | grep . | sort -u || true)
 reels_unwatched=0
 while IFS= read -r u; do
-  code=$(print -r -- "$u" | sed -nE 's#.*instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+).*#\2#p')
+  code=$("$repo/tools/video-pack-id.zsh" "$u" 2>/dev/null) || code=""
   [[ -n $code && ! -s $reels_dir/$code/meta.json && ! -s $reels_dir/$code/yt-dlp.err ]] && reels_unwatched=$(( reels_unwatched + 1 ))
-done <<< "$reel_urls"
+done <<< "$video_urls"
 if (( reels_unwatched )) && (( offline || ! watch )); then
-  print "  skipped (${${offline:#0}:+--offline}${${watch:#1}:+--no-watch}): $reels_unwatched reels have no pack yet; a run that watches downloads them"
+  print "  skipped (${${offline:#0}:+--offline}${${watch:#1}:+--no-watch}): $reels_unwatched videos have no pack yet; a run that watches downloads them"
 elif (( reels_unwatched )); then
   # watch-reel's own errors (a missing tool, a failed contact sheet) pass through: filtering them out
   # once hid that the Import button's PATH had no mlx_whisper, so no reel was ever transcribed from it.
   reel_rc=0
-  print -r -- "$reel_urls" | REELS_DIR=$reels_dir xargs "$repo/tools/watch-reel.zsh" 2>&1 \
+  print -r -- "$video_urls" | REELS_DIR=$reels_dir xargs "$repo/tools/watch-reel.zsh" 2>&1 \
     | grep -E "^packs:|!|^missing:" || reel_rc=$?
-  (( reel_rc )) && print "  ! reel downloads did not finish ($reels_unwatched were waiting); see the lines above"
+  (( reel_rc )) && print "  ! video downloads did not finish ($reels_unwatched were waiting); see the lines above"
 fi
 # What each pack points to (Claude Haiku over caption, transcript and on-screen text): spends tokens, so
 # full runs only; a pack whose input has not changed is not asked again.
