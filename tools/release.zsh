@@ -10,8 +10,11 @@
 #   tools/release.zsh --dry-run  # say what it would do, change nothing
 #   tools/release.zsh --no-open  # the same release, the signed xpi's path printed instead of opened
 #   tools/release.zsh --finish   # a version already submitted but not yet signed: fetch it, open it, commit it
+#   tools/release.zsh --owner-asked   # the owner asked for this release: allowed within 2 hours of the last
 #
 # Refuses while a capture run is going or paused: installing the release would reset it.
+# Refuses within 2 hours of the last release unless the owner asked for this one (--owner-asked): an
+# agent's own sense that the owner wants a change installed now is not the end of a batch.
 # Needs a clean tree (the batch committed) and Doppler's firefox-signing project for AMO's keys.
 # If AMO's approval outlasts web-ext's wait, the version is submitted but not downloaded: the script
 # then waits for it (up to 15 minutes) and fetches it with tools/fetch-signed-xpi.py. Still unsigned
@@ -26,15 +29,35 @@ ext=$repo/extension
 manifest=$ext/manifest.json
 
 if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-  sed -n '4,19p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '4,22p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 dry=0
 no_open=0
 finish=0
-[[ ${1:-} == --dry-run ]] && dry=1
-[[ ${1:-} == --no-open ]] && no_open=1
-[[ ${1:-} == --finish ]] && finish=1
+owner_asked=0
+for arg in "$@"; do
+  case $arg in
+    --dry-run) dry=1 ;;
+    --no-open) no_open=1 ;;
+    --finish) finish=1 ;;
+    --owner-asked) owner_asked=1 ;;
+    *) print -u2 "unknown option $arg; see --help"; exit 1 ;;
+  esac
+done
+
+# One release per batch. On 2026-10-19/20 an agent signed 5.69 to 5.77, nine releases, in under three
+# hours: the owner was trying each change as it landed, and the agent released after every request to put
+# it in front of them. A release within 2 hours of the last needs the owner's own ask.
+gap=7200
+last=$(git -C "$repo" log -1 --format=%ct --grep='^ship .* as a signed release$' 2>/dev/null || true)
+if (( ! finish && ! owner_asked )) && [[ -n $last ]] && (( $(date +%s) - last < gap )); then
+  ago=$(( ($(date +%s) - last) / 60 ))
+  print -u2 "the last release was $ago min ago; one release carries a whole batch."
+  print -u2 "Say \"committed; it ships with the next release\" and keep going. Release now only if the owner"
+  print -u2 "asked for it, with --owner-asked."
+  (( dry )) || exit 1
+fi
 
 # Installing a release reloads the add-on, which drops a capture run in progress (its state is in
 # storage.session). On 2026-10-20 releases shipped mid-run reset the owner's run four times; a run that is

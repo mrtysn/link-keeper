@@ -8,6 +8,9 @@ A Firefox extension (`extension/`) and the tools around it (`tools/`). The READM
 - **Sign a release only when the batch is done**: when the owner says so, or when the session's
   requests are finished and tested. Never after each change or each answer — a fast run of
   requests is one batch. Say a change is "committed; it ships with the next release".
+- **The owner trying each change as it lands does not end the batch.** Wanting to put a fix in front
+  of them is the reason 5.69 to 5.77 went out nine times in under three hours. `release.zsh` refuses
+  within 2 hours of the last release unless the owner asked for this one (`--owner-asked`).
 - **Release with `tools/release.zsh`**: it bumps the version, signs on addons.mozilla.org, opens the
   signed xpi in Firefox, and commits and pushes "ship N as a signed release". `--dry-run` shows the
   next version without changing anything.
