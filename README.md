@@ -539,6 +539,16 @@ already exist.
 
 ### Capturing many at once
 
+**Where a page is read.** A public link is read first in the agent browser, Obscura, through the helper
+(`read-page`): a headless browser with no logins and a fresh session, running the extension's own readers,
+so capturing stops going through your accounts (install it once with
+`tools/agent-browser/install-obscura.zsh`). Sites that need your login (X, Instagram, Google, YouTube,
+LinkedIn, Facebook, `*.mertyas.in`, local pages) are read in a Firefox tab as before, and so is a page the
+agent browser reads almost empty or cannot read. A site that turns it away (a captcha, a login, a block)
+is not asked by it again; Settings → **Captures** lists those sites, can let it try them again, and
+switches the agent browser off. Obscura was chosen with `tools/browser-bench/` on 50 of your failed
+captures (it read 18 of 33, as headless Chromium did, and got past Reddit and two PDFs).
+
 The capture queue reads a pile of links one after another, out of sight. In Links, filter to **Not
 captured** (narrow by site if you like), press **Select**, then **Select all shown** or tick some, and
 **Capture**. Firefox asks once for access to every site, since a link may redirect anywhere; the links
