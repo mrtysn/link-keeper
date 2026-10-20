@@ -96,6 +96,10 @@ with tempfile.TemporaryDirectory() as tmp:
     check("resource URLs become the record's links, with a scheme",
           rec["links"] == ["https://github.com/acme/frame-tool"], str(rec["links"]))
 
+    (pack / "transcript.txt").write_text("Music\nMusic\nGo and try Voicebox.\n[Music]\n")
+    text = r2c.record(pack)["text"]
+    check("whisper's runs of 'Music' become one (music) line in the capture; transcript.txt keeps them",
+          "— transcript —\n(music)\nGo and try Voicebox.\n(music)" in text and (pack / "transcript.txt").read_text().count("Music") == 3, text)
     (pack / "resources.json").unlink()
     (pack / "onscreen.txt").unlink()
     rec = r2c.record(pack)

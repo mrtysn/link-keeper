@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -35,6 +36,23 @@ from pathlib import Path
 def looks_hallucinated(lines: list[str]) -> bool:
     stripped = [l.strip() for l in lines if l.strip()]
     return len(stripped) >= 4 and len(set(stripped)) <= 2
+
+
+MUSIC = re.compile(r"[\[(]?music[\])]?", re.I)
+
+
+def collapse_music(lines) -> list[str]:
+    """Whisper writes "Music" for each stretch of music with no speech; nobody said it. A run of them
+    becomes one "(music)" line, so the text still says where music plays. transcript.txt keeps whisper's
+    own output."""
+    out: list[str] = []
+    for line in lines:
+        if MUSIC.fullmatch(line):
+            if not out or out[-1] != "(music)":
+                out.append("(music)")
+        else:
+            out.append(line)
+    return out
 
 
 LINE_SEPARATORS = {0x2028: "\\u2028", 0x2029: "\\u2029"}
@@ -76,7 +94,7 @@ def record(pack: Path) -> dict | None:
     text = caption
     if transcript_p.is_file():
         lines = transcript_p.read_text(encoding="utf-8").splitlines()
-        transcript = "\n".join(l.strip() for l in lines if l.strip())
+        transcript = "\n".join(collapse_music(l.strip() for l in lines if l.strip()))
         if looks_hallucinated(lines):
             transcript = "(no intelligible speech — visual reel)"
         if transcript:
