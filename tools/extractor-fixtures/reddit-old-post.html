@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>How would I achieve this in Godot ? Can't wrap my head around it. : godot</title>
+<meta property="og:title" content="How would I achieve this in Godot ? Can't wrap my head around it."></head>
+<!-- Old Reddit's comments page, cut down: the post as a .thing in #siteTable, its body in a form,
+     the sidebar in .side, and comments nested in .commentarea, a reply inside its parent. -->
+<body class="listing-page comments-page">
+<div id="header"><a href="/">reddit</a> <span class="pagename">godot</span> <a href="/login">login</a></div>
+<div class="side"><div class="md">Welcome to r/godot, the subreddit for the Godot engine. Read the rules before posting.</div></div>
+<div class="content" role="main">
+  <div id="siteTable" class="sitetable linklisting">
+    <div class="thing link self" data-author="pixelmoth" data-subreddit-prefixed="r/godot" data-timestamp="1760900000000"
+         data-url="/r/godot/comments/1su9f83/how_would_i_achieve_this_in_godot_cant_wrap_my/" data-permalink="/r/godot/comments/1su9f83/how_would_i_achieve_this_in_godot_cant_wrap_my/" data-comments-count="2">
+      <div class="entry">
+        <p class="title"><a class="title" href="/r/godot/comments/1su9f83/how_would_i_achieve_this_in_godot_cant_wrap_my/">How would I achieve this in Godot ? Can't wrap my head around it.</a></p>
+        <div class="expando"><form class="usertext"><div class="usertext-body"><div class="md">
+          <p>I want the camera to follow the player but lag behind on turns, like in the clip.</p>
+          <p>I tried lerp in _process but it jitters.</p>
+        </div></div></form></div>
+      </div>
+    </div>
+  </div>
+  <div class="commentarea">
+    <div class="sitetable nestedlisting">
+      <div class="thing comment" data-author="godotdev">
+        <div class="entry"><form class="usertext"><div class="usertext-body"><div class="md"><p>Use a Camera2D with position smoothing and move it in _physics_process.</p></div></div></form></div>
+        <div class="child"><div class="sitetable listing">
+          <div class="thing comment" data-author="pixelmoth">
+            <div class="entry"><form class="usertext"><div class="usertext-body"><div class="md"><p>That fixed it, thanks!</p></div></div></form></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="thing comment" data-author="shaderwitch">
+        <div class="entry"><form class="usertext"><div class="usertext-body"><div class="md"><p>Or a RemoteTransform2D on a spring arm.</p></div></div></form></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="footer-parent">about · help · reddit premium</div>
+</body>
+</html>

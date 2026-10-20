@@ -514,9 +514,58 @@ const LK = (() => {
   }
 
   /* --- youtube ----------------------------------------------------------------- */
+  /* A video by its preview tags. A search lists its results, each "title — channel · views · age", from
+   * the page's own data (ytInitialData, in the HTML YouTube sends) or else the drawn results, so it reads
+   * whether or not the page has drawn itself; a page out of sight may not have. Any other page (a
+   * channel, the home feed) is kept by its visible text, as a page no site reader knows. */
+
+  /* The JSON YouTube ships in a script as `var ytInitialData = {...};`, or null. */
+  function ytInitialData() {
+    for (const node of document.querySelectorAll("script:not([src])")) {
+      const src = node.textContent;
+      const at = src.indexOf("ytInitialData = ");
+      if (at < 0) continue;
+      const start = src.indexOf("{", at), end = src.lastIndexOf("}");
+      try { return JSON.parse(src.slice(start, end + 1)); } catch (e) { return null; }
+    }
+    return null;
+  }
+  const ytText = t => t?.simpleText || t?.runs?.map(r => r.text).join("") || null;
+
+  function youtubeResults() {
+    const found = [];
+    const walk = (node, depth = 0) => {
+      if (!node || typeof node !== "object" || depth > 40 || found.length >= 40) return;
+      if (node.videoRenderer?.videoId) { found.push(node.videoRenderer); return; }
+      for (const v of Array.isArray(node) ? node : Object.values(node)) walk(v, depth + 1);
+    };
+    walk(ytInitialData()?.contents);
+    let items = found.map(v => ({
+      href: `https://www.youtube.com/watch?v=${v.videoId}`,
+      title: ytText(v.title),
+      about: [ytText(v.ownerText), ytText(v.lengthText), ytText(v.viewCountText), ytText(v.publishedTimeText)].filter(Boolean),
+    }));
+    if (!items.length) {
+      items = [...document.querySelectorAll("ytd-video-renderer")].map(r => ({
+        href: r.querySelector("a#video-title")?.href || null,
+        title: txt(r.querySelector("#video-title")),
+        about: [txt(r.querySelector("ytd-channel-name a")), ...[...r.querySelectorAll("#metadata-line span")].map(txt)].filter(Boolean),
+      }));
+    }
+    items = items.filter(i => i.title && i.href);
+    if (!items.length) return null;   // not drawn yet
+    const query = new URLSearchParams(location.search).get("search_query");
+    return {
+      kind: "search",
+      title: query ? `YouTube search: ${query}` : document.title,
+      text: items.map(i => `• ${i.title}${i.about.length ? ` — ${i.about.join(" · ")}` : ""}`).join("\n").slice(0, MAIN_MAX),
+      links: items.slice(0, 12).map(i => ({ href: i.href, display: i.title, resolved: i.href })),
+    };
+  }
 
   function youtube() {
-    if (!/\/watch|\/shorts\//.test(location.pathname)) return null;
+    if (location.pathname === "/results") return youtubeResults();
+    if (!/\/watch|\/shorts\//.test(location.pathname)) return {};
     return {
       kind: "video",
       title: meta("og:title") || txt(document.querySelector("h1.ytd-watch-metadata")) || document.title,
@@ -531,22 +580,64 @@ const LK = (() => {
   }
 
   /* --- reddit ------------------------------------------------------------------ */
+  /* A post with its body and top comments, "u/name: comment" a blank line apart, from new Reddit
+   * (shreddit-post, shreddit-comment) or old Reddit (.thing), whichever the account opens. A subreddit
+   * or other listing lists its posts. */
+  const COMMENTS_MAX = 20;
+  const redditLink = href => (href && !/^https?:\/\/([\w-]+\.)*reddit\.com\//.test(href) && !href.startsWith("/")
+    ? [{ href, display: href, resolved: href }] : []);
+  const joinText = (body, comments) => [body, ...comments].filter(Boolean).join("\n\n").slice(0, MAIN_MAX) || null;
 
-  function reddit() {
-    const post = document.querySelector("shreddit-post");
-    if (!post) return null;
-    const outbound = post.getAttribute("content-href");
+  function redditNew(onPost) {
+    const posts = [...document.querySelectorAll("shreddit-post")];
+    if (!posts.length) return null;
+    if (!onPost) return redditListing(posts.map(p => ({ title: p.getAttribute("post-title"), href: p.getAttribute("permalink"), about: [p.getAttribute("subreddit-prefixed-name"), p.getAttribute("comment-count") && `${p.getAttribute("comment-count")} comments`] })));
+    const post = posts[0];
+    const body = post.querySelector("[slot=text-body]") || document.querySelector("[data-post-click-location=text-body]");
+    const comments = [...document.querySelectorAll("shreddit-comment[depth='0']")].slice(0, COMMENTS_MAX)
+      .map(c => { const t = readableText(c.querySelector("[slot=comment]") || c); return t && `u/${c.getAttribute("author")}: ${t}`; });
     return {
       kind: "reddit-post",
       title: post.getAttribute("post-title") || meta("og:title"),
       author: { handle: post.getAttribute("author"), name: null },
       subreddit: post.getAttribute("subreddit-prefixed-name"),
       posted: post.getAttribute("created-timestamp"),
-      links: outbound && !outbound.includes("reddit.com")
-        ? [{ href: outbound, display: outbound, resolved: outbound }]
-        : [],
-      text: txt(document.querySelector("[data-post-click-location=text-body]"))?.slice(0, 800) || null,
+      links: redditLink(post.getAttribute("content-href")),
+      text: joinText(body && readableText(body), comments),
     };
+  }
+
+  function redditOld(onPost) {
+    const things = [...document.querySelectorAll("#siteTable > .thing.link")];
+    if (!things.length) return null;
+    if (!onPost) return redditListing(things.map(t => ({ title: txt(t.querySelector("a.title")), href: t.getAttribute("data-permalink"), about: [t.getAttribute("data-subreddit-prefixed"), t.getAttribute("data-comments-count") && `${t.getAttribute("data-comments-count")} comments`] })));
+    const post = things[0];
+    const body = post.querySelector(".usertext-body .md");
+    const comments = [...document.querySelectorAll(".commentarea > .sitetable > .thing.comment")].slice(0, COMMENTS_MAX)
+      .map(c => { const t = readableText(c.querySelector(":scope > .entry .usertext-body .md") || c); return t && `u/${c.getAttribute("data-author")}: ${t}`; });
+    const at = Number(post.getAttribute("data-timestamp"));
+    return {
+      kind: "reddit-post",
+      title: txt(post.querySelector("a.title")) || meta("og:title"),
+      author: { handle: post.getAttribute("data-author"), name: null },
+      subreddit: post.getAttribute("data-subreddit-prefixed"),
+      posted: at ? new Date(at).toISOString() : null,
+      links: redditLink(post.getAttribute("data-url")),
+      text: joinText(body && readableText(body), comments),
+    };
+  }
+
+  function redditListing(posts) {
+    const items = posts.filter(p => p.title);
+    return {
+      kind: "reddit-listing",
+      text: items.map(p => `• ${p.title}${p.about.filter(Boolean).length ? ` — ${p.about.filter(Boolean).join(" · ")}` : ""}`).join("\n").slice(0, MAIN_MAX) || null,
+    };
+  }
+
+  function reddit() {
+    const onPost = /\/comments\//.test(location.pathname);
+    return redditNew(onPost) || redditOld(onPost) || (onPost ? null : {});
   }
 
   /* --- instagram --------------------------------------------------------------- */
@@ -619,14 +710,26 @@ const LK = (() => {
   ];
 
   /* The site handler wins field by field; generic() fills the gaps. */
+  /* The site handler wins field by field; generic() fills the gaps. A handler answers null while its
+   * page is not ready, and {} for a page it has nothing to add to (a profile, a channel), which is then
+   * read as a page no site reader knows. */
   function extract(hostname = location.hostname) {
     const host = hostname.toLowerCase();
     const handler = REGISTRY.find(entry => entry.hosts.test(host));
     const base = generic();
+    let specific = null;
+    if (handler) {
+      try {
+        specific = handler.run();
+      } catch (e) {
+        specific = { extractor_error: String(e.message || e) };
+      }
+      if (!specific) return null;   // not ready
+    }
     // A page no site reader knows is kept by its own text: its description stays only when that text is short.
     // An app, a listing or a dashboard has no block of paragraphs to find; its visible text, without the
     // menus, headers and footers around it, stands in, and is kept whenever there is no description.
-    if (!handler) {
+    if (!specific || !Object.keys(specific).length) {
       let root = mainNode();
       let own = root && readableText(root);
       if (!own || own.length < 280) {
@@ -638,16 +741,8 @@ const LK = (() => {
         base.text = base.text && !own.replace(/\s+/g, " ").includes(base.text.replace(/\s+/g, " ").slice(0, 60)) ? `${base.text}\n\n${own}` : own;
         base.links = mainLinks(root);
       }
+      if (!specific) return base;
     }
-    let specific = null;
-    if (handler) {
-      try {
-        specific = handler.run();
-      } catch (e) {
-        specific = { extractor_error: String(e.message || e) };
-      }
-    }
-    if (!specific) return handler ? null : base;   // handler present but page not ready
 
     const merged = { ...base, ...specific };
     merged.author = specific.author?.handle || specific.author?.name ? specific.author : base.author;

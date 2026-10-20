@@ -213,6 +213,40 @@ await check("a docs page with no article or main: the block holding its paragrap
   lacks(r.text, ["Hidden mobile menu", "Configure", "First run\nFirst run"], "text");
 });
 
+/* A site reader's page, read as if served by `host`. */
+const sitePage = async (path, host, ready = "body") => {
+  const tab = await loaded(`http://127.0.0.1:${PORT}${path}`, ready);
+  const r = (await browser.scripting.executeScript({ target: { tabId: tab.id }, func: h => LK.extract(h), args: [host] }))[0].result;
+  await browser.tabs.remove(tab.id);
+  return r;
+};
+
+await check("an old Reddit post: its body and top-level comments, each after its author, without the sidebar, header or replies", async () => {
+  const r = await sitePage("/r/godot/comments/1su9f83/how_would_i_achieve_this_in_godot_cant_wrap_my/", "old.reddit.com");
+  eq([r.kind, r.title, r.author, r.subreddit, r.posted, r.links], ["reddit-post", "How would I achieve this in Godot ? Can't wrap my head around it.",
+    { handle: "pixelmoth", name: null }, "r/godot", "2025-10-19T18:53:20.000Z", []], "kind, title, author, subreddit, posted, links");
+  eq(r.text, "I want the camera to follow the player but lag behind on turns, like in the clip.\n\nI tried lerp in _process but it jitters.\n\n" +
+    "u/godotdev: Use a Camera2D with position smoothing and move it in _physics_process.\n\nu/shaderwitch: Or a RemoteTransform2D on a spring arm.", "text");
+});
+
+await check("a new Reddit post: its body, its outbound link and top-level comments, without replies", async () => {
+  const r = await sitePage("/r/firefox/comments/1s3t2iu/x/", "www.reddit.com");
+  eq([r.kind, r.author.handle, r.subreddit, r.links.map(l => l.href)], ["reddit-post", "tabhater", "r/firefox", ["https://example.com/screenshot"]], "kind, author, subreddit, links");
+  eq(r.text, "The new tab strip hides the close buttons until you long-press.\n\nu/mozdev: There is a pref for it in about:config.\n\nu/nightly_user: Nightly already reverted it.", "text");
+});
+
+await check("an old Reddit subreddit page lists its posts, not the first post as if it were the page", async () => {
+  const r = await sitePage("/r/slopsmith/", "old.reddit.com");
+  eq([r.kind, r.text], ["reddit-listing", "• Is slopsmith dead? — r/slopsmith · 14 comments\n• Introducing slopsmith: self-hosted Rocksmith CDLC — r/slopsmith · 88 comments"], "kind, text");
+});
+
+await check("a YouTube search not yet drawn is read from the page's data: every video, in order, with its channel, length, views and age", async () => {
+  const r = await sitePage("/results?search_query=outhold%20gameplay", "www.youtube.com");
+  eq([r.kind, r.title], ["search", "YouTube search: outhold gameplay"], "kind, title");
+  eq(r.text, "• Outhold — full gameplay, no commentary — Quiet Plays · 41:02 · 12,345 views · 2 weeks ago\n• Outhold first look — Indie Radar", "text");
+  eq(r.links.map(l => l.href), ["https://www.youtube.com/watch?v=abc123def45", "https://www.youtube.com/watch?v=zzz999yyy88"], "links");
+});
+
 const igPage = async path => {
   const tab = await loaded(`http://127.0.0.1:${PORT}${path}`, "video");
   const r = (await browser.scripting.executeScript({ target: { tabId: tab.id }, func: () => LK.extract("www.instagram.com") }))[0].result;

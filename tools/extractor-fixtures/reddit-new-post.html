@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Whoever decided this was how tabs should look : r/firefox</title></head>
+<!-- New Reddit's post page, cut down: the post as shreddit-post with its body in slot text-body, and
+     comments as shreddit-comment, a reply nested inside its parent with a greater depth. -->
+<body>
+<shreddit-app>
+  <reddit-header-large><a href="/">reddit</a> Log In</reddit-header-large>
+  <main>
+    <shreddit-post post-title="Whoever decided this was how tabs should look on mobile" author="tabhater" subreddit-prefixed-name="r/firefox"
+                   created-timestamp="2026-10-01T10:00:00.000000+0000" content-href="https://example.com/screenshot" permalink="/r/firefox/comments/1s3t2iu/x/">
+      <h1 slot="title">Whoever decided this was how tabs should look on mobile</h1>
+      <div slot="text-body"><p>The new tab strip hides the close buttons until you long-press.</p></div>
+    </shreddit-post>
+    <shreddit-comment-tree>
+      <shreddit-comment author="mozdev" depth="0">
+        <div slot="comment"><p>There is a pref for it in about:config.</p></div>
+        <shreddit-comment author="tabhater" depth="1"><div slot="comment"><p>Which one?</p></div></shreddit-comment>
+      </shreddit-comment>
+      <shreddit-comment author="nightly_user" depth="0"><div slot="comment"><p>Nightly already reverted it.</p></div></shreddit-comment>
+    </shreddit-comment-tree>
+  </main>
+</shreddit-app>
+</body>
+</html>

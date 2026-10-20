@@ -38,6 +38,12 @@ OTHER = {
     "/app/busy": "app-busy.html",
     # Hacker News's rate-limit page, as it answers once requests come too fast.
     "/hn/item": "hn-rate-limit.html",
+    # Reddit as old Reddit and new Reddit draw a post, and old Reddit a subreddit.
+    "/r/godot/comments/1su9f83/how_would_i_achieve_this_in_godot_cant_wrap_my/": "reddit-old-post.html",
+    "/r/slopsmith/": "reddit-old-listing.html",
+    "/r/firefox/comments/1s3t2iu/x/": "reddit-new-post.html",
+    # A YouTube search with its results only in the page's data.
+    "/results": "youtube-results.html",
 }
 
 
@@ -51,7 +57,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/accounts/login/?"):
             self.path = "/accounts/login/"
         m = re.match(r"^/[^/]+/status/(\d+)", self.path)
-        page = PAGES.get(m.group(1)) if m else OTHER.get(self.path)
+        page = PAGES.get(m.group(1)) if m else OTHER.get(self.path.split("?")[0])
         if not page:
             self.send_error(404)
             return
