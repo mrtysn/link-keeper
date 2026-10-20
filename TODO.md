@@ -2,6 +2,15 @@
 
 ## Waiting on the owner
 
+**Watch the videos captured before watching was part of capture (as of 2026-10-21).** 5.81 counts a
+video read but not watched (links.js `capUnwatched`) as not captured: 461 Instagram reels, YouTube
+videos and X posts with a video. The owner said they will start it themselves: Links → Captured filter
+on **Not captured** → Select → tick them → **Capture**, which hands each to the watcher on this Mac
+(`watch-start`, tools/watch-links.zsh) without loading its page. Agents cannot start a capture queue.
+To check progress: `node tools/link-keeper.mjs links --filter uncaptured --all --json` and count the
+links whose `cap.unwatched` is true; the worker logs to ~/Library/Logs/link-watch.log, and a video that
+could not be watched lands under Failed with yt-dlp's reason.
+
 **Make the link previews (as of 2026-10-18).** Previews (a picture and a line per link, shown
 in the list and the hover card) are built and shipped: 5.68 is signed and installed in the owner's
 Firefox. Existing links have none until the owner clicks **Make previews for N links** in Links →
