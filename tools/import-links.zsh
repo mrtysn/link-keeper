@@ -51,6 +51,8 @@ for a in "$@"; do
   [[ $a == --no-serve ]] && { serve=0; continue }
   [[ $a == --no-open ]] && { open_page=0; continue }
   [[ $a == --offline ]] && { offline=1; continue }
+  # The import no longer watches videos (capture does); a helper from 5.80 or earlier still sends this.
+  [[ $a == --no-watch ]] && continue
   args+=$a
 done
 
