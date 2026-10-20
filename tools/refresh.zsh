@@ -89,6 +89,11 @@ else
 fi
 inbox=$outdir/link-inbox.tsv
 
+# Every run leaves a log, however it was started: a terminal run used to leave none, and a reel step
+# that skipped 291 reels on 2026-10-15 could not be told apart from one that died.
+exec > >(tee -a "$outdir/refresh.log") 2>&1
+print -- "--- refresh $(date '+%F %T')${${offline:#0}:+ (offline)}"
+
 # Instagram is optional: the newest instagram-* zip or unzipped directory that actually holds
 # messages or saved posts. Instagram exports are per-request subsets, so a newer zip requested
 # for something else (say, connections only) must not shadow the one with the links in it.
@@ -280,9 +285,32 @@ fi
 print "\n4/8  reels — packs for new instagram links, records from all of them"
 reels_dir=${REELS_DIR:-$outdir/reels}
 reels_jsonl=$outdir/link-captures-reels.jsonl
-reel_urls=$(print -r -- "$worklist" | cut -f1 | grep -E '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' | sort -u || true)
-if [[ -n $reel_urls ]] && (( ! offline )); then
-  print -r -- "$reel_urls" | REELS_DIR=$reels_dir xargs "$repo/tools/watch-reel.zsh" 2>&1 | grep -E "^packs:|! download failed" || true
+# The worklist holds only Telegram and phone reels: instagram.py --other leaves instagram.com links
+# out, so the export's own reels (the DMs) come from its capture records. Until 2026-10-20 they were
+# never downloaded, and 291 DM reels had only their caption.
+reel_urls=$( {
+  print -r -- "$worklist" | cut -f1
+  [[ -s $ig_jsonl ]] && python3 -c '
+import json, sys
+for line in open(sys.argv[1], encoding="utf-8"):
+    r = json.loads(line) if line.strip() else {}
+    if r.get("kind") in ("reel", "ig-post"): print(r["url"])
+' "$ig_jsonl"
+} | grep -E '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' | sort -u || true)
+reels_unwatched=0
+while IFS= read -r u; do
+  code=$(print -r -- "$u" | sed -nE 's#.*instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+).*#\2#p')
+  [[ -n $code && ! -s $reels_dir/$code/meta.json && ! -s $reels_dir/$code/yt-dlp.err ]] && reels_unwatched=$(( reels_unwatched + 1 ))
+done <<< "$reel_urls"
+if (( reels_unwatched )) && (( offline )); then
+  print "  skipped (--offline): $reels_unwatched reels have no pack yet; a run without --offline downloads them"
+elif (( reels_unwatched )); then
+  # watch-reel's own errors (a missing tool, a failed contact sheet) pass through: filtering them out
+  # once hid that the Import button's PATH had no mlx_whisper, so no reel was ever transcribed from it.
+  reel_rc=0
+  print -r -- "$reel_urls" | REELS_DIR=$reels_dir xargs "$repo/tools/watch-reel.zsh" 2>&1 \
+    | grep -E "^packs:|!|^missing:" || reel_rc=$?
+  (( reel_rc )) && print "  ! reel downloads did not finish ($reels_unwatched were waiting); see the lines above"
 fi
 if [[ -d $reels_dir ]]; then
   "$repo/tools/reels-to-captures.py" "$reels_dir" -o "$reels_jsonl"
