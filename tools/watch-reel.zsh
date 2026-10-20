@@ -19,18 +19,21 @@
 #   watch-reel.zsh --retry-failed <url>...     # also retry packs with a recorded failure
 #   watch-reel.zsh --summarize <packdir|shortcode>...   # sheet + summary for existing packs
 #   watch-reel.zsh --summarize-all             # the same for every finished pack in REELS_DIR
-#   (--summarize touches no network; it skips a pack that has summary.md unless --force)
+#   (--summarize touches no network; it skips a pack that has summary.md and onscreen.txt unless
+#   --force, and deletes the pack's MP4s once it is summarised)
 #
 # Packs land under REELS_DIR (config.local.sh; default $DATA_DIR/reels), one directory per
 # shortcode:
-#   reels/DBxYz123/video.mp4  transcript.txt  frames/f0001.jpg …  video.info.json  meta.json
+#   reels/DBxYz123/transcript.txt  onscreen.txt  frames/f0001.jpg …  video.info.json  meta.json
 #                  summary.md  sheet.jpg (sheet-2.jpg when over 24 distinct frames)
-#   reels/DCarou45/slides/01.jpg  slides/02.mp4 …  frames/s02-f0001.jpg …  transcript.txt  meta.json
+#   reels/DCarou45/slides/01.jpg  slides/03.webp …  frames/s02-f0001.jpg …  transcript.txt  meta.json
 #                  summary.md  s02-sheet.jpg …   (one sheet set per video slide)
 #
 # Idempotent: a pack with a meta.json is complete and skipped, so rerunning over the whole capture
 # file only fetches what is new. Instagram rate-limits aggressively; posts are spaced a few seconds
-# apart.
+# apart. A reel is processed (frames, transcript, OCR, summary) in the background while the next one
+# downloads, one at a time, and its MP4 is deleted once the pack is done: the frames and transcript are
+# what an agent reads, and the video can be downloaded again.
 #
 # Requires: yt-dlp, ffmpeg (brew), mlx_whisper (uv tool install mlx-whisper). No login anywhere.
 
@@ -130,17 +133,14 @@ frame_reader() {
   print -r -- "$bin"
 }
 
-# onscreen.txt: the text the reel shows, read by OCR from the distinct frames (the contact-sheet tiles,
-# so build_sheets runs first) and the image slides. Each line once, at its first appearance:
-# "[12s] text", "[slide 2, 4s] text", "[slide 3] text". Catches what is shown but never said.
+# onscreen.txt: the text the reel shows, read by OCR from every per-second frame and the image slides.
+# Each line once, at its first appearance: "[12s] text", "[slide 2, 4s] text", "[slide 3] text".
+# Catches what is shown but never said. Every frame, not only the contact sheet's distinct ones: a
+# caption changing over a still talking head is too small a change to count as a new scene.
 ocr_pack() {
-  local p=$1 s f pre t bin
+  local p=$1 bin
   local -a imgs
-  for s in $sheet_specs; do
-    f=${s%%|*} pre=${${s%%|*}%%sheet*}
-    for t in ${=s#*|}; do imgs+=$p/frames/${pre}f${(l:4::0:)$(( t + 1 ))}.jpg; done
-  done
-  imgs+=($p/slides/*.(jpg|webp)(N))
+  imgs=($p/frames/*f[0-9]*.jpg(N) $p/slides/*.(jpg|webp)(N))
   bin=$(frame_reader) || return 1
   "$bin" $imgs | python3 -c '
 import json, re, sys
@@ -246,6 +246,9 @@ tmp = f"{pack}/summary.md.tmp"
 open(tmp, "w", encoding="utf-8").write("\n".join(out))
 os.replace(tmp, f"{pack}/summary.md")
 PY
+  # A summarised pack holds what an agent reads (frames, transcript, on-screen text): the MP4s are
+  # 80% of a pack's size and can be downloaded again.
+  rm -f "$p/video.mp4" $p/slides/*.mp4(N)
 }
 
 # --- collect the URLs -----------------------------------------------------------
@@ -338,6 +341,40 @@ watch_video() {
   print -r -- "$txt" >> "$pack/transcript.txt"
 }
 
+# Everything after the download, from files on disk: frames and transcript per video, meta.json, the
+# sheet, OCR and summary (which drops the MP4s). Runs in the background while the next pack downloads.
+process_pack() {
+  local pack=$1 url=$2 kind=$3 code=$4 duration=0 slides=0 mp4 rc=0
+  local -a files
+  if [[ $kind == reel ]]; then
+    watch_video "$pack/video.mp4" ""
+    duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$pack/video.mp4")
+  else
+    for mp4 in $pack/slides/*.mp4(N); do
+      watch_video "$mp4" "s${mp4:t:r}-"
+    done
+    files=($pack/slides/*(N))
+    slides=$#files
+  fi
+
+  python3 - "$pack/meta.json" "$url" "${duration:-0}" "$kind" "$slides" <<'PY'
+import json, sys, datetime
+out, url, duration, kind, slides = sys.argv[1:6]
+meta = {"url": url, "kind": kind, "duration_s": round(float(duration or 0), 1),
+        "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+if kind == "carousel":
+    meta["slides"] = int(slides)
+json.dump(meta, open(out, "w"), indent=2)
+PY
+  # The sheet and summary come last: a pack without summary.md can be completed offline later
+  # with --summarize.
+  rm -f "$pack/summary.md"
+  summarize_pack "$pack" || rc=$?
+  (( rc )) && print "  ! contact sheet failed — rerun with --summarize $code"
+  return 0
+}
+
+processing=0
 for url in $urls; do
   code=$(shortcode "$url")
   [[ -n $code ]] || { print "  ? not a reel/post url, skipping: $url"; continue }
@@ -380,9 +417,6 @@ for url in $urls; do
       failed=$(( failed + 1 ))
       continue
     fi
-    watch_video "$pack/video.mp4" ""
-    duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$pack/video.mp4")
-    slides=0
   else
     mkdir -p "$pack/slides"
     # Image slides are the entry's thumbnails. The one without an stp= resize parameter is the
@@ -404,32 +438,17 @@ PY
     # Video slides: yt-dlp downloads the ones with a format and passes over the images.
     yt-dlp --no-progress --ignore-no-formats-error --load-info-json "$pack/video.info.json" \
            -o "$pack/slides/%(playlist_index)02d.%(ext)s" >/dev/null 2>"$pack/yt-dlp.err" || true
-    for mp4 in $pack/slides/*.mp4(N); do
-      watch_video "$mp4" "s${mp4:t:r}-"
-    done
-    files=($pack/slides/*(N))
-    slides=$#files
-    duration=0
   fi
   rm -f "$pack/yt-dlp.err"
 
-  python3 - "$pack/meta.json" "$url" "${duration:-0}" "$kind" "$slides" <<'PY'
-import json, sys, datetime
-out, url, duration, kind, slides = sys.argv[1:6]
-meta = {"url": url, "kind": kind, "duration_s": round(float(duration or 0), 1),
-        "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
-if kind == "carousel":
-    meta["slides"] = int(slides)
-json.dump(meta, open(out, "w"), indent=2)
-PY
-  # The sheet and summary come last: a pack without summary.md can be completed offline later
-  # with --summarize.
-  rm -f "$pack/summary.md"
-  rc=0
-  summarize_pack "$pack" || rc=$?
-  (( rc )) && print "  ! contact sheet failed — rerun with --summarize $code"
+  # Whisper and OCR are local and slow, the next download is network and paced: overlap them, one
+  # pack processing at a time.
+  (( processing )) && { wait $processing || true }
+  { process_pack "$pack" "$url" "$kind" "$code" || print "  ! $code: processing failed — rerun to retry" } &
+  processing=$!
   built=$(( built + 1 ))
 done
+(( processing )) && { wait $processing || true }
 
 print "\npacks: $built built, $skipped already had one, $failed failed → ${REELS_DIR/#$HOME/~}"
 print "agent reads: summary.md and sheet.jpg in each pack first; frames/ and transcript.txt only on demand"

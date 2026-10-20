@@ -718,9 +718,11 @@ there are more; a carousel's video slides get `s02-sheet.jpg` and so on) and a o
 first, a few thousand tokens instead of about 880 per per-second frame, and opens `frames/` only on demand.
 `watch-reel.zsh --summarize <packdir|shortcode>...` or `--summarize-all` adds them to packs that already
 exist, offline; it skips a pack that has a `summary.md` and an `onscreen.txt` unless given `--force`.
+A reel is processed in the background while the next one downloads (one at a time), and a summarised
+pack drops its MP4s: they were 1.4 GB of the first 184 packs' 1.7 GB, and can be downloaded again.
 
 What a reel only *shows* matters as much as what it says: a repo name on screen, a URL in a caption
-card. Each pack's distinct frames (the contact-sheet tiles) and image slides go through macOS's Vision
+card. Every per-second frame and image slide goes through macOS's Vision
 OCR (`tools/read-frame-text.swift`, compiled once into `$DATA_DIR/bin`, offline) into `onscreen.txt`,
 one line per distinct text at its first second (`[12s] text`), and into `summary.md`.
 `tools/extract-reel-resources.py` then hands Claude Haiku the caption, transcript and on-screen text

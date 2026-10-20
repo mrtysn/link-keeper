@@ -102,5 +102,46 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a pack from before OCR still converts, with no links",
           rec["links"] == [] and "— on screen —" not in rec["text"] and "— transcript —" in rec["text"], rec["text"])
 
+with tempfile.TemporaryDirectory() as tmp:
+    # The download path with stand-ins: yt-dlp hands over a 3 s MP4 made from the fixture frame, whisper
+    # writes a fixed line. Two reels, so the second downloads while the first is processed.
+    tmp = Path(tmp)
+    stubs = tmp / "bin"
+    stubs.mkdir()
+    mp4 = tmp / "fixture.mp4"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-loop", "1", "-i", str(tools / "reel-fixtures" / "frame-text.jpg"),
+                    "-f", "lavfi", "-i", "sine=frequency=440", "-t", "3", "-pix_fmt", "yuv420p", "-shortest", str(mp4)],
+                   check=True)
+    (stubs / "yt-dlp").write_text(f"""#!/usr/bin/env python3
+import json, shutil, sys
+a = sys.argv[1:]
+if "-J" in a:
+    print(json.dumps({{"description": "stub caption", "channel": "someone"}}))
+else:
+    shutil.copy({str(mp4)!r}, a[a.index("-o") + 1])
+""")
+    (stubs / "mlx_whisper").write_text("""#!/usr/bin/env python3
+import sys
+a = sys.argv[1:]
+open(a[a.index("--output-dir") + 1] + "/" + a[a.index("--output-name") + 1] + ".txt", "w").write("hello from the stub\\n")
+""")
+    for f in stubs.iterdir():
+        f.chmod(0o755)
+    env = dict(os.environ, DATA_DIR=str(tmp), REELS_DIR=str(tmp / "reels"), PATH=f"{stubs}:{os.environ['PATH']}")
+    done = subprocess.run([str(tools / "watch-reel.zsh"), "https://www.instagram.com/reel/AAA111/",
+                           "https://www.instagram.com/reel/BBB222/"], env=env, capture_output=True, text=True)
+    check("watch-reel builds two packs with the downloads overlapping the processing",
+          done.returncode == 0 and "packs: 2 built" in done.stdout, done.stdout + done.stderr)
+    for code in ("AAA111", "BBB222"):
+        p = tmp / "reels" / code
+        check(f"{code}: meta, transcript, on-screen text and summary are there",
+              all((p / f).is_file() for f in ("meta.json", "transcript.txt", "onscreen.txt", "summary.md"))
+              and "hello from the stub" in (p / "transcript.txt").read_text()
+              and "frame-tool" in (p / "onscreen.txt").read_text(), str(sorted(x.name for x in p.iterdir())))
+        check(f"{code}: the MP4 is deleted once the pack is done", not (p / "video.mp4").exists())
+    again = subprocess.run([str(tools / "watch-reel.zsh"), "https://www.instagram.com/reel/AAA111/"], env=env,
+                           capture_output=True, text=True)
+    check("a finished pack is skipped on the next run", "0 built, 1 already had one" in again.stdout, again.stdout)
+
 print("all passed" if not failed else "FAILED")
 sys.exit(1 if failed else 0)
