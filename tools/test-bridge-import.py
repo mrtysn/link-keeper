@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# DESC: Check the helper's refresh commands (native/link-keeper-bridge.py) against a stand-in refresh.zsh.
-"""Run the bridge's refresh-start and refresh-status against a fake repo whose tools/refresh.zsh only
-prints a few lines and exits, with HOME and the state folder in a temp directory: no real refresh, no
+# DESC: Check the helper's import and watch commands (native/link-keeper-bridge.py) against a stand-in import-links.zsh.
+"""Run the bridge's import-start and import-status against a fake repo whose tools/import-links.zsh only
+prints a few lines and exits, with HOME and the state folder in a temp directory: no real import, no
 network, the real log untouched.
 
-    tools/test-bridge-refresh.py
+    tools/test-bridge-import.py
 """
 
 from __future__ import annotations
@@ -35,41 +35,41 @@ with tempfile.TemporaryDirectory() as tmp:
     spec.loader.exec_module(bridge)
     fake = tmp / "repo"
     (fake / "tools").mkdir(parents=True)
-    script = fake / "tools" / "refresh.zsh"
+    script = fake / "tools" / "import-links.zsh"
     script.write_text('#!/bin/zsh\nprint "export : somewhere"\nprint "flags: $*"\nsleep 1\nprint "5/8  merging"\nexit 3\n')
     script.chmod(0o755)
     bridge.REPO = fake
-    bridge.REFRESH_LOG = tmp / "Library/Logs/link-refresh.log"
+    bridge.IMPORT_LOG = tmp / "Library/Logs/link-import.log"
 
-    check("nothing has run: not running, no lines", bridge.refresh_status() == {"ok": True, "running": False, "started": None, "lines": [], "exit": None},
-          str(bridge.refresh_status()))
-    started = bridge.refresh_start(offline=True)
-    check("refresh-start runs the script", started["ok"] and started["pid"] > 0, str(started))
-    check("a second start while it runs is refused", bridge.refresh_start(offline=False) == {"ok": False, "error": "a refresh is already running"})
+    check("nothing has run: not running, no lines", bridge.import_status() == {"ok": True, "running": False, "started": None, "lines": [], "exit": None},
+          str(bridge.import_status()))
+    started = bridge.import_start(offline=True)
+    check("import-start runs the script", started["ok"] and started["pid"] > 0, str(started))
+    check("a second start while it runs is refused", bridge.import_start(offline=False) == {"ok": False, "error": "an import is already running"})
     time.sleep(0.4)
-    st = bridge.refresh_status()
+    st = bridge.import_status()
     check("while it runs: running, and its lines so far", st["running"] and any("export : somewhere" in l for l in st["lines"]), str(st))
     check("...with --no-open, and --offline when asked", any(l == "flags: --no-open --offline" for l in st["lines"]), str(st["lines"]))
     for _ in range(40):
-        if not bridge.refresh_status()["running"]:
+        if not bridge.import_status()["running"]:
             break
         time.sleep(0.25)
-    st = bridge.refresh_status()
+    st = bridge.import_status()
     check("when it ends: not running, its exit code and its last lines", not st["running"] and st["exit"] == 3 and "5/8  merging" in st["lines"], str(st))
-    check("the run's lines start at its own '--- refresh' line", st["lines"][0].startswith("--- refresh ") and st["lines"][0].endswith("(offline)"), st["lines"][0])
-    again = bridge.refresh_start(offline=False)
+    check("the run's lines start at its own '--- import' line", st["lines"][0].startswith("--- import ") and st["lines"][0].endswith("(offline)"), st["lines"][0])
+    again = bridge.import_start(offline=False)
     time.sleep(1.6)
-    st = bridge.refresh_status()
-    check("a later run shows only its own lines", st["lines"][0].startswith("--- refresh ") and not st["lines"][0].endswith("(offline)")
-          and sum(l.startswith("--- refresh ") for l in st["lines"]) == 1, str(st["lines"]))
+    st = bridge.import_status()
+    check("a later run shows only its own lines", st["lines"][0].startswith("--- import ") and not st["lines"][0].endswith("(offline)")
+          and sum(l.startswith("--- import ") for l in st["lines"]) == 1, str(st["lines"]))
     for _ in range(40):
-        if not bridge.refresh_status()["running"]:
+        if not bridge.import_status()["running"]:
             break
         time.sleep(0.25)
-    bridge.refresh_start(offline=False, watch=False)
+    bridge.import_start(offline=False, watch=False)
     time.sleep(0.4)
-    check("an Import without watching passes --no-watch", "flags: --no-open --no-watch" in bridge.refresh_status()["lines"],
-          str(bridge.refresh_status()["lines"]))
+    check("an Import without watching passes --no-watch", "flags: --no-open --no-watch" in bridge.import_status()["lines"],
+          str(bridge.import_status()["lines"]))
 
     # The watch worker: a stand-in that turns each queued link into a record, then exits.
     worker = fake / "tools" / "watch-links.zsh"

@@ -185,16 +185,16 @@
           }
           case "chat-control":
             return { ok: true };
-          // ?refresh=running|done|failed: the Import panel's refresh, as the helper reports it.
-          case "refresh-status": {
-            const how = params.get("refresh");
-            const lines = ["--- refresh 2026-10-16T14:00:00", "export : ~/Downloads/Telegram Desktop/ChatExport/result.json", "1/8  x.com via FxTwitter", "2/8  everything else via og: tags and free APIs"];
+          // ?exports=running|done|failed: the Import panel's import from exports, as the helper reports it.
+          case "import-status": {
+            const how = params.get("exports");
+            const lines = ["--- import 2026-10-16T14:00:00", "export : ~/Downloads/Telegram Desktop/ChatExport/result.json", "1/8  x.com via FxTwitter", "2/8  everything else via og: tags and free APIs"];
             if (how === "done") lines.push("5/8  merging", "  handover: 997 captures, 27 for the browser", "--- exit 0");
             if (how === "failed") lines.push("  ! could not reach node01 — using the last mirror", "--- exit 1");
             return how ? { ok: true, running: how === "running", started: "2026-10-16T14:00:00", lines, exit: how === "done" ? 0 : how === "failed" ? 1 : null }
               : { ok: true, running: false, started: null, lines: [], exit: null };
           }
-          case "refresh-start":
+          case "import-start":
             return { ok: true, pid: 1, started: "2026-10-16T14:00:00" };
           // ?watch=running: the helper watching videos, two waiting.
           case "watch-settings":

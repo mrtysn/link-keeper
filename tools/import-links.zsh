@@ -8,16 +8,16 @@
 # nothing to paste.
 #
 # Usage:
-#   refresh.zsh                     # newest export, paths from config.local.sh
-#   refresh.zsh <path/to/result.json>
-#   refresh.zsh <result.json> <outdir>
-#   refresh.zsh --no-serve          # rebuild only, do not offer it to the extension
-#   refresh.zsh --no-open           # offer it, but do not open the browser yourself
-#   refresh.zsh --offline           # no internet: parse the Instagram dump, keep the last lookups, hand over
-#   refresh.zsh --no-watch          # everything but watching reels (download, transcript, resource list)
+#   import-links.zsh                     # newest export, paths from config.local.sh
+#   import-links.zsh <path/to/result.json>
+#   import-links.zsh <result.json> <outdir>
+#   import-links.zsh --no-serve          # rebuild only, do not offer it to the extension
+#   import-links.zsh --no-open           # offer it, but do not open the browser yourself
+#   import-links.zsh --offline           # no internet: parse the Instagram dump, keep the last lookups, hand over
+#   import-links.zsh --no-watch          # everything but watching reels (download, transcript, resource list)
 #
 # --offline skips every step that reaches out — the phone-inbox mirror, the Saved Messages puller, the
-# x.com and web lookups, the reel downloads, the tag suggestions — and keeps the files the last full
+# x.com and web lookups, the reel downloads — and keeps the files the last full
 # run left. Links in the Instagram dump and the X archive's DMs are parsed and merged (X's as bare
 # records: where and when they were sent, no text yet); links to other sites in the Instagram dump, and
 # Telegram links, wait for the next full run. The extension skips a link it already holds, so it is safe to repeat.
@@ -94,8 +94,8 @@ inbox=$outdir/link-inbox.tsv
 
 # Every run leaves a log, however it was started: a terminal run used to leave none, and a reel step
 # that skipped 291 reels on 2026-10-15 could not be told apart from one that died.
-exec > >(tee -a "$outdir/refresh.log") 2>&1
-print -- "--- refresh $(date '+%F %T')${${offline:#0}:+ (offline)}"
+exec > >(tee -a "$outdir/import.log") 2>&1
+print -- "--- import $(date '+%F %T')${${offline:#0}:+ (offline)}"
 
 # Instagram is optional: the newest instagram-* zip or unzipped directory that actually holds
 # messages or saved posts. Instagram exports are per-request subsets, so a newer zip requested
@@ -165,7 +165,6 @@ ig_jsonl=$outdir/link-captures-ig.jsonl
 all_jsonl=$outdir/link-captures-all.jsonl
 extra_jsonl=$outdir/link-captures-extra.jsonl
 unresolved=$outdir/link-unresolved.tsv
-captures_html=$outdir/$(date +%Y-%m-%d)-all-captures.html
 messages_html=$outdir/saved-messages.html
 triage_html=$outdir/telegram-saved-links.html
 triage_json=$outdir/telegram-links-triage.json
@@ -180,9 +179,9 @@ print "output : ${outdir/#$HOME/~}\n"
 # --- mirror the phone-share inbox from its server, when configured ----------------
 
 if (( offline )); then
-  print "--offline: no internet steps (phone inbox, Saved Messages, lookups, reel downloads, tag suggestions)"
+  print "--offline: no internet steps (phone inbox, Saved Messages, lookups, reel downloads)"
 elif [[ -n ${LINK_INBOX_REMOTE:-} ]]; then
-  print "0/8  links shared from the phone"
+  print "0/7  links shared from the phone"
   r_host=${LINK_INBOX_REMOTE%%:*} r_path=${LINK_INBOX_REMOTE#*:}
   if ssh -o ConnectTimeout=6 -o BatchMode=yes "$r_host" cat "$r_path" > "$inbox.tmp" 2>/dev/null; then
     mv "$inbox.tmp" "$inbox"
@@ -199,11 +198,11 @@ session=${XDG_CONFIG_HOME:-$HOME/.config}/link-keeper/telegram.session
 if (( offline )); then
   :
 elif [[ -n ${TELEGRAM_API_ID:-} && -f $session ]]; then
-  print "0/8  new links from Saved Messages, no export needed"
+  print "0/7  new links from Saved Messages, no export needed"
   "$repo/importers/telegram-pull.py" --inbox "$inbox" \
     || print "  ! pull failed — continuing with what is already on disk"
 elif [[ -n ${TELEGRAM_API_ID:-} ]]; then
-  print "0/8  Saved Messages puller configured but not logged in"
+  print "0/7  Saved Messages puller configured but not logged in"
   print "  run once: $repo/importers/telegram-pull.py --login"
 fi
 
@@ -242,24 +241,24 @@ fi
 enrich_input=$(print -r -- "$worklist" | grep -vE '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' || true)
 
 if (( offline )); then
-  print "1/8  x.com via FxTwitter — skipped (--offline), keeping the last run's records"
-  print "\n2/8  everything else via og: tags and free APIs — skipped (--offline), keeping the last run's records"
+  print "1/7  x.com via FxTwitter — skipped (--offline), keeping the last run's records"
+  print "\n2/7  everything else via og: tags and free APIs — skipped (--offline), keeping the last run's records"
   [[ -e $x_jsonl ]] || : > "$x_jsonl"
   [[ -e $web_jsonl ]] || : > "$web_jsonl"
 else
-  print "1/8  x.com via FxTwitter"
+  print "1/7  x.com via FxTwitter"
   # The previous run's records are reused, so only new ids are fetched and a transient failure
   # cannot erase a capture that already exists. The output must not be the reuse file itself.
   x_prev=$outdir/link-captures-x.prev.jsonl
   [[ -s $x_jsonl ]] && cp "$x_jsonl" "$x_prev"
   print -r -- "$enrich_input" | "$repo/importers/enrich-x.py" --reuse "$x_prev" > "$x_jsonl"
 
-  print "\n2/8  everything else via og: tags and free APIs"
+  print "\n2/7  everything else via og: tags and free APIs"
   print -r -- "$enrich_input" \
     | "$repo/importers/enrich-web.py" --failed-to "$unresolved" > "$web_jsonl"
 fi
 
-print "\n3/8  instagram, from its own export"
+print "\n3/7  instagram, from its own export"
 : > "$ig_jsonl"
 if (( ${#ig_paths} )); then
   for (( i = 1; i <= ${#ig_paths}; i++ )); do
@@ -285,7 +284,7 @@ else
   : > "$xdm_jsonl"
 fi
 
-print "\n4/8  reels — packs for new instagram links, records from all of them"
+print "\n4/7  reels — packs for new instagram links, records from all of them"
 reels_dir=${REELS_DIR:-$outdir/reels}
 reels_jsonl=$outdir/link-captures-reels.jsonl
 # The worklist holds only Telegram and phone reels: instagram.py --other leaves instagram.com links
@@ -335,7 +334,7 @@ if [[ -n $reel_urls ]] && (( ! offline )); then
   done <<< "$reel_urls"
 fi
 
-print "\n5/8  merging"
+print "\n5/7  merging"
 # reels last, so a pack-backed record wins over a caption-only one for the same url on import; the
 # bare X DM records first, so any record with text fills them in.
 if [[ -s $extra_jsonl ]]; then
@@ -350,17 +349,14 @@ if (( ${#origins_files} )); then
 fi
 print "  $(grep -c . "$all_jsonl") captures → ${all_jsonl:t}"
 
-print "\n6/8  capture view"
-"$repo/tools/captures-to-html.py" "$all_jsonl" -o "$captures_html"
-
-print "\n7/8  message view"
+print "\n6/7  message view"
 if [[ -n $export_json ]]; then
   "$repo/tools/telegram-messages-to-html.py" "$export_json" -c "$all_jsonl" -o "$messages_html"
 else
   print "  no Telegram export on disk — the message replica keeps its last build"
 fi
 
-print "\n8/8  saved-links triage"
+print "\n7/7  saved-links triage"
 if [[ -n $export_json ]]; then
   DATA_DIR=$outdir "$repo/tools/telegram-saved-links.py" "$export_json" \
     -c "$all_jsonl" -t "$triage_json" -o "$triage_html"
@@ -426,18 +422,3 @@ else
 fi
 
 wait $serve_pid
-
-# --- tag suggestions ---------------------------------------------------------------
-# The extension now holds the new links. Train the tag heads on the owner's tags and send suggestions
-# for the untagged links (tools/tag-model/). It can take a long time the first time, so it runs
-# detached and logs beside the other output; skipped with a line when its environment is not set up.
-tag_model=$here/tag-model
-if (( offline )); then
-  print "\ntag suggestions: skipped (--offline); the next full run makes them"
-elif [[ -x $tag_model/run.zsh && -d $tag_model/.venv ]]; then
-  mkdir -p "$outdir/tag-model"
-  print "\ntag suggestions: running in the background, log ${outdir/#$HOME/~}/tag-model/run.log"
-  DATA_DIR=$outdir "$tag_model/run.zsh" >> "$outdir/tag-model/run.log" 2>&1 &!
-else
-  print "\ntag suggestions: skipped, the tag model is not set up (run $tag_model/run.zsh --setup)"
-fi

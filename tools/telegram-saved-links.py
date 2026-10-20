@@ -52,7 +52,7 @@ CAPTURES_DEFAULT = "link-captures-all.jsonl"
 
 def data_dir() -> Path:
     """Environment, then config.local.sh at the repo root, else this repo's own data/ —
-    the same precedence tools/refresh.zsh and tools/extension-diff.py use."""
+    the same precedence tools/import-links.zsh and tools/extension-diff.py use."""
     if os.environ.get("DATA_DIR"):
         return Path(os.environ["DATA_DIR"]).expanduser()
     cfg = REPO / "config.local.sh"

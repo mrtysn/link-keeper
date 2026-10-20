@@ -1942,7 +1942,7 @@ function openPanel(which) {
   for (const id of ["settings-panel", "import-panel", "dups-panel", "trash-panel"]) $(id).hidden = id !== which || !$(id).hidden;
   $("settings").setAttribute("aria-expanded", String(!$("settings-panel").hidden));
   if (!$("settings-panel").hidden) { loadFilterRules(); loadBackups(); loadGrouping(); loadPreviews(); }
-  if (!$("import-panel").hidden) watchRefresh();
+  if (!$("import-panel").hidden) watchImport();
   $("import").setAttribute("aria-expanded", String(!$("import-panel").hidden));
   $("dups").setAttribute("aria-expanded", String(!$("dups-panel").hidden));
   if (!$("import-panel").hidden) $("import-text").focus();
@@ -2434,44 +2434,44 @@ $("import-go").onclick = async () => {
   await load();
 };
 
-/* If a refresh is waiting on loopback, take it now. Import is idempotent, so doing this on every
+/* If an import is waiting on loopback, take it now. Import is idempotent, so doing this on every
  * visit costs nothing and means the only step after a rebuild is opening this page. */
-/* Refresh from exports: the helper runs tools/refresh.zsh; this page shows its last lines while it runs
- * and collects its hand-over when it serves one (takePendingRefresh, quiet when nothing waits). */
-let refreshTimer = null;
-async function watchRefresh() {
-  clearTimeout(refreshTimer);
-  const st = await send({ type: "refresh-status" });
-  if (!st?.ok) { $("refresh-msg").textContent = `Refresh is not available: ${st?.error || "the helper did not answer"}.`; $("refresh-go").disabled = false; return; }
+/* Import from exports: the helper runs tools/import-links.zsh; this page shows its last lines while it runs
+ * and collects its hand-over when it serves one (takePendingImport, quiet when nothing waits). */
+let importTimer = null;
+async function watchImport() {
+  clearTimeout(importTimer);
+  const st = await send({ type: "import-status" });
+  if (!st?.ok) { $("exports-msg").textContent = `Import is not available: ${st?.error || "the helper did not answer"}.`; $("exports-go").disabled = false; return; }
   const lines = (st.lines || []).filter(l => l.trim());
-  $("refresh-log").hidden = !lines.length;
-  $("refresh-log").textContent = lines.slice(-12).join("\n");
-  $("refresh-log").scrollTop = $("refresh-log").scrollHeight;
-  $("refresh-go").disabled = st.running;
-  await takePendingRefresh();
+  $("exports-log").hidden = !lines.length;
+  $("exports-log").textContent = lines.slice(-12).join("\n");
+  $("exports-log").scrollTop = $("exports-log").scrollHeight;
+  $("exports-go").disabled = st.running;
+  await takePendingImport();
   if (st.running) {
-    $("refresh-msg").textContent = `Refreshing since ${new Date(st.started).toLocaleTimeString()}…`;
-    refreshTimer = setTimeout(watchRefresh, 2000);
+    $("exports-msg").textContent = `Importing since ${new Date(st.started).toLocaleTimeString()}…`;
+    importTimer = setTimeout(watchImport, 2000);
   } else if (lines.length) {
-    $("refresh-msg").textContent = st.exit === 0 ? "The last refresh finished." : st.exit == null ? "The last refresh stopped without finishing." : `The last refresh failed (exit ${st.exit}); its last lines are below.`;
+    $("exports-msg").textContent = st.exit === 0 ? "The last import finished." : st.exit == null ? "The last import stopped without finishing." : `The last import failed (exit ${st.exit}); its last lines are below.`;
   }
 }
-$("refresh-go").onclick = async () => {
-  $("refresh-go").disabled = true;
-  const res = await send({ type: "refresh-start", offline: $("refresh-offline").checked, watch: $("refresh-watch").checked });
-  if (!res?.ok) { $("refresh-go").disabled = false; $("refresh-msg").textContent = res?.error || "The refresh did not start."; return; }
-  $("refresh-msg").textContent = "Refreshing…";
-  refreshTimer = setTimeout(watchRefresh, 800);
+$("exports-go").onclick = async () => {
+  $("exports-go").disabled = true;
+  const res = await send({ type: "import-start", offline: $("exports-offline").checked, watch: $("exports-watch").checked });
+  if (!res?.ok) { $("exports-go").disabled = false; $("exports-msg").textContent = res?.error || "The import did not start."; return; }
+  $("exports-msg").textContent = "Importing…";
+  importTimer = setTimeout(watchImport, 800);
 };
 
 /* A batch brought in from this page is one group, named for what it is and the day: "Pasted links ·
- * Oct 15, 2026". Its key keeps one batch's several calls (a refresh's captures and queue) together. */
+ * Oct 15, 2026". Its key keeps one batch's several calls (an import's captures and queue) together. */
 const batchGroup = label => ({ name: `${label} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`, key: `batch:${label}:${Date.now()}` });
 
-async function takePendingRefresh() {
+async function takePendingImport() {
   const res = await send({ type: "fetch-pending" });
   if (!res?.ok) return;
-  // A refresh hands over both halves: what it could read, and what it could not. The second lot
+  // An import hands over both halves: what it could read, and what it could not. The second lot
   // are the only links that still need a browser, so they go straight onto the queue.
   let records = [], queue = [];
   const body = res.body.trim();
@@ -2485,7 +2485,7 @@ async function takePendingRefresh() {
     records = parseStashImport(body).records || [];
   }
   if (!records.length && !queue.length) return;
-  const handover = batchGroup("Refresh hand-over");
+  const handover = batchGroup("Import hand-over");
   const bits = [];
   if (records.length) {
     const out = await send({ type: "import-captures", records, group: handover });
@@ -2497,7 +2497,7 @@ async function takePendingRefresh() {
   }
   if ($("import-panel").hidden) openPanel("import-panel");   // opens it; a call on an open panel would close it
   $("import-msg").className = "ok";
-  $("import-msg").textContent = `From the last refresh: ${bits.join("; ")}`;
+  $("import-msg").textContent = `From the last import: ${bits.join("; ")}`;
   load();
 }
 
@@ -2589,7 +2589,7 @@ $("t-compact").onclick = () => { setPref(pane ? COMPACT_PANE_KEY : COMPACT_KEY, 
 applyView();
 
 if (location.hash === "#import") { openPanel("import-panel"); previewImport(); }
-takePendingRefresh();
+takePendingImport();
 reloadOnChanges(load, () => !!(renaming || dragging));
 load();
 loadQueue();

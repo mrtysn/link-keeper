@@ -179,9 +179,9 @@
   }
   #import-msg { font-size: .875rem; color: var(--dim); }
   #import-progress { width: 12rem; height: 6px; accent-color: var(--accent); }
-  .refresh-box { margin: 4px 0 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
-  .refresh-box h3 { margin: 0 0 4px; font-size: .9375rem; }
-  #refresh-log { max-height: 12rem; overflow: auto; margin: 8px 0 0; padding: 8px 10px; font: .75rem/1.45 ui-monospace, Menlo, monospace;
+  .exports-box { margin: 4px 0 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .exports-box h3 { margin: 0 0 4px; font-size: .9375rem; }
+  #exports-log { max-height: 12rem; overflow: auto; margin: 8px 0 0; padding: 8px 10px; font: .75rem/1.45 ui-monospace, Menlo, monospace;
     color: var(--dim); background: var(--chip); border-radius: 8px; white-space: pre-wrap; }
   #import-msg.ok { color: var(--ok); } #import-msg.bad { color: var(--bad); }
 
@@ -659,18 +659,18 @@
 
   <section class="panel" id="import-panel" hidden aria-labelledby="import-h">
     <h2 id="import-h">Import</h2>
-    <!-- tools/refresh.zsh, run by the helper on this Mac (native/link-keeper-bridge.py): what the Link
-         Refresh app did, from here. Its new links arrive as a "Refresh hand-over" group. -->
-    <div class="refresh-box">
+    <!-- tools/import-links.zsh, run by the helper on this Mac (native/link-keeper-bridge.py). Its new
+         links arrive as an "Import hand-over" group. -->
+    <div class="exports-box">
       <h3>From your exports</h3>
       <p class="hint">Reads the newest Telegram, Instagram and X exports and the links shared from your phone, looks up what is new, and brings the new links here as one group.</p>
       <div class="row">
-        <button type="button" class="small" id="refresh-go">Refresh from exports</button>
-        <label class="hint"><input type="checkbox" id="refresh-offline"> Offline: only the exports on disk, nothing fetched</label>
-        <label class="hint"><input type="checkbox" id="refresh-watch" checked> Watch the reels: transcript, on-screen text and what each points to</label>
+        <button type="button" class="small" id="exports-go">Import from exports</button>
+        <label class="hint"><input type="checkbox" id="exports-offline"> Offline: only the exports on disk, nothing fetched</label>
+        <label class="hint"><input type="checkbox" id="exports-watch" checked> Watch the reels: transcript, on-screen text and what each points to</label>
       </div>
-      <p id="refresh-msg" class="hint" role="status"></p>
-      <pre id="refresh-log" hidden></pre>
+      <p id="exports-msg" class="hint" role="status"></p>
+      <pre id="exports-log" hidden></pre>
     </div>
     <p>Paste or choose a file: OneTab's <em>Export URLs</em> text, a TidyTab or Link Keeper export, CSV with a <code>url</code> column
       (and optionally <code>title</code>, <code>group</code>, <code>date</code>), or any text with links in it. A URL on its own line can be followed by the date it was saved.

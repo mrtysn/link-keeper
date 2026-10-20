@@ -276,30 +276,30 @@ def journal_drop(entry_id: str) -> dict:
     return {"ok": True}
 
 
-# --- refresh -------------------------------------------------------------------------------------
-# Links' "Refresh from exports" button: tools/refresh.zsh, run detached so it outlives this helper, with
-# the PATH an app started outside a shell lacks (asdf's shims, Homebrew). Only that script runs, and
-# --offline is the one choice the page makes. Its output goes to the log the Link Refresh app used;
-# each run starts with a "--- refresh" line and ends with "--- exit <code>".
-REFRESH_LOG = Path.home() / "Library/Logs/link-refresh.log"
+# --- import --------------------------------------------------------------------------------------
+# Links' "Import from exports" button: tools/import-links.zsh, run detached so it outlives this helper,
+# with the PATH an app started outside a shell lacks (asdf's shims, Homebrew). Only that script runs;
+# --offline and --no-watch are the choices the page makes. Each run starts its log with a "--- import"
+# line and ends with "--- exit <code>".
+IMPORT_LOG = Path.home() / "Library/Logs/link-import.log"
 
 
-def refresh_pid_file() -> Path:
-    return state_dir() / "refresh.json"
+def import_pid_file() -> Path:
+    return state_dir() / "import.json"
 
 
 # The run this helper started: it must be reaped (poll) or it lingers as a zombie that kill(pid, 0)
 # still finds, and the button would wait forever. A run from an earlier helper is not our child, so
 # for that one kill(pid, 0) is the test.
-_refresh_proc = None
+_import_proc = None
 
 
-def refresh_running() -> dict | None:
+def import_running() -> dict | None:
     try:
-        run = json.loads(refresh_pid_file().read_text())
+        run = json.loads(import_pid_file().read_text())
         pid = int(run["pid"])
-        if _refresh_proc is not None and _refresh_proc.pid == pid:
-            return run if _refresh_proc.poll() is None else None
+        if _import_proc is not None and _import_proc.pid == pid:
+            return run if _import_proc.poll() is None else None
         os.kill(pid, 0)
         return run
     except (OSError, ValueError, KeyError):
@@ -311,36 +311,36 @@ def refresh_running() -> dict | None:
 TOOL_PATH = f"{Path.home()}/.asdf/shims:{Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 
-def refresh_start(offline: bool, watch: bool = True) -> dict:
-    global _refresh_proc
-    if refresh_running():
-        return {"ok": False, "error": "a refresh is already running"}
-    script = REPO / "tools" / "refresh.zsh"
+def import_start(offline: bool, watch: bool = True) -> dict:
+    global _import_proc
+    if import_running():
+        return {"ok": False, "error": "an import is already running"}
+    script = REPO / "tools" / "import-links.zsh"
     if not script.exists():
-        return {"ok": False, "error": f"no refresh script at {script}"}
-    REFRESH_LOG.parent.mkdir(parents=True, exist_ok=True)
+        return {"ok": False, "error": f"no import script at {script}"}
+    IMPORT_LOG.parent.mkdir(parents=True, exist_ok=True)
     started = dt.datetime.now().isoformat(timespec="seconds")
     flags = "--no-open" + (" --offline" if offline else "") + ("" if watch else " --no-watch")
-    with REFRESH_LOG.open("a") as log:
-        log.write(f"--- refresh {started}{' (offline)' if offline else ''}\n")
+    with IMPORT_LOG.open("a") as log:
+        log.write(f"--- import {started}{' (offline)' if offline else ''}\n")
     env = dict(os.environ, PATH=TOOL_PATH)
     proc = subprocess.Popen(
         ["/bin/zsh", "-c", f'"$0" {flags}; print -- "--- exit $?"', str(script)],
-        stdin=subprocess.DEVNULL, stdout=REFRESH_LOG.open("a"), stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL, stdout=IMPORT_LOG.open("a"), stderr=subprocess.STDOUT,
         cwd=str(REPO), env=env, start_new_session=True)
-    _refresh_proc = proc
-    refresh_pid_file().parent.mkdir(parents=True, exist_ok=True)
-    refresh_pid_file().write_text(json.dumps({"pid": proc.pid, "started": started, "offline": offline}))
+    _import_proc = proc
+    import_pid_file().parent.mkdir(parents=True, exist_ok=True)
+    import_pid_file().write_text(json.dumps({"pid": proc.pid, "started": started, "offline": offline}))
     return {"ok": True, "pid": proc.pid, "started": started}
 
 
-def refresh_status() -> dict:
-    """Whether a refresh runs, and the last run's lines so far (its exit code once it ended)."""
-    run = refresh_running()
+def import_status() -> dict:
+    """Whether an import runs, and the last run's lines so far (its exit code once it ended)."""
+    run = import_running()
     lines: list = []
-    if REFRESH_LOG.exists():
-        text = REFRESH_LOG.read_text(errors="replace").splitlines()[-400:]
-        start = max((i for i, l in enumerate(text) if l.startswith("--- refresh ")), default=None)
+    if IMPORT_LOG.exists():
+        text = IMPORT_LOG.read_text(errors="replace").splitlines()[-400:]
+        start = max((i for i, l in enumerate(text) if l.startswith("--- import ")), default=None)
         lines = text[start:] if start is not None else []
     code = next((l[len("--- exit "):] for l in reversed(lines) if l.startswith("--- exit ")), None)
     return {"ok": True, "running": bool(run), "started": run["started"] if run else None,
@@ -348,7 +348,7 @@ def refresh_status() -> dict:
 
 
 # --- watch -----------------------------------------------------------------------------------------
-# Watching a video: tools/watch-links.zsh, one worker at a time, run detached like the refresh. watch-start
+# Watching a video: tools/watch-links.zsh, one worker at a time, run detached like the import. watch-start
 # drops one file per link into the queue folder and starts the worker when none runs; the worker builds
 # each pack, its resource list and its capture record, appended to records.jsonl. watch-status hands the
 # records past the page's cursor back to the extension, which imports them.
@@ -429,8 +429,11 @@ HOST_OPS = {
     "journal-last": lambda m: journal_last(),
     "journal-list": lambda m: journal_list(),
     "journal-drop": lambda m: journal_drop(m.get("entry_id") or ""),
-    "refresh-start": lambda m: refresh_start(bool(m.get("offline")), m.get("watch") is not False),
-    "refresh-status": lambda m: refresh_status(),
+    "import-start": lambda m: import_start(bool(m.get("offline")), m.get("watch") is not False),
+    "import-status": lambda m: import_status(),
+    # The names before 5.79; an add-on not yet updated still sends them.
+    "refresh-start": lambda m: import_start(bool(m.get("offline")), m.get("watch") is not False),
+    "refresh-status": lambda m: import_status(),
     "watch-start": lambda m: watch_start(m.get("urls") or []),
     "watch-status": lambda m: watch_status(int(m.get("after") or 0)),
 }

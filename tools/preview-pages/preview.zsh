@@ -24,6 +24,7 @@
 #   light    drop the dark-scheme rules to show the light palette
 #   empty    nothing stashed
 #   settings, import, dups   list.html with that panel open
+#   exports=running|done|failed   list.html's Import from exports, as the helper reports it
 #   import-run         list.html importing 300 tabs, slowly enough to see the progress
 #   queue=running|paused|done|stopped   list.html with the capture queue's line, and capture.html, in that state
 #   group=stash|domain|status|day|month|newest|oldest   list.html grouped that way

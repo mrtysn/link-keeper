@@ -22,7 +22,7 @@ There are no content scripts, no background tabs, and no automation of your brow
 | `receiver/` | tiny HTTP endpoint an always-on box runs — the phone's shares land here |
 | `android/` | the share-sheet app that sends them (`build.zsh`, no Gradle) |
 | `native/` | the helpers Firefox starts for the add-on, registered by `native/install.zsh`: `open-local-files.py` reopens stashed local-file tabs; `link-keeper-bridge.py` backs the add-on's storage up to disk and lets local agents reach it (see *Backups and agents*) |
-| `tools/` | `refresh.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`link-keeper.mjs` — the agents' CLI: read and change links, tags, captures and stashes, live from Firefox or from the latest backup (`--help`)<br>`test-bridge.mjs` — check the bridge and the CLI against a stand-in extension<br>`test-bridge-firefox.zsh` — check backups, restore, agent undo and the CLI in a headless Firefox<br>`test-bridge-socket.py` — check the helper makes its shell socket again when the file goes missing<br>`test-bridge-owner.py` — check that only the profile owning the backup folder writes and reads it<br>`release.zsh` — ship a batch: bump the version, sign on AMO, open it in Firefox, commit the release (once per finished batch; AMO allows 24 signings a day)<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`survey-stashed-sites.py` — count stashed links per site, and show which pages of a site are main pages or items (for the filtered-out rules)<br>`check-capture-queue.mjs` — check a running capture queue: each site's captures at least its wait apart, and each capture looking like its page<br>`test-capture-queue.mjs` — run the capture queue against a fake capture and clock: two at once, never two of one site, each site's wait, a wall or three failures stopping a site, pause, retry and a resume after sleep<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox, its bridge helper pointed at temporary folders so the real backups are never read or written<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks; each check starts from empty stashes, list and tags and waits on what a page draws, never on a delay<br>`test-extractors.zsh` — check in headless Firefox that an x.com capture holds every rendered reply and that a page walk gathers the ones x.com drops while scrolling, that a GitHub repo keeps its README, an Instagram reel its caption, author, day and cover, and a plain page its own text, that a login redirect or a captcha is refused as a wall, and that the capture queue reads links in a minimised window and stops a walled site, against the pages in `extractor-fixtures/`<br>`test-chat-grab.mjs` — check the chat grab against stand-in x.com Chat and Instagram direct pages: exact times, senders, post, reel and card links, loading older pages<br>`test-x-archive.py` — check the X archive importer against a made-up archive: threads, handles, senders, origins<br>`test-instagram-export.py` — check the Instagram importer against a made-up export: threads, accounts, origins<br>`test-refresh-instagram-accounts.zsh` — run `refresh.zsh` on made-up exports for two accounts, in a temporary repo with its own config<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup and Links (card mode included) in any browser with a fake extension API and real capture text<br>`preview-frames/test-preview-frames.zsh` — check in headless Firefox that the Links detail pane's live preview frames sites that forbid framing, and nothing else can<br>`preview-pages/test-keys.zsh` — drive Links (list and card mode) and the popup in that preview with the shared keys and check each action and its undo, the tag library, the tag palette and the hover previews<br>`captures-to-html.py` — render an exported capture JSONL as one browsable page<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`watch-links.zsh` — the helper's video worker: each queued link becomes a pack, a resource list and a capture record<br>`read-frame-text.swift` — read the text in images with macOS Vision OCR, for a pack's frames<br>`extract-reel-resources.py` — have Claude Haiku list the tools, repos and sites each reel says or shows<br>`test-reel-resources.py` — check a pack's OCR, its resource list (with a stand-in for Claude) and the record it becomes<br>`tag-model/` — learn the owner's tags and suggest them for untagged links (see *Tag suggestions*) |
+| `tools/` | `import-links.zsh` — the one command that rebuilds everything from the newest exports<br>`extension-diff.py` — read the add-on's storage out of the Firefox profile and list the captures it does not hold yet<br>`link-keeper.mjs` — the agents' CLI: read and change links, tags, captures and stashes, live from Firefox or from the latest backup (`--help`)<br>`test-bridge.mjs` — check the bridge and the CLI against a stand-in extension<br>`test-bridge-firefox.zsh` — check backups, restore, agent undo and the CLI in a headless Firefox<br>`test-bridge-socket.py` — check the helper makes its shell socket again when the file goes missing<br>`test-bridge-owner.py` — check that only the profile owning the backup folder writes and reads it<br>`release.zsh` — ship a batch: bump the version, sign on AMO, open it in Firefox, commit the release (once per finished batch; AMO allows 24 signings a day)<br>`fetch-signed-xpi.py` — download a version AMO signed after web-ext stopped waiting<br>`stash-status.py` — list the tab stashes the add-on holds, read out of the profile's bookmarks<br>`survey-stashed-sites.py` — count stashed links per site, and show which pages of a site are main pages or items (for the filtered-out rules)<br>`check-capture-queue.mjs` — check a running capture queue: each site's captures at least its wait apart, and each capture looking like its page<br>`test-capture-queue.mjs` — run the capture queue against a fake capture and clock: two at once, never two of one site, each site's wait, a wall or three failures stopping a site, pause, retry and a resume after sleep<br>`test-stash.mjs` — run the tab stash against a fake browser and prove no tab is lost<br>`test-stash-import.mjs` — check every format the stash import reads<br>`run-in-headless-firefox.zsh` — run a WebExtension script, alone or beside the real extension, in a throwaway headless Firefox, its bridge helper pointed at temporary folders so the real backups are never read or written<br>`e2e-stash.js` — the stash checks that script runs against real tabs and bookmarks; each check starts from empty stashes, list and tags and waits on what a page draws, never on a delay<br>`test-extractors.zsh` — check in headless Firefox that an x.com capture holds every rendered reply and that a page walk gathers the ones x.com drops while scrolling, that a GitHub repo keeps its README, an Instagram reel its caption, author, day and cover, and a plain page its own text, that a login redirect or a captcha is refused as a wall, and that the capture queue reads links in a minimised window and stops a walled site, against the pages in `extractor-fixtures/`<br>`test-chat-grab.mjs` — check the chat grab against stand-in x.com Chat and Instagram direct pages: exact times, senders, post, reel and card links, loading older pages<br>`test-x-archive.py` — check the X archive importer against a made-up archive: threads, handles, senders, origins<br>`test-instagram-export.py` — check the Instagram importer against a made-up export: threads, accounts, origins<br>`test-import-instagram-accounts.zsh` — run `import-links.zsh` on made-up exports for two accounts, in a temporary repo with its own config<br>`test-open-local-files.py` — check the local-file helper refuses everything but existing files<br>`preview-pages/preview.zsh` — render the popup and Links (card mode included) in any browser with a fake extension API and real capture text<br>`preview-frames/test-preview-frames.zsh` — check in headless Firefox that the Links detail pane's live preview frames sites that forbid framing, and nothing else can<br>`preview-pages/test-keys.zsh` — drive Links (list and card mode) and the popup in that preview with the shared keys and check each action and its undo, the tag library, the tag palette and the hover previews<br>`telegram-messages-to-html.py` — render a Telegram export, flagging which messages migration made redundant<br>`telegram-saved-links.py` — a swipe-to-triage page for a Telegram export's raw links, keep/drop/defer<br>`watch-reel.zsh` — turn an Instagram reel or carousel into a transcript, keyframes and slides an agent can read<br>`chat-to-watchlist.py` — render a chat export of film links as one page with IMDb, Metacritic and RT scores<br>`reels-to-captures.py` — convert those packs into capture records the extension displays<br>`watch-links.zsh` — the helper's video worker: each queued link becomes a pack, a resource list and a capture record<br>`read-frame-text.swift` — read the text in images with macOS Vision OCR, for a pack's frames<br>`extract-reel-resources.py` — have Claude Haiku list the tools, repos and sites each reel says or shows<br>`test-reel-resources.py` — check a pack's OCR, its resource list (with a stand-in for Claude) and the record it becomes<br>`tag-model/` — learn the owner's tags and suggest them for untagged links (see *Tag suggestions*) |
 
 ## Backups and agents
 
@@ -52,11 +52,11 @@ tab. The open connection keeps the add-on's background page awake while Firefox 
 
 ## After an export: one button
 
-Links → **Import** → **Refresh from exports**, with **Offline** ticked to read only the exports on
-disk and fetch nothing. The helper (`native/link-keeper-bridge.py`) runs `tools/refresh.zsh`
+Links → **Import** → **Import from exports**, with **Offline** ticked to read only the exports on
+disk and fetch nothing. The helper (`native/link-keeper-bridge.py`) runs `tools/import-links.zsh`
 detached, with asdf's shims and Homebrew on its PATH (Firefox starts helpers with almost none); the
 panel shows its last lines while it runs and collects the hand-over when it is ready. The run's output
-goes to `~/Library/Logs/link-refresh.log`. From a terminal, `link-refresh` (or `tools/refresh.zsh`)
+goes to `~/Library/Logs/link-import.log`. From a terminal, `link-import` (or `tools/import-links.zsh`)
 does the same. The Link Refresh Mac app this replaced went in 5.65.
 
 That is the whole routine, and it covers both sources: the newest export under Telegram's download
@@ -66,18 +66,18 @@ port. Open the extension's Links page and it collects the file itself — no dia
 
 Better still, exports are optional altogether once the phone-share path is up: the `android/` share
 target puts **Link Keeper** in Android's share sheet, POSTs the link to the `receiver/` endpoint on
-any always-on box you own (over Tailscale, so nothing crosses the open internet), and the refresh
+any always-on box you own (over Tailscale, so nothing crosses the open internet), and the import
 mirrors that inbox before rebuilding. Share → pick Link Keeper → done; no messenger in the loop.
 Links queue on the phone when the endpoint is unreachable and ride along with the next share.
 
 Two alternative intakes exist for the same inbox: `importers/telegram-pull.py` reads Saved Messages
 directly through Telegram's API (needs a my.telegram.org login), and plain chat exports keep working
-as the manual fallback. All three feed the same refresh; `config.local.sh.example` shows the knobs.
+as the manual fallback. All three feed the same import; `config.local.sh.example` shows the knobs.
 
 Rebuilt files land in `data/` at the repo root by default — nothing to set up. Copy
 `config.local.sh.example` to `config.local.sh` only if you want `DATA_DIR` pointed somewhere else;
-nothing machine-specific is committed. Symlink `tools/refresh.zsh` onto your PATH as
-`link-refresh`, or call it by path.
+nothing machine-specific is committed. Symlink `tools/import-links.zsh` onto your PATH as
+`link-import`, or call it by path.
 
 Only links that resolved to nothing need anything more, and the command prints those.
 
@@ -250,8 +250,8 @@ them; they are suggested only once a head trained on your tagging holds them.
 or step by step, from `tools/tag-model/` with `uv run python`: `train.py` (`--min-positives`,
 `--min-precision`, `--threshold`), `suggest.py` (`--limit N` for a trial, `--system-one-only`,
 `--no-gutsy`, `--system-one-threshold`, `--gutsy-threshold`, `--write`), `suggest_system_one.py --limit 10` (times system-one on ten links and prints the
-estimate for all). `tools/refresh.zsh` runs `run.zsh` in the background after each refresh when the
-environment is set up, and says so when it is not. system-one is globally disabled; the scripts
+estimate for all). Nothing runs it on its own: run `run.zsh` by hand when you want suggestions (the import
+stopped running it after each import on 2026-10-20). system-one is globally disabled; the scripts
 start it for the run only if it is not running and stop it afterwards only if they started it.
 gutsy-inference is found through `GUTSY_DIR` in `config.local.sh` (its install folder, with `.venv/`
 and `models.json`); the run starts `gutsy-inference serve` on 127.0.0.1:8765 when nothing listens
@@ -647,7 +647,7 @@ reads the zip directly, undoes Meta's latin-1 mojibake, follows the `message_N.j
 finds the self-thread on its own. No enrichment fetch is needed or possible: instagram.com stonewalls
 resolvers, but the export already carries each reel's caption and author, so `--json` emits finished
 capture records (`kind: "reel"` / `"ig-post"`) with zero network calls. Non-instagram links pasted
-into the self-thread go through the normal enrichers via `--other`. `tools/refresh.zsh` runs all of
+into the self-thread go through the normal enrichers via `--other`. `tools/import-links.zsh` runs all of
 this whenever an export containing messages exists — Instagram exports are per-request subsets, so
 `--check` keeps a zip requested for something else from shadowing the one with the links in it.
 
@@ -665,12 +665,12 @@ the threads to read in `config.local.sh` (`config.local.sh.example` shows the la
     IG_ACCOUNTS[side]=""                                          # self-thread only
 
 With a single account and no folders, `IG_THREADS="alice_123 bob_456"` in `config.local.sh` names the threads to
-read. `refresh.zsh` then reads the newest export of each account. Links to other sites go through the enrichers
+read. `import-links.zsh` then reads the newest export of each account. Links to other sites go through the enrichers
 as plain `URL<TAB>date`, which cannot carry the origin, so `importers/attach-dm-origin.py` puts `account`,
 `thread` and `senders` back on their records after the merge. A link two accounts both hold becomes
 one record naming both (`account` is then a list) with every sender and thread. Without `IG_ACCOUNTS` the old single-export setup is unchanged.
 
-`tools/refresh.zsh --offline` brings a new Instagram dump in with no internet: it parses the dump, keeps the
+`tools/import-links.zsh --offline` brings a new Instagram dump in with no internet: it parses the dump, keeps the
 x.com and web lookups the last full run left, and hands the result to the extension, skipping the phone inbox, the
 Saved Messages puller, the lookups, the reel downloads and the tag suggestions. Links to other sites inside the
 dump and any new Telegram links wait for the next full run. The extension skips a link it already holds, so
@@ -690,7 +690,7 @@ named by its last rename. twitter.com links fold into x.com without their share 
 The archive holds no tweet or page text, so `--json` writes bare records: the link, the day it was
 sent, `account`, `thread` and `senders`. Links shows such a link as not captured, with where it came
 from in the detail pane and hover card; a record with text (FxTwitter's, a page read) fills it in, and a
-later capture keeps the origin. `refresh.zsh` reads the newest `twitter-*` archive under
+later capture keeps the origin. `import-links.zsh` reads the newest `twitter-*` archive under
 `X_ARCHIVE_DIR` (default `~/Downloads`) that holds DMs, with the threads in `X_THREADS` and the account
 in `X_ACCOUNT` (see `config.local.sh.example`). Its links go through the enrichers like any other, and
 under `--offline` the bare records alone bring them in. `tools/test-x-archive.py` checks the importer
@@ -699,11 +699,11 @@ against a made-up archive.
 The archive cannot read X Chat, X's end-to-end encrypted DMs: it keeps them only as ciphertext in
 `data/message-event.js`. A conversation that moved there looks complete when it is not. So
 `--list-threads` adds a column counting each conversation's encrypted messages (and lists one that exists
-only as X Chat), and a refresh prints a line for each named thread that has some, with its chat page:
+only as X Chat), and an import prints a line for each named thread that has some, with its chat page:
 grab those from the page with Link Keeper's popup.
 
 When an export will not do, `docs/browser-agent-dm-run.md` is the brief for a Chrome-agent run over named DM threads:
-the approval, request count and stop rules it needs first, and the records it returns, which the refresh
+the approval, request count and stop rules it needs first, and the records it returns, which the import
 merges from `link-captures-extra.jsonl`.
 
 A reel is a video, so a captured URL is not yet captured content. `tools/watch-reel.zsh` closes that
@@ -724,7 +724,7 @@ pack drops its MP4s: they were 1.4 GB of the first 184 packs' 1.7 GB, and can be
 Watching is offered wherever a video turns up, and a reel that already has a pack is skipped at every
 one: **Settings → Videos → Watch videos when captured** (on unless switched off) watches a reel the
 moment Links, the capture queue or the popup captures it; **Watch** under a video link's ⋯ watches that
-one; and Import's **Watch the reels** box (on) watches the reels in your exports (`refresh.zsh
+one; and Import's **Watch the reels** box (on) watches the reels in your exports (`import-links.zsh
 --no-watch` when off). The first two go through the helper: `watch-start` queues the link in its state
 folder and starts `tools/watch-links.zsh`, one worker at a time, which builds the pack, its resource list
 and its record (`reels-to-captures.py --pack`); the add-on collects the records through `watch-status`
@@ -738,7 +738,7 @@ one line per distinct text at its first second (`[12s] text`), and into `summary
 `tools/extract-reel-resources.py` then hands Claude Haiku the caption, transcript and on-screen text
 (text only, no frames) and writes `resources.json`: one sentence on what the reel is about and the
 tools, repos, sites and products it points to, each with where it came from (shown, said, caption) and a
-URL only when one appears. A pack is asked again only when its input changes. A full refresh runs it
+URL only when one appears. A pack is asked again only when its input changes. A full import runs it
 after the downloads; `--offline` does not, since every call spends tokens. `reels-to-captures.py` puts the
 list at the top of the reel's capture text, its URLs in the record's links, and the on-screen text
 beside the transcript; on import a watch-reel record replaces a caption-only read of the same reel.
@@ -755,9 +755,9 @@ one exists for that link, so a card carries the real title and text rather than 
 Decisions live in the page's localStorage and are also exportable to a sidecar JSON
 (`telegram-links-triage.json` by default); pass it back in with `-t` and a re-export of the same
 chat does not re-litigate links already decided. Output and the sidecar both default into
-`DATA_DIR` rather than the current directory. `tools/refresh.zsh` runs this on every export
+`DATA_DIR` rather than the current directory. `tools/import-links.zsh` runs this on every export
 alongside the message view, into fixed filenames in `DATA_DIR` so the queue is right there after
-every refresh; `--urls` prints the same `URL<TAB>date` lines as `importers/telegram.py` if you
+every import; `--urls` prints the same `URL<TAB>date` lines as `importers/telegram.py` if you
 just want to paste into Links' Import instead.
 
 The link extraction underneath — walking `result.json`'s messages and text entities, the

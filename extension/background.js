@@ -2596,11 +2596,11 @@ async function handleMessage(msg) {
     case "link-counts":
       return linkCounts();
 
-    // Links' "Refresh from exports": tools/refresh.zsh, started and watched by the helper on this Mac.
-    case "refresh-start":
-      return hostCall("refresh-start", { offline: !!msg.offline, watch: msg.watch !== false }).catch(e => ({ ok: false, error: String(e.message || e) }));
-    case "refresh-status":
-      return hostCall("refresh-status").catch(e => ({ ok: false, error: String(e.message || e) }));
+    // Links' "Import from exports": tools/import-links.zsh, started and watched by the helper on this Mac.
+    case "import-start":
+      return hostCall("import-start", { offline: !!msg.offline, watch: msg.watch !== false }).catch(e => ({ ok: false, error: String(e.message || e) }));
+    case "import-status":
+      return hostCall("import-status").catch(e => ({ ok: false, error: String(e.message || e) }));
 
     // Watching a video: the Watch item, the setting, and the Settings line saying what is under way.
     case "watch-start":
@@ -2818,7 +2818,7 @@ async function handleMessage(msg) {
      * public API with no login, so half a pile can arrive already read. Merged on the same
      * normalised key the rest of the extension uses; an incoming record wins only where the
      * existing one has no text, so a real page read is never overwritten by an API summary. */
-    /* refresh.zsh leaves the rebuilt file behind a loopback URL and exits once it has been read, so
+    /* import-links.zsh leaves the rebuilt file behind a loopback URL and exits once it has been read, so
      * the list page can collect it with no file dialog and nothing to paste. Silent when nothing is
      * waiting — that is the normal case. */
     case "fetch-pending": {
