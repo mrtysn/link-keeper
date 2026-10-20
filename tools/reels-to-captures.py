@@ -48,7 +48,7 @@ def default_reels_dir() -> Path:
     config = repo / "config.local.sh"
     if config.is_file():
         out = subprocess.run(
-            ["zsh", "-c", f'source "{config}" && print -r -- "${{REELS_DIR:-}}\\t${{DATA_DIR:-}}"'],
+            ["zsh", "-c", f'source "{config}" && printf "%s\\t%s" "${{REELS_DIR:-}}" "${{DATA_DIR:-}}"'],
             capture_output=True, text=True,
         ).stdout.rstrip("\n")
         reels_dir, _, data_dir = out.partition("\t")
