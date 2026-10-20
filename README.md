@@ -684,7 +684,7 @@ one record naming both (`account` is then a list) with every sender and thread. 
 
 `tools/import-links.zsh --offline` brings a new Instagram dump in with no internet: it parses the dump, keeps the
 x.com and web lookups the last full run left, and hands the result to the extension, skipping the phone inbox, the
-Saved Messages puller, the lookups, the reel downloads and the tag suggestions. Links to other sites inside the
+Saved Messages puller and the lookups. Links to other sites inside the
 dump and any new Telegram links wait for the next full run. The extension skips a link it already holds, so
 repeating an import is safe.
 
@@ -738,15 +738,18 @@ video's own captions (the uploader's, else the automatic ones) are its transcrip
 downloaded for the frames, and whisper runs only when it has none; a video over 10 minutes gets 600 frames
 spread over its length. An X post is watched on capture only when its capture shows a video.
 
-Watching is offered wherever a video turns up, and a reel that already has a pack is skipped at every
-one: **Settings → Videos → Watch videos when captured** (on unless switched off) watches a reel the
-moment Links, the capture queue or the popup captures it; **Watch** under a video link's ⋯ watches that
-one; and Import's **Watch the reels** box (on) watches the reels in your exports (`import-links.zsh
---no-watch` when off). The first two go through the helper: `watch-start` queues the link in its state
+Watching a video is part of capturing it, and a video that already has a pack is never downloaded again.
+**Settings → Videos → Watch videos when captured** (on unless switched off) watches a video the moment
+Links, the capture queue or the popup captures it. A video captured before it was watched (a caption from
+an export, an older page read) counts as not captured, so **Not captured** lists it and **Capture** on it
+hands it to the watcher straight away, with no page load and no wait for the site. **Watch** under a video
+link's ⋯ watches that one, whatever the setting. Import does not watch: it saves links, and the capture
+queue does the rest. All of these go through the helper: `watch-start` queues the link in its state
 folder and starts `tools/watch-links.zsh`, one worker at a time, which builds the pack, its resource list
 and its record (`reels-to-captures.py --pack`); the add-on collects the records through `watch-status`
-and imports them, so the capture updates by itself a minute or so later. The worker logs to
-`~/Library/Logs/link-watch.log`.
+and imports them, so the capture updates by itself a minute or so later. A video that could not be
+watched (deleted, private) comes back as a failure and is listed under **Failed** with the reason. The
+worker logs to `~/Library/Logs/link-watch.log`.
 
 What a reel only *shows* matters as much as what it says: a repo name on screen, a URL in a caption
 card. Every per-second frame and image slide goes through macOS's Vision
@@ -755,8 +758,8 @@ one line per distinct text at its first second (`[12s] text`), and into `summary
 `tools/extract-reel-resources.py` then hands Claude Haiku the caption, transcript and on-screen text
 (text only, no frames) and writes `resources.json`: one sentence on what the reel is about and the
 tools, repos, sites and products it points to, each with where it came from (shown, said, caption) and a
-URL only when one appears. A pack is asked again only when its input changes. A full import runs it
-after the downloads; `--offline` does not, since every call spends tokens. `reels-to-captures.py` puts the
+URL only when one appears. A pack is asked again only when its input changes. The watcher runs it
+for each pack it builds (`WATCH_NO_RESOURCES=1` skips it, since every call spends tokens). `reels-to-captures.py` puts the
 list at the top of the reel's capture text, its URLs in the record's links, and the on-screen text
 beside the transcript; on import a watch-reel record replaces a caption-only read of the same reel.
 

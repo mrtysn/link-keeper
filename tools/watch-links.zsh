@@ -5,7 +5,8 @@
 # folder and starts this worker when none runs. For each, oldest first: watch-reel.zsh builds the pack
 # (download, frames, transcript, on-screen text), extract-reel-resources.py lists what it points to, and
 # reels-to-captures.py --pack appends its record to the out file, which Links reads back (watch-status)
-# and imports. The queue file goes once the link is done, failed or not: a failed pack keeps its
+# and imports. A link with no pack gets a line {url, watch_error} instead, which the helper hands back as
+# a failure. The queue file goes once the link is done, failed or not: a failed pack keeps its
 # yt-dlp.err, and watch-reel.zsh will not retry it unasked. Exits when the queue is empty.
 #
 # Usage:
@@ -41,11 +42,19 @@ while true; do
   code=$("$here/video-pack-id.zsh" "$url" 2>/dev/null) || code=""
   print -- "--- $url"
   if [[ -n $code ]]; then
-    "$here/watch-reel.zsh" "$url" || print "  ! watch-reel failed for $code"
+    said=$("$here/watch-reel.zsh" "$url" 2>&1) || said+=$'\n'"  ! watch-reel failed for $code"
+    print -r -- "$said"
     if [[ -z ${WATCH_NO_RESOURCES:-} ]]; then
       "$here/extract-reel-resources.py" "$code" | grep -E "^resources:|!" || true
     fi
-    "$here/reels-to-captures.py" --pack "$code" >> "$out" || print "  ! no record for $code (the pack did not finish)"
+    if ! "$here/reels-to-captures.py" --pack "$code" >> "$out"; then
+      # No pack: the link comes back as a failure, with watch-reel's own reason when it gave one. A pack
+      # that failed before (yt-dlp.err) is skipped by watch-reel without a word.
+      why=${${(M)${(f)said}:#*!*}[-1]:-}
+      why=${${why#*! }:-the video could not be downloaded (deleted, private, or failed before)}
+      print -r -- "  ! no record for $code: $why"
+      python3 -c 'import json, sys; print(json.dumps({"url": sys.argv[1], "watch_error": sys.argv[2]}))' "$url" "$why" >> "$out"
+    fi
   else
     print "  ? not a video link this worker can watch: $url"
   fi

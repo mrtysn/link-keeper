@@ -5,7 +5,8 @@
 // answers from a table, a clock that only moves when the test advances it, and a window counter. It
 // checks that two links load at once but never two of one site, that a site waits its gap between pages,
 // that a wall or three failures in a row stop a site and set its links aside, that pause, resume, stop,
-// retry and dismiss do what Links says they do, and that a queue put to sleep mid-capture resumes.
+// retry and dismiss do what Links says they do, that a queue put to sleep mid-capture resumes, and that a
+// video read but not watched goes to the watcher with no page load and no wait.
 // tools/test-extractors.zsh runs the real thing in headless Firefox.
 //
 // Usage: node tools/test-capture-queue.mjs
@@ -26,7 +27,7 @@ vm.runInContext(`${source}\nthis.makeCaptureQueue = makeCaptureQueue; this.crawl
 
 /* A world for one queue: answers[url] is what capturing it returns (default ok); every capture resolves
  * only when the test lets it, so what is loading at once can be seen. */
-function world({ answers = {}, captured = [], saved = null, robots = {} } = {}) {
+function world({ answers = {}, captured = [], saved = null, robots = {}, watch = {} } = {}) {
   const robotsRead = [];   // hosts whose robots.txt was read
   let clock = 1_000_000;
   const timers = [];
@@ -34,6 +35,7 @@ function world({ answers = {}, captured = [], saved = null, robots = {} } = {}) 
   const log = [];       // [url, at] per capture started
   const windows = { opened: 0, closed: 0, open: new Set() };
   const recorded = {};   // url → the kind of failure kept on the link
+  const handed = [];     // videos handed to the watcher
   let store = saved;
   const fx = {
     capture: (url, windowId) => {
@@ -42,6 +44,8 @@ function world({ answers = {}, captured = [], saved = null, robots = {} } = {}) 
       return new Promise(resolve => loading.push({ url, resolve: () => resolve(answers[url] || { ok: true }) }));
     },
     isCaptured: async url => captured.includes(url),
+    // watch[url]: what handing that video to the watcher returns; any other link is read as a page.
+    watch: async url => { if (!(url in watch)) return null; handed.push(url); return watch[url]; },
     load: async () => (store ? structuredClone(store) : null),
     save: async s => { store = structuredClone(s); },
     openWindow: async () => { const id = ++windows.opened; windows.open.add(id); return id; },
@@ -63,7 +67,7 @@ function world({ answers = {}, captured = [], saved = null, robots = {} } = {}) 
   const q = ctx.makeCaptureQueue(fx);
   const settle = () => new Promise(r => setImmediate(r));
   return {
-    q, log, windows, loading, recorded, robotsRead, store: () => store,
+    q, log, windows, loading, recorded, robotsRead, handed, store: () => store,
     async flush() { for (let i = 0; i < 10; i++) await settle(); },
     // Finishes the oldest loading page (or the one for url).
     async finish(url) {
@@ -340,6 +344,20 @@ await check("a queue put to sleep mid-capture starts again with the page it was 
   assert.deepEqual(again.loadingNow(), [GH(1), IG(1)]);
   await again.drain();
   assert.equal((structuredClone(await again.q.status())).captured, 3);
+});
+
+await check("a video read but not watched goes to the watcher at once, with no page load or wait", async () => {
+  const w = world({ watch: { [IG(1)]: { ok: true }, [IG(2)]: { ok: true }, [IG(3)]: { ok: false, error: "the watcher did not take it: no helper" } } });
+  await w.q.start([IG(1), IG(2), IG(3), IG(4)]);
+  await w.flush();
+  assert.deepEqual(w.handed, [IG(1), IG(2), IG(3)]);
+  assert.deepEqual(w.loadingNow(), [IG(4)], "only the unread one loads, straight away");
+  await w.drain();
+  const st = structuredClone(await w.q.status());
+  assert.equal(st.captured, 3);
+  assert.deepEqual(st.failed.map(f => f.url), [IG(3)]);
+  assert.equal(w.recorded[IG(3)], "error");
+  assert.deepEqual(w.log.map(([u]) => u), [IG(4)], "no page of a handed video was loaded");
 });
 
 if (failures) {

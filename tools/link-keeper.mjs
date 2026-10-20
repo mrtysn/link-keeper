@@ -133,7 +133,8 @@ async function getData() {
   source = `backup of ${b.at}`;
   const s = b.storage;
   const joined = LINKS.joinLinks({ items: s.items || [], captures: s.captures || [], sessions: b.sessions || [],
-    thumbs: s.thumbs || {}, currentKey: s.current?.key || null, tags: s.linkTags || {}, suggestions: s.tagSuggestions || {}, agentTags: s.agentTags || {}, fails: s.captureFails || {} });
+    thumbs: s.thumbs || {}, currentKey: s.current?.key || null, tags: s.linkTags || {}, suggestions: s.tagSuggestions || {}, agentTags: s.agentTags || {}, fails: s.captureFails || {},
+    watchVideos: s.watchOnCapture !== false });
   return { ...JSON.parse(JSON.stringify(joined)), tagDefs: s.tagDefs, backup: b };
 }
 
@@ -187,8 +188,8 @@ const replyLine = r => {
 
 const suggestedText = l => (l.suggested?.length ? `suggested: ${l.suggested.map(s => `${s.tag} ${Math.round(s.p * 100)}%`).join(", ")}` : "");
 const agentText = l => (l.agentTags?.length ? `agent${l.agentBy ? `(${l.agentBy})` : ""}: ${l.agentTags.join(", ")}` : "");
-// Captured as Links counts it (list.js hasRead): a capture that read its page.
-const hasRead = l => !!l.cap && !l.cap.thin;
+// Captured as Links counts it (list.js hasRead): a capture that read its page, and watched it if a video.
+const hasRead = l => !!l.cap && !l.cap.thin && !l.cap.unwatched;
 const linkLine = l => [day(l.date), l.tags.length ? `[${l.tags.join(",")}]` : "[]", suggestedText(l), agentText(l),
   hasRead(l) ? "captured" : l.fail ? `capture failed: ${l.fail.error}` : "",
   l.copies.length > 1 ? `×${l.copies.length}` : "", l.title || l.cap?.title || "", l.url].filter(Boolean).join("  ");

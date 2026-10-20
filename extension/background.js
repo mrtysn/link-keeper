@@ -1318,18 +1318,13 @@ browser.runtime.onInstalled.addListener(() => applyFilterRules().catch(() => {})
 
 /* Watching a video — download, transcript, on-screen text, the list of what it points to — runs on this
  * Mac through the helper (tools/watch-links.zsh), for an Instagram reel or post, a YouTube video, or an X
- * post. It is asked for three ways: a page capture of one
- * when "Watch videos when captured" is on (watchOnCapture, on unless switched off), the Watch item on
- * a link, and Import. The finished records come back through watch-status and are imported like any
- * other: a watch-reel record replaces the caption-only read of the same reel. watchCursor is how far
- * into the helper's records file this profile has read. */
-// The links tools/video-pack-id.zsh names a pack for (the helper keeps the same patterns).
-const WATCHABLE = /^https?:\/\/((www\.)?instagram\.com\/(reel|reels|p|tv)\/[A-Za-z0-9_-]+|((www|m)\.)?youtube\.com\/(watch\?(.*&)?v=|shorts\/)[A-Za-z0-9_-]{11}|youtu\.be\/[A-Za-z0-9_-]{11}|((www|mobile)\.)?(x|twitter)\.com\/[A-Za-z0-9_]+\/status\/\d+)/;
-/* Watched on capture: every reel and YouTube video, but an X post only when its capture shows a video
- * (most X posts are text, and asking for a video that is not there is a request to X for nothing). */
-const XPOST = /^https?:\/\/((www|mobile)\.)?(x|twitter)\.com\//;
-const hasVideo = r => /video\.twimg\.com|\.mp4(\?|$)/.test(JSON.stringify([r.images, r.media, r.video].filter(Boolean)));
-const watchOnCaptureWants = r => WATCHABLE.test(r.url || "") && (!XPOST.test(r.url) || hasVideo(r));
+ * post with a video (links.js WATCHABLE, watchWants). It is the rest of the video's capture, asked for
+ * three ways when "Watch videos when captured" is on (watchOnCapture, on unless switched off): a page
+ * capture of one, the capture queue for a video read but not watched yet (links.js capUnwatched), and
+ * the Watch item on a link, which asks whatever the setting. The finished records come back through
+ * watch-status and are imported like any other: a watch-reel record replaces the caption-only read of
+ * the same video. A video that could not be watched comes back as a failure, kept on the link like a
+ * capture's (captureFails). watchCursor is how far into the helper's records file this profile has read. */
 const getWatchOnCapture = async () => (await read("watchOnCapture", true)) !== false;
 
 async function watchStart(urls) {
@@ -1350,6 +1345,8 @@ async function watchCollect() {
   const st = await hostCall("watch-status", { after });
   if (!st?.ok || !Array.isArray(st.records)) return { ok: false, error: st?.error || "the helper does not watch videos yet; update it" };
   if (st.records.length) await handleMessage({ type: "import-captures", records: st.records });
+  for (const r of st.records) await clearCaptureFail(r.url);
+  for (const f of st.failed || []) await recordCaptureFail(f.url, `the video could not be watched: ${f.error}`, "watch");
   await browser.storage.local.set({ watchCursor: st.next });
   if (st.running || st.queued) watchPoll(15e3);
   return { ok: true, running: st.running, queued: st.queued, imported: st.records.length };
@@ -1419,13 +1416,13 @@ async function captureLink(url, note = "", windowId = undefined) {
   return { ok: true, record };
 }
 
-/* A reel read by a page capture is queued once, when its record first appears or is read again. Only a
- * page capture: its record has via "list" (Links, the queue) or none (the popup). An imported record
- * names its source, and Import watches its own reels when asked to. */
+/* A video read by a page capture is queued once, when its record first appears or is read again. Only a
+ * page capture: its record has via "list" (Links, the queue), "agent" or none (the popup). An imported
+ * record names its source; the capture queue watches it later, as a video not watched yet. */
 browser.storage.onChanged.addListener(async (changes, area) => {
   if (area !== "local" || !changes.captures?.newValue) return;
   const before = new Map((changes.captures.oldValue || []).map(r => [keyOf(r.url), r.captured_at]));
-  const fresh = changes.captures.newValue.filter(r => (!r.via || r.via === "list" || r.via === "agent") && watchOnCaptureWants(r)
+  const fresh = changes.captures.newValue.filter(r => (!r.via || r.via === "list" || r.via === "agent") && watchWants(r)
     && before.get(keyOf(r.url)) !== r.captured_at);
   if (!fresh.length || !(await getWatchOnCapture())) return;
   watchStart(fresh.map(r => r.url)).catch(() => {});
@@ -1871,7 +1868,8 @@ async function getLinks() {
   const [items, captures, sessions, thumbs, current, tags, suggestions, agentTags, previews, fails] =
     [await getItems(), await getCaptures(), await getSessions(), await read("thumbs", {}), await getCurrent(), await read("linkTags", {}),
       await read("tagSuggestions", {}), await read("agentTags", {}), await read("previews", {}), await read("captureFails", {})];
-  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags, suggestions, agentTags, previews, fails });
+  return joinLinks({ items, captures, sessions, thumbs, currentKey: current?.key || null, tags, suggestions, agentTags, previews, fails,
+    watchVideos: await getWatchOnCapture() });
 }
 
 /* --- failed captures --------------------------------------------------------------
@@ -2690,7 +2688,7 @@ async function handleMessage(msg) {
 
     // Links' "Import from exports": tools/import-links.zsh, started and watched by the helper on this Mac.
     case "import-start":
-      return hostCall("import-start", { offline: !!msg.offline, watch: msg.watch !== false }).catch(e => ({ ok: false, error: String(e.message || e) }));
+      return hostCall("import-start", { offline: !!msg.offline }).catch(e => ({ ok: false, error: String(e.message || e) }));
     case "import-status":
       return hostCall("import-status").catch(e => ({ ok: false, error: String(e.message || e) }));
 
@@ -2884,8 +2882,15 @@ async function handleMessage(msg) {
       return res;
     }
 
-    case "capture-url":
+    case "capture-url": {
+      // A video already read but not watched: watching it is what its capture lacks, not another page read.
+      const c = (await getCaptures()).find(c => keyOf(c.url) === keyOf(msg.url));
+      if (c && !capThin(c) && capUnwatched(c) && await getWatchOnCapture()) {
+        const res = await watchStart([msg.url]);
+        return res?.ok ? { ok: true, watching: true, record: c } : { ok: false, error: res?.error || "the helper did not take the video" };
+      }
       return captureLink(msg.url, msg.note);
+    }
 
     // Settings → Captures: whether public links are read in the agent browser, and the sites that walled it.
     case "agent-settings":

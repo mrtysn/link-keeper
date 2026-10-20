@@ -14,10 +14,9 @@
 #   import-links.zsh --no-serve          # rebuild only, do not offer it to the extension
 #   import-links.zsh --no-open           # offer it, but do not open the browser yourself
 #   import-links.zsh --offline           # no internet: parse the Instagram dump, keep the last lookups, hand over
-#   import-links.zsh --no-watch          # everything but watching reels (download, transcript, resource list)
 #
 # --offline skips every step that reaches out — the phone-inbox mirror, the Saved Messages puller, the
-# x.com and web lookups, the reel downloads — and keeps the files the last full
+# x.com and web lookups — and keeps the files the last full
 # run left. Links in the Instagram dump and the X archive's DMs are parsed and merged (X's as bare
 # records: where and when they were sent, no text yet); links to other sites in the Instagram dump, and
 # Telegram links, wait for the next full run. The extension skips a link it already holds, so it is safe to repeat.
@@ -38,7 +37,7 @@ here=${0:A:h}
 repo=${here:h}
 
 if [[ ${1:-} == -h || ${1:-} == --help ]]; then
-  sed -n '2,24p' "$0" | sed 's/^# \?//'
+  sed -n '2,23p' "$0" | sed -E 's/^# ?//'
   exit 0
 fi
 
@@ -47,13 +46,11 @@ fi
 serve=1
 open_page=1
 offline=0
-watch=1
 args=()
 for a in "$@"; do
   [[ $a == --no-serve ]] && { serve=0; continue }
   [[ $a == --no-open ]] && { open_page=0; continue }
   [[ $a == --offline ]] && { offline=1; continue }
-  [[ $a == --no-watch ]] && { watch=0; continue }
   args+=$a
 done
 
@@ -277,12 +274,14 @@ else
   : > "$xdm_jsonl"
 fi
 
-print "\n4/7  videos — packs for new reels, YouTube videos and X videos, records from all of them"
+print "\n4/7  videos — records from the packs already built"
+# The import does not watch videos: watching is part of capture, and Links' capture queue hands a video
+# read but not watched to the watcher (tools/watch-links.zsh). The packs it has built are folded in here,
+# so a fresh profile gets them too.
 reels_dir=${REELS_DIR:-$outdir/reels}
 reels_jsonl=$outdir/link-captures-reels.jsonl
 # The worklist holds only Telegram and phone reels: instagram.py --other leaves instagram.com links
-# out, so the export's own reels (the DMs) come from its capture records. Until 2026-10-20 they were
-# never downloaded, and 291 DM reels had only their caption.
+# out, so the export's own reels (the DMs) come from its capture records.
 reel_urls=$( {
   print -r -- "$worklist" | cut -f1
   [[ -s $ig_jsonl ]] && python3 -c '
@@ -292,45 +291,14 @@ for line in open(sys.argv[1], encoding="utf-8"):
     if r.get("kind") in ("reel", "ig-post"): print(r["url"])
 ' "$ig_jsonl"
 } | grep -E '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' | sort -u || true)
-# YouTube videos from the worklist, and X posts whose record (FxTwitter's) carries a video.
-video_urls=$( {
-  print -r -- "$reel_urls"
-  print -r -- "$worklist" | cut -f1 | grep -E '^https?://(((www|m)\.)?youtube\.com/(watch\?|shorts/)|youtu\.be/)' || true
-  [[ -s $x_jsonl ]] && python3 -c '
-import json, sys
-for line in open(sys.argv[1], encoding="utf-8"):
-    r = json.loads(line) if line.strip() else {}
-    if "video.twimg.com" in json.dumps(r.get("images") or []): print(r["url"])
-' "$x_jsonl"
-} | grep . | sort -u || true)
-reels_unwatched=0
-while IFS= read -r u; do
-  code=$("$repo/tools/video-pack-id.zsh" "$u" 2>/dev/null) || code=""
-  [[ -n $code && ! -s $reels_dir/$code/meta.json && ! -s $reels_dir/$code/yt-dlp.err ]] && reels_unwatched=$(( reels_unwatched + 1 ))
-done <<< "$video_urls"
-if (( reels_unwatched )) && (( offline || ! watch )); then
-  print "  skipped (${${offline:#0}:+--offline}${${watch:#1}:+--no-watch}): $reels_unwatched videos have no pack yet; a run that watches downloads them"
-elif (( reels_unwatched )); then
-  # watch-reel's own errors (a missing tool, a failed contact sheet) pass through: filtering them out
-  # once hid that the Import button's PATH had no mlx_whisper, so no reel was ever transcribed from it.
-  reel_rc=0
-  print -r -- "$video_urls" | REELS_DIR=$reels_dir xargs "$repo/tools/watch-reel.zsh" 2>&1 \
-    | grep -E "^packs:|!|^missing:" || reel_rc=$?
-  (( reel_rc )) && print "  ! video downloads did not finish ($reels_unwatched were waiting); see the lines above"
-fi
-# What each pack points to (Claude Haiku over caption, transcript and on-screen text): spends tokens, so
-# full runs only; a pack whose input has not changed is not asked again.
-if [[ -d $reels_dir ]] && (( ! offline && watch )); then
-  "$repo/tools/extract-reel-resources.py" --reels-dir "$reels_dir" 2>&1 | grep -E "^resources:|!" || true
-fi
 if [[ -d $reels_dir ]]; then
   "$repo/tools/reels-to-captures.py" "$reels_dir" -o "$reels_jsonl"
 else
   : > "$reels_jsonl"
   print "  no packs yet — reels arrive here once links are shared"
 fi
-# An instagram link whose pack failed (deleted reel, private post) must not vanish: it goes onto the
-# unresolved queue so the browser handoff still carries it.
+# An instagram link with no pack must not vanish: it goes onto the unresolved queue so the browser
+# handoff still carries it, and capturing it there watches it.
 if [[ -n $reel_urls ]] && (( ! offline )); then
   while IFS= read -r u; do
     code=$(print -r -- "$u" | sed -nE 's#.*instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+).*#\2#p')

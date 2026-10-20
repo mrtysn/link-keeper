@@ -28,18 +28,21 @@ Pipeline, in order:
    (stash import, popup, chat grab in `extension/chat-grab.js`).
 2. **`tools/import-links.zsh`:** finds the newest exports; mirrors the phone inbox; runs the importers and the
    x.com/web enrichers; merges `link-captures-extra.jsonl` (hand-recovered records, never overwritten);
-   downloads new Instagram reels into watch-packs; suggests tags; rebuilds the safe-to-delete and link-triage pages (`tools/build-safe-to-delete-page.py`,
+   folds the watch-packs already built into records; rebuilds the safe-to-delete and link-triage pages (`tools/build-safe-to-delete-page.py`,
    `tools/build-link-triage-page.py`, every source, only when their input changed); then serves the
-   result on loopback. `--offline` skips everything that touches the network.
-3. **Watch-packs:** `tools/watch-reel.zsh` downloads a reel or carousel and builds a pack (video, whisper
+   result on loopback. `--offline` skips everything that touches the network. It saves links; it does not
+   watch videos.
+3. **Watch-packs (part of capture):** `tools/watch-reel.zsh` downloads a reel or carousel and builds a pack (video, whisper
    transcript, keyframes, contact sheet, slides) under `REELS_DIR` (default `data/reels`): Instagram reels and posts, YouTube videos (`yt-<id>`, from their
    captions when they have them) and X posts with a video (`x-<id>`); `tools/video-pack-id.zsh` names the packs.
-   Each pack gets `onscreen.txt` (OCR of the distinct frames); `tools/extract-reel-resources.py` (Claude Haiku,
-   full import only) writes `resources.json`, what the reel is about and the tools and links it points to.
+   Each pack gets `onscreen.txt` (OCR of the distinct frames); `tools/extract-reel-resources.py` (Claude Haiku)
+   writes `resources.json`, what the reel is about and the tools and links it points to.
    `tools/reels-to-captures.py` folds the packs into capture records (`link-captures-reels.jsonl`).
 4. **Into the extension:** Links pulls the served JSONL and skips links it already holds. Links still
    without a capture go through the extension's capture queue (`extension/capture-queue.js`), which reads
-   pages in a minimised Firefox window, paced per site, and stops a site at a wall.
+   pages in a minimised Firefox window, paced per site, and stops a site at a wall. A video's capture
+   includes watching it: one read but not watched yet counts as not captured, and the queue hands it to
+   the helper's watcher (`watch-start`, `tools/watch-links.zsh`) without loading its page.
 5. **Out:** `native/link-keeper-bridge.py` backs the add-on's storage up to disk; `tools/link-keeper.mjs`
    reads and edits it for agents.
 

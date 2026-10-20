@@ -279,8 +279,8 @@ def journal_drop(entry_id: str) -> dict:
 # --- import --------------------------------------------------------------------------------------
 # Links' "Import from exports" button: tools/import-links.zsh, run detached so it outlives this helper,
 # with the PATH an app started outside a shell lacks (asdf's shims, Homebrew). Only that script runs;
-# --offline and --no-watch are the choices the page makes. Each run starts its log with a "--- import"
-# line and ends with "--- exit <code>".
+# --offline is the choice the page makes. It does not watch videos: that is capture's (watch-start).
+# Each run starts its log with a "--- import" line and ends with "--- exit <code>".
 IMPORT_LOG = Path.home() / "Library/Logs/link-import.log"
 
 
@@ -311,7 +311,7 @@ def import_running() -> dict | None:
 TOOL_PATH = f"{Path.home()}/.asdf/shims:{Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 
-def import_start(offline: bool, watch: bool = True) -> dict:
+def import_start(offline: bool) -> dict:
     global _import_proc
     if import_running():
         return {"ok": False, "error": "an import is already running"}
@@ -320,7 +320,7 @@ def import_start(offline: bool, watch: bool = True) -> dict:
         return {"ok": False, "error": f"no import script at {script}"}
     IMPORT_LOG.parent.mkdir(parents=True, exist_ok=True)
     started = dt.datetime.now().isoformat(timespec="seconds")
-    flags = "--no-open" + (" --offline" if offline else "") + ("" if watch else " --no-watch")
+    flags = "--no-open" + (" --offline" if offline else "")
     with IMPORT_LOG.open("a") as log:
         log.write(f"--- import {started}{' (offline)' if offline else ''}\n")
     env = dict(os.environ, PATH=TOOL_PATH)
@@ -351,7 +351,8 @@ def import_status() -> dict:
 # Watching a video: tools/watch-links.zsh, one worker at a time, run detached like the import. watch-start
 # drops one file per link into the queue folder and starts the worker when none runs; the worker builds
 # each pack, its resource list and its capture record, appended to records.jsonl. watch-status hands the
-# records past the page's cursor back to the extension, which imports them.
+# records past the page's cursor back to the extension, which imports them, and the links that could not
+# be watched as failed.
 WATCH_LOG = Path.home() / "Library/Logs/link-watch.log"
 # The pack name of a video link, as tools/video-pack-id.zsh gives it: the queue file is named after it.
 WATCHABLE = [
@@ -425,14 +426,19 @@ def watch_status(after: int) -> dict:
     except OSError:
         lines = []
     after = after if 0 <= after <= len(lines) else 0   # a cursor past the end: the file was started again
-    records = []
+    records, failed = [], []
     for line in lines[after:]:
         try:
-            records.append(json.loads(line))
+            rec = json.loads(line)
         except ValueError:
-            pass
+            continue
+        # A link the worker could not watch: {url, watch_error}, a failure for the link, not a capture.
+        if "watch_error" in rec:
+            failed.append({"url": rec.get("url"), "error": rec["watch_error"]})
+        else:
+            records.append(rec)
     return {"ok": True, "running": watch_running(), "queued": len(list(queue.glob("*.url"))) if queue.is_dir() else 0,
-            "records": records, "next": len(lines)}
+            "records": records, "failed": failed, "next": len(lines)}
 
 
 # --- the agent browser -------------------------------------------------------------------------------
@@ -510,10 +516,10 @@ HOST_OPS = {
     "journal-last": lambda m: journal_last(),
     "journal-list": lambda m: journal_list(),
     "journal-drop": lambda m: journal_drop(m.get("entry_id") or ""),
-    "import-start": lambda m: import_start(bool(m.get("offline")), m.get("watch") is not False),
+    "import-start": lambda m: import_start(bool(m.get("offline"))),
     "import-status": lambda m: import_status(),
     # The names before 5.79; an add-on not yet updated still sends them.
-    "refresh-start": lambda m: import_start(bool(m.get("offline")), m.get("watch") is not False),
+    "refresh-start": lambda m: import_start(bool(m.get("offline"))),
     "refresh-status": lambda m: import_status(),
     "inbox-pull": lambda m: inbox_pull(),
     "read-page": lambda m: read_page(str(m.get("url") or "")),

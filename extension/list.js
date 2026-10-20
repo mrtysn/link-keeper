@@ -184,8 +184,9 @@ const visibleStash = id => data.stashes.some(s => s.id === id);
 /* --- filtering ------------------------------------------------------------------ */
 
 /* Captured, for the filters and counts: a capture that read its page. A thin one (links.js capThin: almost
- * no text) counts as not captured, so Not captured shows it and Capture reads it again. */
-const hasRead = l => !!l.cap && !l.cap.thin;
+ * no text) counts as not captured, so Not captured shows it and Capture reads it again; so does a video
+ * not watched yet (links.js capUnwatched), which Capture hands to the watcher. */
+const hasRead = l => !!l.cap && !l.cap.thin && !l.cap.unwatched;
 
 /* A web page's site; local files and browser pages have none, so they group under a name. */
 const siteOf = url => ({ web: () => hostOf(url), file: () => "Local files", other: () => "Browser pages" })[kindOf(url)]();
@@ -2484,7 +2485,7 @@ async function watchImport() {
 }
 $("exports-go").onclick = async () => {
   $("exports-go").disabled = true;
-  const res = await send({ type: "import-start", offline: $("exports-offline").checked, watch: $("exports-watch").checked });
+  const res = await send({ type: "import-start", offline: $("exports-offline").checked });
   if (!res?.ok) { $("exports-go").disabled = false; $("exports-msg").textContent = res?.error || "The import did not start."; return; }
   $("exports-msg").textContent = "Importing…";
   importTimer = setTimeout(watchImport, 800);

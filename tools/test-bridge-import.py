@@ -67,19 +67,17 @@ with tempfile.TemporaryDirectory() as tmp:
         if not bridge.import_status()["running"]:
             break
         time.sleep(0.25)
-    bridge.import_start(offline=False, watch=False)
-    time.sleep(0.4)
-    check("an Import without watching passes --no-watch", "flags: --no-open --no-watch" in bridge.import_status()["lines"],
-          str(bridge.import_status()["lines"]))
 
     # The watch worker: a stand-in that turns each queued link into a record, then exits.
     worker = fake / "tools" / "watch-links.zsh"
+    # A post (/p/) stands in for a video that could not be watched: a {url, watch_error} line.
     worker.write_text('#!/bin/zsh\nq=$2 out=$4\nsleep 0.5\nfor f in $q/*.url(N.Om); do\n'
-                      '  print -r -- "{\\"url\\": \\"$(<$f)\\", \\"via\\": \\"watch-reel\\"}" >> $out\n  rm -f $f\ndone\n')
+                      '  if [[ $(<$f) == */p/* ]]; then print -r -- "{\\"url\\": \\"$(<$f)\\", \\"watch_error\\": \\"private post\\"}" >> $out\n'
+                      '  else print -r -- "{\\"url\\": \\"$(<$f)\\", \\"via\\": \\"watch-reel\\"}" >> $out; fi\n  rm -f $f\ndone\n')
     worker.chmod(0o755)
     bridge.WATCH_LOG = tmp / "Library/Logs/link-watch.log"
     st = bridge.watch_status(0)
-    check("nothing watched yet: no worker, no queue, no records", st == {"ok": True, "running": False, "queued": 0, "records": [], "next": 0}, str(st))
+    check("nothing watched yet: no worker, no queue, no records", st == {"ok": True, "running": False, "queued": 0, "records": [], "failed": [], "next": 0}, str(st))
     res = bridge.watch_start(["https://www.instagram.com/reel/AAA111/?igsh=x", "https://example.com/page",
                               "https://www.instagram.com/p/BBB222/"])
     check("watch-start queues the instagram links only and starts the worker",
@@ -92,9 +90,11 @@ with tempfile.TemporaryDirectory() as tmp:
         time.sleep(0.25)
     st = bridge.watch_status(0)
     check("the worker's records come back, and the queue is empty",
-          not st["running"] and st["queued"] == 0 and len(st["records"]) == 2 and st["next"] == 2, str(st))
-    check("a cursor returns only the records after it", bridge.watch_status(1)["records"] == st["records"][1:])
-    check("a cursor past the end starts from the top", len(bridge.watch_status(9)["records"]) == 2)
+          not st["running"] and st["queued"] == 0 and len(st["records"]) == 1 and st["next"] == 2, str(st))
+    check("a video it could not watch comes back as failed, not as a record",
+          st["failed"] == [{"url": "https://www.instagram.com/p/BBB222/", "error": "private post"}], str(st))
+    check("a cursor returns only the lines after it", bridge.watch_status(2) == {**st, "records": [], "failed": []})
+    check("a cursor past the end starts from the top", bridge.watch_status(9) == st)
 
     # The phone inbox: the helper hands back what its script prints as new; exit 3 is "not set up".
     puller = fake / "tools" / "pull-phone-inbox.zsh"

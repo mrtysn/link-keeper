@@ -120,6 +120,18 @@ const capHasContent = c => !!(c.text || c.title || c.images?.length || c.screens
  * reel) is never thin, since its fields are the content. The capture queue reads such a link again. */
 const capThin = c => !!c && (!!c.incomplete || ((!c.kind || c.kind === "page") && (c.text || "").trim().length < 40));
 
+/* Videos: watching one (background.js, watchStart) is the rest of its capture. The links
+ * tools/video-pack-id.zsh names a pack for (the helper keeps the same patterns). */
+const WATCHABLE = /^https?:\/\/((www\.)?instagram\.com\/(reel|reels|p|tv)\/[A-Za-z0-9_-]+|((www|m)\.)?youtube\.com\/(watch\?(.*&)?v=|shorts\/)[A-Za-z0-9_-]{11}|youtu\.be\/[A-Za-z0-9_-]{11}|((www|mobile)\.)?(x|twitter)\.com\/[A-Za-z0-9_]+\/status\/\d+)/;
+/* Watched: every reel and YouTube video, but an X post only when its capture shows a video (most X
+ * posts are text, and asking for a video that is not there is a request to X for nothing). */
+const XPOST = /^https?:\/\/((www|mobile)\.)?(x|twitter)\.com\//;
+const hasVideo = r => /video\.twimg\.com|\.mp4(\?|$)/.test(JSON.stringify([r.images, r.media, r.video].filter(Boolean)));
+const watchWants = r => WATCHABLE.test(r.url || "") && (!XPOST.test(r.url) || hasVideo(r));
+/* A video read but not watched yet (a caption, a page read): not fully captured, so Not captured lists
+ * it and the capture queue hands it to the watcher. A watch-pack's record says via "watch-reel". */
+const capUnwatched = c => !!c && c.via !== "watch-reel" && watchWants(c);
+
 /* The reader: raised whenever what a capture reads or how it loads a page changes (extractors.js, and
  * captureIn and readTab in background.js). Captures and failure records carry the reader that made them.
  * A failure an older reader recorded, or an almost empty capture it made, is not final: the cause may be
@@ -141,7 +153,7 @@ function originOf(c) {
   return o.account || o.thread.length || o.senders.length ? o : null;
 }
 
-function capView(c, thumbs = {}) {
+function capView(c, thumbs = {}, watchVideos = true) {
   return {
     title: c.title || null,
     handle: c.author?.handle || c.handle || null,
@@ -161,13 +173,14 @@ function capView(c, thumbs = {}) {
     shotId: c.screenshot?.downloadId ?? null,
     code_blocks: (c.code_blocks || []).length,
     thin: capThin(c),
+    unwatched: watchVideos && capUnwatched(c),
     reader: c.reader || 1,
   };
 }
 
 /* items and captures as stored, sessions as getSessions gives them, currentKey the reading list's
  * current entry. Returns { links, stashes }, stashes in their own order with each tab's link key. */
-function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {}, suggestions = {}, agentTags = {}, previews = {}, fails = {} }) {
+function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, currentKey = null, tags = {}, suggestions = {}, agentTags = {}, previews = {}, fails = {}, watchVideos = true }) {
   const capBy = new Map();
   for (const c of captures) {
     if (c.source_url) capBy.set(keyOf(c.source_url), c);
@@ -180,7 +193,7 @@ function joinLinks({ items = [], captures = [], sessions = [], thumbs = {}, curr
     let link = byKey.get(key);
     if (!link) {
       const c = capBy.get(key);
-      link = { key, url, title: null, sources: [], list: null, cap: c && capHasContent(c) ? capView(c, thumbs) : null, origin: originOf(c), copies: [] };
+      link = { key, url, title: null, sources: [], list: null, cap: c && capHasContent(c) ? capView(c, thumbs, watchVideos) : null, origin: originOf(c), copies: [] };
       byKey.set(key, link);
     }
     if (!link.title && title) link.title = title;

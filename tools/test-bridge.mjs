@@ -386,6 +386,21 @@ await check("a failure an older reader recorded is tried again; a wall, and one 
     "skipped-after-wall-old": true, "error-now": true, "skipped-walled-now": true }), JSON.stringify(got));
 });
 
+await check("a video read but not watched is not captured, unless watching is switched off", async () => {
+  const at = "2026-10-20T00:00:00Z";
+  const captures = [
+    { url: "https://www.instagram.com/reel/AAA111/", kind: "reel", text: "a caption", captured_at: at },
+    { url: "https://www.instagram.com/reel/BBB222/", kind: "reel", text: "caption, transcript", via: "watch-reel", captured_at: at },
+    { url: "https://x.com/a/status/1", kind: "tweet", text: "just text", captured_at: at },
+    { url: "https://x.com/a/status/2", kind: "tweet", text: "a clip", images: ["https://video.twimg.com/v.mp4"], captured_at: at },
+    { url: "https://example.org/page", text: "a page with plenty of text in it, well over forty characters", captured_at: at },
+  ];
+  const items = captures.map(c => ({ url: c.url, status: "pending", added_at: at }));
+  const unwatched = watchVideos => LINKS.joinLinks({ items, captures, watchVideos }).links.filter(l => l.cap.unwatched).map(l => l.url);
+  assert(JSON.stringify(unwatched(true)) === JSON.stringify(["https://www.instagram.com/reel/AAA111/", "https://x.com/a/status/2"]), JSON.stringify(unwatched(true)));
+  assert(unwatched(false).length === 0, JSON.stringify(unwatched(false)));
+});
+
 fs.rmSync(work, { recursive: true, force: true });
 console.log(failed ? `\n${failed} failed` : "\nall bridge checks passed");
 process.exit(failed ? 1 : 0);

@@ -78,6 +78,7 @@ const LinkActions = (() => {
       if (!isWeb(t.link.url)) return { ok: false, say: "Only web pages can be captured" };
       const res = await readLink(t.link.url);
       if (!res?.ok) return fail(res, "Unable to capture it");
+      if (res.watching) return { ok: true, say: "Watching the video on this Mac; its capture updates when done" };
       const r = res.record;
       const extra = [r.links?.length ? plural(r.links.length, "link") : null,
         r.replies?.length ? plural(r.replies.length, "reply") : null,

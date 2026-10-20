@@ -15,6 +15,10 @@
  * under Failed instead of Not captured, so a later run does not try it again unless asked. A speed (SPEEDS) scales it all: Gentle loads one link at a time and doubles every wait, Fast
  * loads three and halves them.
  *
+ * A video's capture includes watching it (links.js capUnwatched). One already read but not watched is
+ * handed to the watcher on this Mac (fx.watch) with no page load and no wait; one not read yet is read,
+ * and its new capture asks for the watch (background.js).
+ *
  * The state lives in storage.session: it outlives the background page being put to sleep and Links being
  * closed, and ends with Firefox, so a queue never starts loading pages by itself at the next launch.
  * Agents can read it (capture-queue-status) but never start one: that stays with the person at the
@@ -64,7 +68,8 @@ const siteKey = url => {
 const siteGap = host => (SITE_GAPS.find(([re]) => re.test(host))?.[1] ?? DEFAULT_GAP) * 1000;
 
 function makeCaptureQueue(fx) {
-  // fx: capture(url, windowId) → { ok, error, wall }, isCaptured(url), load(), save(state), openWindow() → id,
+  // fx: capture(url, windowId) → { ok, error, wall }, isCaptured(url), watch(url) → null or { ok, error }
+  //     (a video handed to the watcher instead of read), load(), save(state), openWindow() → id,
   //     windowAlive(id), closeWindow(id), now(), setTimer(fn, ms), random()
   let state = null;
   const busy = new Set();   // sites with a page loading now
@@ -185,7 +190,10 @@ function makeCaptureQueue(fx) {
     let res;
     let loaded = true;
     try {
+      let handed;
       if (await fx.isCaptured(url)) { res = { ok: true, skipped: true }; loaded = false; }
+      // A video read but not watched: the watcher on this Mac does the rest, and the site sees no page load.
+      else if (fx.watch && (handed = await fx.watch(url))) { res = handed; loaded = false; }
       else {
         // A site's robots.txt, once, before its first page.
         // One that cannot be read (a timeout, a server error) leaves the site at CRAWL_DELAY_UNKNOWN.
@@ -340,8 +348,19 @@ if (typeof browser !== "undefined" && typeof captureLink === "function") {
   var captureQueue = makeCaptureQueue({
     // The agent browser first for a public link, else a tab in the queue's window (background.js).
     capture: (url, windowId) => captureLink(url, "", windowId),
-    // A thin capture (links.js capThin) is read again.
-    isCaptured: async url => (await getCaptures()).some(c => keyOf(c.url) === keyOf(url) && !capThin(c)),
+    // A thin capture (links.js capThin) is read again; a video not watched yet (capUnwatched) is watched.
+    isCaptured: async url => {
+      const c = (await getCaptures()).find(c => keyOf(c.url) === keyOf(url));
+      return !!c && !capThin(c) && !(capUnwatched(c) && await getWatchOnCapture());
+    },
+    // A video already read but not watched goes to the watcher (background.js watchStart); it comes back
+    // as its capture, or as a failure on the link.
+    watch: async url => {
+      const c = (await getCaptures()).find(c => keyOf(c.url) === keyOf(url));
+      if (!c || capThin(c) || !capUnwatched(c) || !(await getWatchOnCapture())) return null;
+      const res = await watchStart([url]).catch(e => ({ ok: false, error: String(e.message || e) }));
+      return res?.ok ? { ok: true } : { ok: false, error: `the watcher did not take it: ${res?.error || "the helper did not answer"}` };
+    },
     load: async () => (await browser.storage.session.get("captureQueue")).captureQueue || null,
     save: state => browser.storage.session.set({ captureQueue: state }),
     // Minimised from the start, so it never takes focus; its blank tab keeps it open between pages.

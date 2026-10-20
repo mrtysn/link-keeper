@@ -121,6 +121,8 @@ import json, shutil, sys
 a = sys.argv[1:]
 if "-J" in a:
     url = a[-1]
+    if "GONE999" in url:
+        sys.exit(print("ERROR: [Instagram] GONE999: this post is unavailable", file=sys.stderr) or 1)
     if "youtube" in url:
         print(json.dumps({{"title": "A YouTube talk", "description": "about the talk", "channel": "Some Channel", "uploader_id": "@somechannel"}}))
     elif "x.com" in url:
@@ -161,13 +163,25 @@ open(a[a.index("--output-dir") + 1] + "/" + a[a.index("--output-name") + 1] + ".
     queue.mkdir()
     (queue / "CCC333.url").write_text("https://www.instagram.com/reel/CCC333/")
     (queue / "nope.url").write_text("https://example.com/not-a-video")
+    (queue / "GONE999.url").write_text("https://www.instagram.com/reel/GONE999/")
     done = subprocess.run([str(tools / "watch-links.zsh"), "--queue", str(queue), "--out", str(out)],
                           env=dict(env, WATCH_NO_RESOURCES="1"), capture_output=True, text=True)
-    recs = [json.loads(l) for l in out.read_text().splitlines()] if out.exists() else []
+    lines = [json.loads(l) for l in out.read_text().splitlines()] if out.exists() else []
+    recs = [r for r in lines if "watch_error" not in r]
+    gone = [r for r in lines if "watch_error" in r]
     check("watch-links turns a queued reel into a record and empties the queue",
           done.returncode == 0 and not list(queue.iterdir()) and len(recs) == 1
           and recs[0]["url"].endswith("/reel/CCC333/") and recs[0]["via"] == "watch-reel"
           and "hello from the stub" in recs[0]["text"], done.stdout + done.stderr)
+    check("a video it could not download comes back as {url, watch_error} with yt-dlp's reason",
+          len(gone) == 1 and gone[0]["url"].endswith("/reel/GONE999/") and "this post is unavailable" in gone[0]["watch_error"],
+          json.dumps(gone) + done.stdout)
+    (queue / "GONE999.url").write_text("https://www.instagram.com/reel/GONE999/")
+    subprocess.run([str(tools / "watch-links.zsh"), "--queue", str(queue), "--out", str(out)],
+                   env=dict(env, WATCH_NO_RESOURCES="1"), capture_output=True, text=True)
+    again = [json.loads(l) for l in out.read_text().splitlines()][len(lines):]
+    check("one that failed before is said as failed again, with no new download",
+          len(again) == 1 and "failed before" in again[0].get("watch_error", ""), json.dumps(again))
     check("a link it cannot watch is said and dropped", "not a video link" in done.stdout, done.stdout)
 
     # YouTube: the captions are the transcript, whisper is not run, and the record is a YouTube video.
@@ -207,7 +221,7 @@ js = subprocess.run(["node", "-e", """
 const src = require("fs").readFileSync(process.argv[1], "utf8");
 const re = eval(src.match(/^const WATCHABLE = (\/.*\/);$/m)[1]);
 console.log(JSON.stringify(JSON.parse(process.argv[2]).map(u => re.test(u))));
-""", str(tools.parent / "extension" / "background.js"), json.dumps(urls)], capture_output=True, text=True)
+""", str(tools.parent / "extension" / "links.js"), json.dumps(urls)], capture_output=True, text=True)
 check("the tools' script and the helper name every pack the same", zsh_ids == [bridge.video_pack_id(u) for u in urls],
       f"{zsh_ids} vs {[bridge.video_pack_id(u) for u in urls]}")
 check("the extension watches exactly the links that get a pack", json.loads(js.stdout or "[]") == [i is not None for i in zsh_ids],

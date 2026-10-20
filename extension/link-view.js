@@ -71,12 +71,14 @@ const shortDay = iso => {
 };
 function readBadge(link) {
   const at = readAt(link);
+  if (link.cap?.unwatched && !link.fail) return el("span", { className: "lk-unread", textContent: "not watched yet", title: `Read${at ? ` ${whenOf(at)}` : ""}, but the video is not watched yet: Capture (3) watches it` });
   if (at) return el("span", { className: "lk-read", textContent: `captured ${shortDay(at)}`.trim(), title: `Captured ${whenOf(at)}: its text, images and links are saved` });
   if (link.fail && isWeb(link.url)) return el("span", { className: "lk-unread lk-failed", textContent: "capture failed", title: `${link.fail.error}${link.fail.at ? ` (${whenOf(link.fail.at)})` : ""}` });
   if (link.cap) return el("span", { className: "lk-read", textContent: "captured", title: "Its text, images and links are saved" });
   return isWeb(link.url) ? el("span", { className: "lk-unread", textContent: "not captured", title: "Press 3 to capture its text, images and links" }) : null;
 }
 function readMark(link) {
+  if (link.cap?.unwatched) return el("span", { className: "rd part", title: "Read, but the video is not watched yet" });
   const span = el("span", { className: `rd${link.cap ? " on" : ""}`, title: link.cap ? (readAt(link) ? `Captured ${dayOf(readAt(link))}` : "Captured") : "" });
   if (link.cap) span.setAttribute("aria-label", "captured");
   return span;
