@@ -81,6 +81,28 @@ def record(pack: Path) -> dict | None:
         if transcript:
             text = f"{caption}\n\n— transcript —\n{transcript}" if caption else transcript
 
+    # What the reel shows (OCR) and what it points to (extract-reel-resources.py): the list goes first,
+    # since it is what the owner sent the reel for; the on-screen text sits beside the transcript.
+    shown = (pack / "onscreen.txt").read_text(encoding="utf-8").strip() if (pack / "onscreen.txt").is_file() else ""
+    if shown:
+        text = f"{text}\n\n— on screen —\n{shown}" if text else f"— on screen —\n{shown}"
+    links = []
+    try:
+        res = json.loads((pack / "resources.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        res = None
+    if res:
+        rows = [f"- {r['name']} ({r['kind']}, {r['where']})" + (f" {r['url']}" if r.get("url") else "")
+                for r in res.get("resources") or []]
+        head = "\n".join([f"— about — {res.get('about', '')}".rstrip(), *rows])
+        text = f"{head}\n\n{text}" if text else head
+        for r in res.get("resources") or []:
+            u = (r.get("url") or "").strip()
+            if u and not u.startswith(("http://", "https://")):
+                u = "https://" + u
+            if u and u not in links:
+                links.append(u)
+
     upload_date = info.get("upload_date")  # YYYYMMDD
     posted = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}" if upload_date else None
 
@@ -99,6 +121,7 @@ def record(pack: Path) -> dict | None:
         "saved_at": None,
         "posted_at": posted,
         "duration_s": meta.get("duration_s"),
+        "links": links,
         "images": [],
         "captured_at": meta.get("fetched_at") or datetime.now(timezone.utc).isoformat(),
         "via": "watch-reel",

@@ -118,12 +118,61 @@ build_sheets() {
   done
 }
 
-# Returns 0 built, 1 failed, 2 skipped (summary.md already there and no --force).
+# The OCR binary, compiled from tools/read-frame-text.swift into $DATA_DIR/bin on first use and again
+# whenever the source is newer. Prints its path.
+frame_reader() {
+  local src=$here/read-frame-text.swift bin=$DATA_DIR/bin/read-frame-text
+  if [[ ! -x $bin || $src -nt $bin ]]; then
+    command -v swiftc >/dev/null || { print -u2 "missing: swiftc (xcode-select --install)"; return 1 }
+    mkdir -p "$DATA_DIR/bin"
+    swiftc -O "$src" -o "$bin" >&2 || return 1
+  fi
+  print -r -- "$bin"
+}
+
+# onscreen.txt: the text the reel shows, read by OCR from the distinct frames (the contact-sheet tiles,
+# so build_sheets runs first) and the image slides. Each line once, at its first appearance:
+# "[12s] text", "[slide 2, 4s] text", "[slide 3] text". Catches what is shown but never said.
+ocr_pack() {
+  local p=$1 s f pre t bin
+  local -a imgs
+  for s in $sheet_specs; do
+    f=${s%%|*} pre=${${s%%|*}%%sheet*}
+    for t in ${=s#*|}; do imgs+=$p/frames/${pre}f${(l:4::0:)$(( t + 1 ))}.jpg; done
+  done
+  imgs+=($p/slides/*.(jpg|webp)(N))
+  bin=$(frame_reader) || return 1
+  "$bin" $imgs | python3 -c '
+import json, re, sys
+seen, out = set(), []
+for line in sys.stdin:
+    r = json.loads(line)
+    name = r["file"].rsplit("/", 1)[-1]
+    m = re.match(r"(?:s(\d+)-)?f(\d+)\.jpg$", name)
+    if m:
+        sec = int(m.group(2)) - 1
+        at = f"slide {int(m.group(1))}, {sec}s" if m.group(1) else f"{sec}s"
+    else:
+        at = f"slide {int(name.split(".")[0])}"
+    for text in r.get("lines", []):
+        key = re.sub(r"\W+", "", text.lower())
+        if len(key) < 3 or key in seen:
+            continue
+        seen.add(key)
+        out.append((key, f"[{at}] {text}"))
+# A logo or caption read half-hidden ("MSUNG" beside "SAMSUNG") is noise: drop a line that is part of
+# a longer one.
+out = [l for k, l in out if not any(k != o and k in o for o in seen)]
+open(sys.argv[1], "w", encoding="utf-8").write("\n".join(out) + ("\n" if out else ""))
+' "$p/onscreen.txt"
+}
+
+# Returns 0 built, 1 failed, 2 skipped (summary.md and onscreen.txt already there and no --force).
 summarize_pack() {
   local p=${1:A} f pre   # absolute, so the rm -f below can never resolve against another cwd
   local -a prefixes
   [[ -s $p/meta.json ]] || { print "  ? ${p:t}: no meta.json — not a finished pack"; return 1 }
-  [[ -s $p/summary.md && $force == 0 ]] && return 2
+  [[ -s $p/summary.md && -e $p/onscreen.txt && $force == 0 ]] && return 2
   sheet_specs=()
   prefixes=()
   for f in $p/frames/*f[0-9]*.jpg(N); do pre=${f:t}; prefixes+="x${pre%%f[0-9]*}"; done
@@ -132,6 +181,7 @@ summarize_pack() {
     rm -f "$p/${pre}sheet.jpg" "$p/${pre}sheet-2.jpg"
     build_sheets "$p" "$pre" || return 1
   done
+  ocr_pack "$p" || return 1
   python3 - "$p" "${sheet_specs[@]}" <<'PY' || return 1
 import json, os, re, sys
 pack, specs = sys.argv[1], sys.argv[2:]
@@ -180,6 +230,17 @@ else:
     if slides:
         out.append(f"The content is the {len(slides)} image slides in slides/ ({slides[0]} …); read those.")
     out.append("")
+try:
+    shown = open(f"{pack}/onscreen.txt", encoding="utf-8").read().split("\n")
+except OSError:
+    shown = []
+shown = [l for l in shown if l]
+out += ["## On screen (OCR of the distinct frames)", ""]
+if shown:
+    out += shown[:60] + ([f"… {len(shown) - 60} more lines in onscreen.txt"] if len(shown) > 60 else [])
+else:
+    out.append("(no text on screen)")
+out.append("")
 out += [f"## Transcript ({head})", "", body, ""]
 tmp = f"{pack}/summary.md.tmp"
 open(tmp, "w", encoding="utf-8").write("\n".join(out))

@@ -312,6 +312,11 @@ elif (( reels_unwatched )); then
     | grep -E "^packs:|!|^missing:" || reel_rc=$?
   (( reel_rc )) && print "  ! reel downloads did not finish ($reels_unwatched were waiting); see the lines above"
 fi
+# What each pack points to (Claude Haiku over caption, transcript and on-screen text): spends tokens, so
+# full runs only; a pack whose input has not changed is not asked again.
+if [[ -d $reels_dir ]] && (( ! offline )); then
+  "$repo/tools/extract-reel-resources.py" --reels-dir "$reels_dir" 2>&1 | grep -E "^resources:|!" || true
+fi
 if [[ -d $reels_dir ]]; then
   "$repo/tools/reels-to-captures.py" "$reels_dir" -o "$reels_jsonl"
 else
