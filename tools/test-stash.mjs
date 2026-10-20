@@ -861,6 +861,29 @@ await check("a reel's watch-pack record replaces its caption-only read, and a ne
   assert.match((await cap(url)).text, /^— about —/, "any other record still never overwrites text");
 });
 
+await check("a page capture of a reel asks the helper to watch it; an imported reel, another page, or the setting off does not", async () => {
+  const { browser } = makeBrowser([]);
+  const changed = [];
+  browser.storage.onChanged = { addListener: fn => changed.push(fn), removeListener() {} };
+  const bg = await load(browser);
+  const asked = [];
+  bg.hostCall = async (op, fields) => { if (op === "watch-start") asked.push(...fields.urls); return { ok: true, added: 1, queued: 1 }; };
+  const fire = async (oldValue, newValue) => { for (const fn of changed) await fn({ captures: { oldValue, newValue } }, "local"); };
+  const reel = { url: "https://www.instagram.com/reel/AAA111/", via: "list", captured_at: "1" };
+  await fire([], [reel, { url: "https://example.com/", via: "list", captured_at: "1" },
+    { url: "https://www.instagram.com/reel/BBB222/", via: "instagram-export", captured_at: "1" },
+    { url: "https://www.instagram.com/reel/CCC333/", captured_at: "1" }]);
+  assert.deepEqual(asked, [reel.url, "https://www.instagram.com/reel/CCC333/"], "the Links and popup captures of reels, nothing else");
+  await fire([reel], [reel]);
+  assert.equal(asked.length, 2, "an unchanged record is not asked again");
+  await fire([reel], [{ ...reel, captured_at: "2" }]);
+  assert.equal(asked.length, 3, "capturing it again asks again");
+  await browser.handle({ type: "watch-settings", onCapture: false });
+  await fire([], [{ ...reel, captured_at: "3" }]);
+  assert.equal(asked.length, 3, "with the setting off, nothing is asked");
+  assert.equal(plain(await browser.handle({ type: "watch-settings" })).onCapture, false, "and the setting reads back");
+});
+
 await check("a chat grab: one record per link with every sender and the first sending, merged into what is held", async () => {
   const { browser, store } = makeBrowser([]);
   const bg = await load(browser);

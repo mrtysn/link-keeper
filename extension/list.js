@@ -1810,6 +1810,7 @@ function renderSettings() {
   const nf = data.filteredLinks.length;
   $("filter-count").textContent = nf ? `${plural(nf, "link")} match the rules now.` : "no link matches the rules now.";
   for (const r of document.querySelectorAll('input[name="after-stash"]')) r.checked = r.value === settings.afterStash;
+  showWatchSettings();
   const list = $("exclude-list");
   list.textContent = "";
   if (!settings.exclude.length) list.append(el("li", { className: "none", textContent: "None yet. Right-click a page → Stash → Never stash this site." }));
@@ -1914,6 +1915,19 @@ $("backup-restore").onclick = async () => {
 };
 
 for (const r of document.querySelectorAll('input[name="after-stash"]')) r.onchange = () => act({ type: "set-stash-settings", afterStash: r.value });
+
+/* Videos: the watch-on-capture switch, and what the helper is watching now. */
+async function showWatchSettings() {
+  const s = await send({ type: "watch-settings" });
+  if (s?.ok) $("watch-on-capture").checked = s.onCapture;
+  const st = await send({ type: "watch-status" });
+  $("watch-status").textContent = !st?.ok ? `Watching is not available: ${st?.error || "the helper did not answer"}.`
+    : st.running || st.queued ? `Watching now; ${plural(st.queued, "video")} waiting.` : "Nothing waiting to be watched.";
+}
+$("watch-on-capture").onchange = async e => {
+  await send({ type: "watch-settings", onCapture: e.target.checked });
+  say(e.target.checked ? "Videos are watched when captured" : "Videos are no longer watched when captured");
+};
 $("exclude-form").onsubmit = e => {
   e.preventDefault();
   let host = $("exclude-host").value.trim().toLowerCase();
@@ -2444,7 +2458,7 @@ async function watchRefresh() {
 }
 $("refresh-go").onclick = async () => {
   $("refresh-go").disabled = true;
-  const res = await send({ type: "refresh-start", offline: $("refresh-offline").checked });
+  const res = await send({ type: "refresh-start", offline: $("refresh-offline").checked, watch: $("refresh-watch").checked });
   if (!res?.ok) { $("refresh-go").disabled = false; $("refresh-msg").textContent = res?.error || "The refresh did not start."; return; }
   $("refresh-msg").textContent = "Refreshing…";
   refreshTimer = setTimeout(watchRefresh, 800);

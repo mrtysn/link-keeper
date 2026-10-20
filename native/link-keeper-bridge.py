@@ -306,7 +306,12 @@ def refresh_running() -> dict | None:
         return None
 
 
-def refresh_start(offline: bool) -> dict:
+# ~/.local/bin holds uv's tools and the claude CLI: watch-reel.zsh needs mlx_whisper from there, and the
+# resource lists need claude.
+TOOL_PATH = f"{Path.home()}/.asdf/shims:{Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
+
+def refresh_start(offline: bool, watch: bool = True) -> dict:
     global _refresh_proc
     if refresh_running():
         return {"ok": False, "error": "a refresh is already running"}
@@ -315,11 +320,10 @@ def refresh_start(offline: bool) -> dict:
         return {"ok": False, "error": f"no refresh script at {script}"}
     REFRESH_LOG.parent.mkdir(parents=True, exist_ok=True)
     started = dt.datetime.now().isoformat(timespec="seconds")
-    flags = "--no-open" + (" --offline" if offline else "")
+    flags = "--no-open" + (" --offline" if offline else "") + ("" if watch else " --no-watch")
     with REFRESH_LOG.open("a") as log:
         log.write(f"--- refresh {started}{' (offline)' if offline else ''}\n")
-    # ~/.local/bin holds uv's tools: watch-reel.zsh needs mlx_whisper from there.
-    env = dict(os.environ, PATH=f"{Path.home()}/.asdf/shims:{Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")
+    env = dict(os.environ, PATH=TOOL_PATH)
     proc = subprocess.Popen(
         ["/bin/zsh", "-c", f'"$0" {flags}; print -- "--- exit $?"', str(script)],
         stdin=subprocess.DEVNULL, stdout=REFRESH_LOG.open("a"), stderr=subprocess.STDOUT,
@@ -343,6 +347,80 @@ def refresh_status() -> dict:
             "lines": lines[-40:], "exit": int(code) if code and code.isdigit() else None}
 
 
+# --- watch -----------------------------------------------------------------------------------------
+# Watching a video: tools/watch-links.zsh, one worker at a time, run detached like the refresh. watch-start
+# drops one file per link into the queue folder and starts the worker when none runs; the worker builds
+# each pack, its resource list and its capture record, appended to records.jsonl. watch-status hands the
+# records past the page's cursor back to the extension, which imports them.
+WATCH_LOG = Path.home() / "Library/Logs/link-watch.log"
+WATCHABLE = re.compile(r"^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+)")
+
+
+def watch_dir() -> Path:
+    return state_dir() / "watch"
+
+
+_watch_proc = None
+
+
+def watch_running() -> bool:
+    try:
+        pid = int(json.loads((watch_dir() / "worker.json").read_text())["pid"])
+        if _watch_proc is not None and _watch_proc.pid == pid:
+            return _watch_proc.poll() is None
+        os.kill(pid, 0)
+        return True
+    except (OSError, ValueError, KeyError):
+        return False
+
+
+def watch_start(urls: list) -> dict:
+    global _watch_proc
+    queue = watch_dir() / "queue"
+    queue.mkdir(parents=True, exist_ok=True)
+    added = 0
+    for url in urls if isinstance(urls, list) else []:
+        m = WATCHABLE.match(str(url))
+        if not m:
+            continue
+        job = queue / f"{m.group(3)}.url"
+        if not job.exists():
+            job.write_text(str(url).split("#")[0])
+            added += 1
+    # No links (or none new) still starts a worker for what waits: a queue left by a helper that quit.
+    if not watch_running() and any(queue.glob("*.url")):
+        script = REPO / "tools" / "watch-links.zsh"
+        if not script.exists():
+            return {"ok": False, "error": f"no watch script at {script}"}
+        WATCH_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with WATCH_LOG.open("a") as log:
+            log.write(f"--- watch {dt.datetime.now().isoformat(timespec='seconds')}\n")
+        _watch_proc = subprocess.Popen(
+            ["/bin/zsh", str(script), "--queue", str(queue), "--out", str(watch_dir() / "records.jsonl")],
+            stdin=subprocess.DEVNULL, stdout=WATCH_LOG.open("a"), stderr=subprocess.STDOUT,
+            cwd=str(REPO), env=dict(os.environ, PATH=TOOL_PATH), start_new_session=True)
+        (watch_dir() / "worker.json").write_text(json.dumps({"pid": _watch_proc.pid}))
+    return {"ok": True, "added": added, "queued": len(list(queue.glob("*.url"))), "running": watch_running()}
+
+
+def watch_status(after: int) -> dict:
+    """Whether the worker runs, how many links wait, and the records written after line `after`."""
+    queue = watch_dir() / "queue"
+    try:
+        lines = (watch_dir() / "records.jsonl").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    after = after if 0 <= after <= len(lines) else 0   # a cursor past the end: the file was started again
+    records = []
+    for line in lines[after:]:
+        try:
+            records.append(json.loads(line))
+        except ValueError:
+            pass
+    return {"ok": True, "running": watch_running(), "queued": len(list(queue.glob("*.url"))) if queue.is_dir() else 0,
+            "records": records, "next": len(lines)}
+
+
 HOST_OPS = {
     "backup": lambda m: write_backup(m.get("data") or {}, m.get("reason") or "change"),
     "list-backups": lambda m: list_backups(),
@@ -351,8 +429,10 @@ HOST_OPS = {
     "journal-last": lambda m: journal_last(),
     "journal-list": lambda m: journal_list(),
     "journal-drop": lambda m: journal_drop(m.get("entry_id") or ""),
-    "refresh-start": lambda m: refresh_start(bool(m.get("offline"))),
+    "refresh-start": lambda m: refresh_start(bool(m.get("offline")), m.get("watch") is not False),
     "refresh-status": lambda m: refresh_status(),
+    "watch-start": lambda m: watch_start(m.get("urls") or []),
+    "watch-status": lambda m: watch_status(int(m.get("after") or 0)),
 }
 
 

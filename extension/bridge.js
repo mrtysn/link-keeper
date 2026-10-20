@@ -74,6 +74,7 @@ async function bridgeReceive(m) {
       bridge.retry = 30e3;
       await restoreIfEmpty().catch(e => console.error("restore:", e));
       backupSoon(5e3);
+      watchPoll(10e3);   // records a worker finished while the add-on was away
       return;
     case "host-reply": {
       const call = bridge.calls.get(m.id);

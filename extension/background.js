@@ -1295,6 +1295,52 @@ browser.bookmarks?.onCreated?.addListener(filterSoon);
 browser.storage.onChanged.addListener((changes, area) => { if (area === "local" && (changes.items || changes.captures)) filterSoon(); });
 browser.runtime.onInstalled.addListener(() => applyFilterRules().catch(() => {}));
 
+/* --- watching videos ------------------------------------------------------------------------------ */
+
+/* Watching a video — download, transcript, on-screen text, the list of what it points to — runs on this
+ * Mac through the helper (tools/watch-links.zsh). It is asked for three ways: a page capture of a reel
+ * when "Watch videos when captured" is on (watchOnCapture, on unless switched off), the Watch item on
+ * a link, and Import. The finished records come back through watch-status and are imported like any
+ * other: a watch-reel record replaces the caption-only read of the same reel. watchCursor is how far
+ * into the helper's records file this profile has read. */
+const WATCHABLE = /^https?:\/\/(www\.)?instagram\.com\/(reel|reels|p|tv)\/[A-Za-z0-9_-]+/;
+const getWatchOnCapture = async () => (await read("watchOnCapture", true)) !== false;
+
+async function watchStart(urls) {
+  const res = await hostCall("watch-start", { urls: urls.filter(u => WATCHABLE.test(u)) });
+  if (res?.ok) watchPoll(5e3);
+  return res;
+}
+
+let watchTimer = null;
+function watchPoll(ms) {
+  clearTimeout(watchTimer);
+  watchTimer = setTimeout(() => watchCollect().catch(e => console.error("watch:", e)), ms);
+}
+
+/* Take the records finished since the cursor; keep polling while the worker runs or links wait. */
+async function watchCollect() {
+  const after = await read("watchCursor", 0);
+  const st = await hostCall("watch-status", { after });
+  if (!st?.ok || !Array.isArray(st.records)) return { ok: false, error: st?.error || "the helper does not watch videos yet; update it" };
+  if (st.records.length) await handleMessage({ type: "import-captures", records: st.records });
+  await browser.storage.local.set({ watchCursor: st.next });
+  if (st.running || st.queued) watchPoll(15e3);
+  return { ok: true, running: st.running, queued: st.queued, imported: st.records.length };
+}
+
+/* A reel read by a page capture is queued once, when its record first appears or is read again. Only a
+ * page capture: its record has via "list" (Links, the queue) or none (the popup). An imported record
+ * names its source, and Import watches its own reels when asked to. */
+browser.storage.onChanged.addListener(async (changes, area) => {
+  if (area !== "local" || !changes.captures?.newValue) return;
+  const before = new Map((changes.captures.oldValue || []).map(r => [keyOf(r.url), r.captured_at]));
+  const fresh = changes.captures.newValue.filter(r => (!r.via || r.via === "list") && WATCHABLE.test(r.url || "")
+    && before.get(keyOf(r.url)) !== r.captured_at);
+  if (!fresh.length || !(await getWatchOnCapture())) return;
+  watchStart(fresh.map(r => r.url)).catch(() => {});
+});
+
 /* What the popup knows about the page you are on: the link as the pages see it (its tags, its
  * capture, its reading-list entry), each stash holding a copy, whole, so the popup can remove one
  * copy and put it back, and how many links carry each tag. link is null when the URL is held nowhere. */
@@ -2552,9 +2598,18 @@ async function handleMessage(msg) {
 
     // Links' "Refresh from exports": tools/refresh.zsh, started and watched by the helper on this Mac.
     case "refresh-start":
-      return hostCall("refresh-start", { offline: !!msg.offline }).catch(e => ({ ok: false, error: String(e.message || e) }));
+      return hostCall("refresh-start", { offline: !!msg.offline, watch: msg.watch !== false }).catch(e => ({ ok: false, error: String(e.message || e) }));
     case "refresh-status":
       return hostCall("refresh-status").catch(e => ({ ok: false, error: String(e.message || e) }));
+
+    // Watching a video: the Watch item, the setting, and the Settings line saying what is under way.
+    case "watch-start":
+      return watchStart((msg.urls || []).map(String)).catch(e => ({ ok: false, error: String(e.message || e) }));
+    case "watch-status":
+      return watchCollect().catch(e => ({ ok: false, error: String(e.message || e) }));
+    case "watch-settings":
+      if (typeof msg.onCapture === "boolean") await browser.storage.local.set({ watchOnCapture: msg.onCapture });
+      return { ok: true, onCapture: await getWatchOnCapture() };
 
     case "preview-counts":
       return previewCounts();

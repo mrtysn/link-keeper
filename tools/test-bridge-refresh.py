@@ -62,6 +62,38 @@ with tempfile.TemporaryDirectory() as tmp:
     st = bridge.refresh_status()
     check("a later run shows only its own lines", st["lines"][0].startswith("--- refresh ") and not st["lines"][0].endswith("(offline)")
           and sum(l.startswith("--- refresh ") for l in st["lines"]) == 1, str(st["lines"]))
+    for _ in range(40):
+        if not bridge.refresh_status()["running"]:
+            break
+        time.sleep(0.25)
+    bridge.refresh_start(offline=False, watch=False)
+    time.sleep(0.4)
+    check("an Import without watching passes --no-watch", "flags: --no-open --no-watch" in bridge.refresh_status()["lines"],
+          str(bridge.refresh_status()["lines"]))
+
+    # The watch worker: a stand-in that turns each queued link into a record, then exits.
+    worker = fake / "tools" / "watch-links.zsh"
+    worker.write_text('#!/bin/zsh\nq=$2 out=$4\nsleep 0.5\nfor f in $q/*.url(N.Om); do\n'
+                      '  print -r -- "{\\"url\\": \\"$(<$f)\\", \\"via\\": \\"watch-reel\\"}" >> $out\n  rm -f $f\ndone\n')
+    worker.chmod(0o755)
+    bridge.WATCH_LOG = tmp / "Library/Logs/link-watch.log"
+    st = bridge.watch_status(0)
+    check("nothing watched yet: no worker, no queue, no records", st == {"ok": True, "running": False, "queued": 0, "records": [], "next": 0}, str(st))
+    res = bridge.watch_start(["https://www.instagram.com/reel/AAA111/?igsh=x", "https://example.com/page",
+                              "https://www.instagram.com/p/BBB222/"])
+    check("watch-start queues the instagram links only and starts the worker",
+          res["ok"] and res["added"] == 2 and res["running"], str(res))
+    again = bridge.watch_start(["https://www.instagram.com/reel/AAA111/"])
+    check("a link already queued is not queued twice", again["added"] == 0, str(again))
+    for _ in range(40):
+        if not bridge.watch_status(0)["running"]:
+            break
+        time.sleep(0.25)
+    st = bridge.watch_status(0)
+    check("the worker's records come back, and the queue is empty",
+          not st["running"] and st["queued"] == 0 and len(st["records"]) == 2 and st["next"] == 2, str(st))
+    check("a cursor returns only the records after it", bridge.watch_status(1)["records"] == st["records"][1:])
+    check("a cursor past the end starts from the top", len(bridge.watch_status(9)["records"]) == 2)
 
 if failed:
     sys.exit("\nsome checks failed")

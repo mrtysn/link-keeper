@@ -16,6 +16,7 @@ Usage:
     ./reels-to-captures.py                      # packs from REELS_DIR / $DATA_DIR/reels / <repo>/data/reels
     ./reels-to-captures.py <reels-dir>          # explicit pack directory
     ./reels-to-captures.py <reels-dir> -o f.jsonl
+    ./reels-to-captures.py --pack CODE          # one pack's record (tools/watch-links.zsh)
 """
 
 from __future__ import annotations
@@ -134,6 +135,8 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Convert watch-reel packs to capture JSONL.")
     p.add_argument("reels_dir", nargs="?", type=Path, default=None)
     p.add_argument("-o", "--output", type=Path, help="write here instead of stdout")
+    p.add_argument("--pack", action="append", default=[], metavar="CODE",
+                   help="only this pack (repeatable); exits 1 when none of them gave a record")
     args = p.parse_args()
 
     reels_dir = args.reels_dir or default_reels_dir()
@@ -143,7 +146,8 @@ def main() -> int:
 
     out = open(args.output, "w", encoding="utf-8") if args.output else sys.stdout
     n = 0
-    for pack in sorted(reels_dir.iterdir()):
+    packs = [reels_dir / c for c in args.pack] if args.pack else sorted(reels_dir.iterdir())
+    for pack in packs:
         if not pack.is_dir():
             continue
         rec = record(pack)
@@ -153,7 +157,7 @@ def main() -> int:
     if args.output:
         out.close()
     print(f"{n} packs → capture records", file=sys.stderr)
-    return 0
+    return 1 if args.pack and not n else 0
 
 
 if __name__ == "__main__":

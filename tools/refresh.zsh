@@ -14,6 +14,7 @@
 #   refresh.zsh --no-serve          # rebuild only, do not offer it to the extension
 #   refresh.zsh --no-open           # offer it, but do not open the browser yourself
 #   refresh.zsh --offline           # no internet: parse the Instagram dump, keep the last lookups, hand over
+#   refresh.zsh --no-watch          # everything but watching reels (download, transcript, resource list)
 #
 # --offline skips every step that reaches out — the phone-inbox mirror, the Saved Messages puller, the
 # x.com and web lookups, the reel downloads, the tag suggestions — and keeps the files the last full
@@ -45,11 +46,13 @@ fi
 serve=1
 open_page=1
 offline=0
+watch=1
 args=()
 for a in "$@"; do
   [[ $a == --no-serve ]] && { serve=0; continue }
   [[ $a == --no-open ]] && { open_page=0; continue }
   [[ $a == --offline ]] && { offline=1; continue }
+  [[ $a == --no-watch ]] && { watch=0; continue }
   args+=$a
 done
 
@@ -302,8 +305,8 @@ while IFS= read -r u; do
   code=$(print -r -- "$u" | sed -nE 's#.*instagram\.com/(reel|reels|p|tv)/([A-Za-z0-9_-]+).*#\2#p')
   [[ -n $code && ! -s $reels_dir/$code/meta.json && ! -s $reels_dir/$code/yt-dlp.err ]] && reels_unwatched=$(( reels_unwatched + 1 ))
 done <<< "$reel_urls"
-if (( reels_unwatched )) && (( offline )); then
-  print "  skipped (--offline): $reels_unwatched reels have no pack yet; a run without --offline downloads them"
+if (( reels_unwatched )) && (( offline || ! watch )); then
+  print "  skipped (${${offline:#0}:+--offline}${${watch:#1}:+--no-watch}): $reels_unwatched reels have no pack yet; a run that watches downloads them"
 elif (( reels_unwatched )); then
   # watch-reel's own errors (a missing tool, a failed contact sheet) pass through: filtering them out
   # once hid that the Import button's PATH had no mlx_whisper, so no reel was ever transcribed from it.
@@ -314,7 +317,7 @@ elif (( reels_unwatched )); then
 fi
 # What each pack points to (Claude Haiku over caption, transcript and on-screen text): spends tokens, so
 # full runs only; a pack whose input has not changed is not asked again.
-if [[ -d $reels_dir ]] && (( ! offline )); then
+if [[ -d $reels_dir ]] && (( ! offline && watch )); then
   "$repo/tools/extract-reel-resources.py" --reels-dir "$reels_dir" 2>&1 | grep -E "^resources:|!" || true
 fi
 if [[ -d $reels_dir ]]; then

@@ -240,12 +240,23 @@ const LinkActions = (() => {
     const more = [
       compact && { text: `Open  ${LinkKeys.showOf("open")}`, run: () => run("open", t) },
       canMove(t) && { text: `Move…  ${LinkKeys.showOf("move")}`, title: "Move it to another stash", run: () => moveMenu(t, out.querySelector(".more") || out) },
+      WATCHABLE_VIDEO.test(link.url) && { text: "Watch", title: "Download the video on this Mac and add what it says, shows and points to, to its capture", run: () => watch(t) },
     ].filter(Boolean);
     const removals = menuItems(t, extra, true);
     const items = [...more, ...(more.length && removals.length ? ["-"] : []), ...removals];
     const out = el("div", { className: `lk-bar${compact ? " compact" : ""}` }, ...[compact ? null : open, tagsB, capture, remove].filter(Boolean));
     if (items.length) out.append(...popoverMenu("⋯", `More for ${labelOf(link) || shortUrl(link.url)}`, items));
     return out;
+  }
+
+  /* Watch: the helper downloads the video and builds its pack; the record comes back into the capture
+   * by itself, a minute or so later (background.js, watchCollect). Instagram reels and posts for now. */
+  const WATCHABLE_VIDEO = /^https?:\/\/(www\.)?instagram\.com\/(reel|reels|p|tv)\/[A-Za-z0-9_-]+/;
+  async function watch(t) {
+    const res = await send({ type: "watch-start", urls: [t.link.url] });
+    page.say(!res?.ok ? res?.error || "Unable to watch it"
+      : res.added ? `Watching it on this Mac${res.queued > 1 ? `, after ${plural(res.queued - 1, "other")}` : ""}; its capture updates when done`
+      : "It is already waiting to be watched");
   }
 
   /* The removals, one per place the link is held, then the page's own items. In the full bar the

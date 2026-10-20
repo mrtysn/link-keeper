@@ -143,5 +143,19 @@ open(a[a.index("--output-dir") + 1] + "/" + a[a.index("--output-name") + 1] + ".
                            capture_output=True, text=True)
     check("a finished pack is skipped on the next run", "0 built, 1 already had one" in again.stdout, again.stdout)
 
+    # The helper's worker: a queued link becomes a pack and a record, and leaves the queue.
+    queue, out = tmp / "queue", tmp / "records.jsonl"
+    queue.mkdir()
+    (queue / "CCC333.url").write_text("https://www.instagram.com/reel/CCC333/")
+    (queue / "nope.url").write_text("https://example.com/not-a-video")
+    done = subprocess.run([str(tools / "watch-links.zsh"), "--queue", str(queue), "--out", str(out)],
+                          env=dict(env, WATCH_NO_RESOURCES="1"), capture_output=True, text=True)
+    recs = [json.loads(l) for l in out.read_text().splitlines()] if out.exists() else []
+    check("watch-links turns a queued reel into a record and empties the queue",
+          done.returncode == 0 and not list(queue.iterdir()) and len(recs) == 1
+          and recs[0]["url"].endswith("/reel/CCC333/") and recs[0]["via"] == "watch-reel"
+          and "hello from the stub" in recs[0]["text"], done.stdout + done.stderr)
+    check("a link it cannot watch is said and dropped", "not a video link" in done.stdout, done.stdout)
+
 print("all passed" if not failed else "FAILED")
 sys.exit(1 if failed else 0)
