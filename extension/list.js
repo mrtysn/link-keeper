@@ -1821,6 +1821,7 @@ function renderSettings() {
   $("filter-count").textContent = nf ? `${plural(nf, "link")} match the rules now.` : "no link matches the rules now.";
   for (const r of document.querySelectorAll('input[name="after-stash"]')) r.checked = r.value === settings.afterStash;
   showWatchSettings();
+  showAgentSettings();
   const list = $("exclude-list");
   list.textContent = "";
   if (!settings.exclude.length) list.append(el("li", { className: "none", textContent: "None yet. Right-click a page → Stash → Never stash this site." }));
@@ -1925,6 +1926,21 @@ $("backup-restore").onclick = async () => {
 };
 
 for (const r of document.querySelectorAll('input[name="after-stash"]')) r.onchange = () => act({ type: "set-stash-settings", afterStash: r.value });
+
+/* Captures: the agent-browser switch, and the sites that turned it away (read in Firefox since). */
+async function showAgentSettings(patch = {}) {
+  const s = await send({ type: "agent-settings", ...patch });
+  if (!s?.ok) return;
+  $("agent-browser").checked = s.on;
+  const walled = Object.keys(s.walled || {}).sort();
+  $("agent-status").textContent = walled.length ? `Read in Firefox, since they turned the agent browser away: ${walled.join(", ")}.` : "";
+  $("agent-forget").hidden = !walled.length;
+}
+$("agent-browser").onchange = async e => {
+  await showAgentSettings({ on: e.target.checked });
+  say(e.target.checked ? "Public links are read in the agent browser" : "Every link is read in Firefox");
+};
+$("agent-forget").onclick = () => showAgentSettings({ forgetWalls: true });
 
 /* Videos: the watch-on-capture switch, and what the helper is watching now. */
 async function showWatchSettings() {

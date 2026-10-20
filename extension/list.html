@@ -730,6 +730,13 @@
         <label><input type="radio" name="after-stash" value="stay"> <span>Stay where I am <span class="hint">(a new tab if the window would close)</span></span></label>
       </fieldset>
       <fieldset>
+        <legend>Captures</legend>
+        <label><input type="checkbox" id="agent-browser"> <span>Read public links in the agent browser</span></label>
+        <p class="hint">The agent browser (Obscura, on this Mac through the helper) reads a page with no logins, so capturing stops going through your accounts. Sites that need your login (X, Instagram, Google, YouTube, LinkedIn, Facebook, your own) and any site that turns the agent browser away are read in Firefox, as is a page it reads almost empty.</p>
+        <p class="hint" id="agent-status" role="status"></p>
+        <div class="row"><button type="button" class="small" id="agent-forget" hidden>Let the agent browser try them again</button></div>
+      </fieldset>
+      <fieldset>
         <legend>Videos</legend>
         <label><input type="checkbox" id="watch-on-capture"> <span>Watch videos when captured</span></label>
         <p class="hint">Watching a video downloads it on this Mac (no login), writes down what is said and what is shown on screen, and lists the tools, sites and links it points to, at the top of its capture. Instagram reels and posts for now. Any video link also has <b>Watch</b> under its ⋯, and Import watches the reels in your exports.</p>

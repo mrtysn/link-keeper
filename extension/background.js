@@ -514,6 +514,17 @@ async function captureUrl(url, note = "", windowId = undefined) {
   }
 }
 
+/* Why no add-on may read a tab, when the tab shows it, or null. Firefox's own page for a site that did
+ * not answer or a certificate it refused has no title of its own: the tab is titled with its address
+ * without the scheme ("127.0.0.1:9/", as Firefox 142 does). Its PDF viewer is titled with the file. */
+async function firefoxPageWhy(tabId) {
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  const title = tab?.title || "", url = tab?.url || "";
+  if (title && title === url.replace(/^[a-z]+:\/\//i, "")) return "the site did not answer (Firefox showed its error page): nothing is running there, it is offline or out of reach from here, or its certificate was refused";
+  if (/\.pdf($|[?#])/i.test(url) || /\.pdf$/i.test(title)) return "a PDF: Firefox lets no add-on read its PDF viewer";
+  return null;
+}
+
 async function captureIn(url, note, windowId, opened) {
   let tab;
   try {
@@ -522,21 +533,29 @@ async function captureIn(url, note, windowId, opened) {
     return { ok: false, error: `could not open it: ${e.message || e}` };
   }
   try {
+    // A page still loading after 25 s (one that keeps a request open, as Instagram does, or a slow image)
+    // is read anyway; it fails only if that read finds nothing.
     const loaded = await tabSettled(tab.id);
-    if (!loaded) return { ok: false, error: "the page never finished loading" };
 
     let record;
     try {
       record = await readTab(tab.id);
     } catch (e) {
-      // With every site granted, a refusal is Firefox's own: its PDF viewer, an error page, or a site it
-      // protects from every add-on (addons.mozilla.org).
+      if (!loaded) return { ok: false, error: "the page never finished loading" };
+      // With every site granted, a refusal is Firefox's own: its page for a site that did not answer, its
+      // PDF viewer, or a site it protects from every add-on (addons.mozilla.org).
       const why = String(e.message || e);
-      if (/host permission/i.test(why) && await hasSiteAccess()) return { ok: false, error: "Firefox lets no add-on read this page (a PDF, an error page, or a protected site)" };
+      if (/host permission/i.test(why)) {
+        const own = await firefoxPageWhy(tab.id);
+        if (own) return { ok: false, error: own };
+        if (await hasSiteAccess()) return { ok: false, error: "Firefox lets no add-on read this page (a protected site such as addons.mozilla.org)" };
+      }
       return { ok: false, error: /host permission/i.test(why) ? `no access to that site; grant it and retry (${why})` : why };
     }
+    if (record?.wall) return { ok: false, wall: record.wall.kind, error: record.wall.reason };
+    if (!loaded && (!record || capThin(record))) return { ok: false, error: "the page never finished loading" };
     if (!record) return { ok: false, error: "nothing extractable on that page" };
-    if (record.wall) return { ok: false, wall: record.wall.kind, error: record.wall.reason };
+    record.reader = READER;
 
     record.url = (record.url || record.canonical || url).split("#")[0];
     const visited = url.split("#")[0];
@@ -1347,6 +1366,52 @@ async function inboxPull(force = false) {
   return { ok: true, configured: true, added: added.added, skipped: added.skipped };
 }
 
+/* --- the agent browser ------------------------------------------------------------------------------ */
+
+/* A public link is read first in the agent browser (Obscura, through the helper's read-page: no logins, a
+ * fresh session, the same readers as a tab), so captures stop going through the owner's logged-in
+ * Firefox. A site that needs the owner's login stays in Firefox (AGENT_SKIP); so does any site that has
+ * walled the agent once (agentWalled), which is not asked by it again. A read the agent could not make,
+ * or made almost empty, falls back to a Firefox tab as before. agentBrowser in storage, on unless
+ * switched off in Settings. */
+const AGENT_SKIP = /(^|\.)(x\.com|twitter\.com|instagram\.com|facebook\.com|linkedin\.com|google\.[a-z.]+|youtube\.com|youtu\.be|mertyas\.in)$|^(localhost|127\.0\.0\.1|\[::1\])$/;
+const getAgentBrowser = async () => (await read("agentBrowser", true)) !== false;
+
+async function agentRead(url) {
+  let host;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return null; }
+  if (!/^https?:/.test(url) || AGENT_SKIP.test(host) || !(await getAgentBrowser())) return null;
+  const walled = await read("agentWalled", {});
+  if (walled[host]) return null;
+  const res = await hostCall("read-page", { url }).catch(() => null);
+  if (res?.wall) {
+    await browser.storage.local.set({ agentWalled: { ...walled, [host]: { at: new Date().toISOString(), why: res.wall.reason || res.wall.kind } } });
+    return null;
+  }
+  const record = res?.ok ? res.record : null;
+  if (!record || capThin(record) || (record.kind === "page" && (record.text || "").trim().length < 200)) return null;
+  return record;
+}
+
+/* A capture: the agent browser when it can, else a tab in Firefox (captureUrl). Stored as captureIn
+ * stores a tab's read, marked via "agent". */
+async function captureLink(url, note = "", windowId = undefined) {
+  const record = await agentRead(url);
+  if (!record) return captureUrl(url, note, windowId);
+  record.url = (record.url || record.canonical || url).split("#")[0];
+  const visited = url.split("#")[0];
+  record.source_url = visited !== record.url ? visited : null;
+  record.captured_at = new Date().toISOString();
+  record.via = "agent";
+  record.reader = READER;
+  if (note) record.note = note;
+  record.links = await resolveLinks(record.links);
+  await resolveReplyLinks(record);
+  await setCaptures(replaceCapture(await getCaptures(), record));
+  await clearCaptureFail(url);
+  return { ok: true, record };
+}
+
 /* A reel read by a page capture is queued once, when its record first appears or is read again. Only a
  * page capture: its record has via "list" (Links, the queue) or none (the popup). An imported record
  * names its source, and Import watches its own reels when asked to. */
@@ -1816,7 +1881,9 @@ function editCaptureFails(change) {
   }).catch(() => {});
   return failWrites;
 }
-const recordCaptureFail = (url, error, kind) => editCaptureFails(f => { f[keyOf(url)] = { error: String(error || "failed").slice(0, 300), kind, at: new Date().toISOString() }; });
+const recordCaptureFail = (url, error, kind, walled = false) => editCaptureFails(f => {
+  f[keyOf(url)] = { error: String(error || "failed").slice(0, 300), kind, at: new Date().toISOString(), reader: READER, ...(walled && { wall: true }) };
+});
 const clearCaptureFail = url => editCaptureFails(f => (keyOf(url) in f ? void delete f[keyOf(url)] : false));
 
 /* --- previews -------------------------------------------------------------------
@@ -2811,7 +2878,13 @@ async function handleMessage(msg) {
     }
 
     case "capture-url":
-      return captureUrl(msg.url, msg.note);
+      return captureLink(msg.url, msg.note);
+
+    // Settings → Captures: whether public links are read in the agent browser, and the sites that walled it.
+    case "agent-settings":
+      if (typeof msg.on === "boolean") await browser.storage.local.set({ agentBrowser: msg.on });
+      if (msg.forgetWalls) await browser.storage.local.set({ agentWalled: {} });
+      return { ok: true, on: await getAgentBrowser(), walled: await read("agentWalled", {}) };
 
     // The capture queue (capture-queue.js): Links starts it with the ticked links and drives it from its line.
     case "capture-queue-start":

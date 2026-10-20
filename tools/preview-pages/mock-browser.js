@@ -202,6 +202,9 @@
             return { ok: true, onCapture: store.watchOnCapture !== false };
           case "watch-status":
             return params.get("watch") === "running" ? { ok: true, running: true, queued: 2, imported: 0 } : { ok: true, running: false, queued: 0, imported: 0 };
+          case "agent-settings":
+            if (typeof msg.on === "boolean") store.agentBrowser = msg.on;
+            return { ok: true, on: store.agentBrowser !== false, walled: msg.forgetWalls ? {} : { "printables.com": { why: "captcha" } } };
           case "inbox-pull":
             return { ok: true, configured: true, added: 0 };
           case "watch-start":
@@ -251,7 +254,7 @@
             // ?fails: two links not captured carry a recorded failure, as the capture queue leaves them.
             const capKeys = new Set(captures.map(c => keyOf(c.url)));
             const fails = !params.has("fails") ? {} : Object.fromEntries(items.filter(i => /^https?:/.test(i.url) && !capKeys.has(keyOf(i.url))).slice(0, 2)
-              .map((i, n) => [keyOf(i.url), n ? { error: "www.example.com asked to log in", kind: "wall", at: "2026-10-20T01:30:00Z" } : { error: "kept, but the page showed almost no text", kind: "thin", at: "2026-10-20T01:31:00Z" }]));
+              .map((i, n) => [keyOf(i.url), n ? { error: "www.example.com asked to log in", kind: "wall", at: "2026-10-20T01:30:00Z" } : { error: "kept, but the page showed almost no text", kind: "thin", at: "2026-10-20T01:31:00Z", reader: 2 }]));
             return joinLinks({ items, captures, sessions, tags: mockTags, suggestions, agentTags, previews, fails,
               currentKey: M.dump.items.find(r => r.current) ? keyOf(M.dump.items.find(r => r.current).url) : null });
           }

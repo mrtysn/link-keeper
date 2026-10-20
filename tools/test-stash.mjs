@@ -899,6 +899,40 @@ await check("opening Links adds the phone inbox's new links as one group, at mos
   assert.deepEqual([forced.added, forced.skipped, calls], [0, 2, 2], "forced, it asks again, and links already held are skipped");
 });
 
+await check("a public link is read in the agent browser; login sites, walled sites, thin reads and the switch off go to Firefox", async () => {
+  const { browser } = makeBrowser([]);
+  const bg = await load(browser);
+  const asked = [], tabs = [];
+  const article = { kind: "page", title: "An article", text: "real text ".repeat(40), links: [] };
+  let answer = { ok: true, record: article };
+  bg.hostCall = async (op, f) => { if (op === "read-page") asked.push(f.url); return structuredClone(answer); };
+  bg.captureUrl = async url => { tabs.push(url); return { ok: true, record: { url } }; };
+  const cap = async url => plain(await browser.handle({ type: "capture-url", url }));
+
+  const r = await cap("https://blog.example/post");
+  assert.deepEqual([r.ok, r.record.via, asked.length, tabs.length], [true, "agent", 1, 0], "read by the agent, no tab");
+  const held = plain(await browser.handle({ type: "links" })).links.find(l => l.url === "https://blog.example/post");
+  assert.equal(held.cap.title, "An article", "and stored as a capture");
+
+  await cap("https://x.com/someone/status/1");
+  assert.deepEqual([asked.length, tabs.at(-1)], [1, "https://x.com/someone/status/1"], "a login site goes straight to Firefox");
+
+  answer = { ok: false, wall: { kind: "captcha", reason: "shop.example asked for a captcha" } };
+  await cap("https://shop.example/a");
+  assert.deepEqual([asked.length, tabs.at(-1)], [2, "https://shop.example/a"], "a wall falls back to Firefox");
+  await cap("https://shop.example/b");
+  assert.deepEqual([asked.length, tabs.at(-1)], [2, "https://shop.example/b"], "and that site is not asked of the agent again");
+  assert.ok(plain(await browser.handle({ type: "agent-settings" })).walled["shop.example"], "Settings lists it");
+
+  answer = { ok: true, record: { kind: "page", title: "App", text: "Loading", links: [] } };
+  await cap("https://app.example/");
+  assert.deepEqual([asked.length, tabs.at(-1)], [3, "https://app.example/"], "an almost empty read falls back to Firefox");
+
+  await browser.handle({ type: "agent-settings", on: false });
+  await cap("https://other.example/");
+  assert.deepEqual([asked.length, tabs.at(-1)], [3, "https://other.example/"], "with the switch off, everything is read in Firefox");
+});
+
 await check("a chat grab: one record per link with every sender and the first sending, merged into what is held", async () => {
   const { browser, store } = makeBrowser([]);
   const bg = await load(browser);

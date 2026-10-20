@@ -134,13 +134,13 @@ function makeCaptureQueue(fx) {
   }
 
   // Sets a site aside: its waiting links fail with the reason, and nothing more of it is loaded.
-  function stopSite(host, reason) {
+  function stopSite(host, reason, walled = false) {
     state.stoppedSites[host] = reason;
     const left = state.pending.filter(u => siteKey(u) === host);
     state.pending = state.pending.filter(u => siteKey(u) !== host);
     for (const url of left) {
       state.failed.push({ url, error: `not tried: ${reason}` });
-      fx.recordFail?.(url, `not tried: ${reason}`, "skipped");
+      fx.recordFail?.(url, `not tried: ${reason}`, "skipped", walled);
     }
     (state.perSite[host] ||= { captured: 0, failed: 0 }).failed += left.length;
   }
@@ -226,7 +226,7 @@ function makeCaptureQueue(fx) {
       fx.recordFail?.(url, res.error || "failed", res.wall ? "wall" : "error");
       tally.failed++;
       state.streaks[host] = (state.streaks[host] || 0) + 1;
-      if (res.wall) stopSite(host, res.error || `${host} put up a ${res.wall} page`);
+      if (res.wall) stopSite(host, res.error || `${host} put up a ${res.wall} page`, true);
       else if (state.streaks[host] >= SITE_STOP_AFTER) stopSite(host, `${host} failed ${SITE_STOP_AFTER} times in a row`);
     }
     pump();
@@ -336,9 +336,10 @@ function makeCaptureQueue(fx) {
   };
 }
 
-if (typeof browser !== "undefined" && typeof captureUrl === "function") {
+if (typeof browser !== "undefined" && typeof captureLink === "function") {
   var captureQueue = makeCaptureQueue({
-    capture: (url, windowId) => captureUrl(url, "", windowId),
+    // The agent browser first for a public link, else a tab in the queue's window (background.js).
+    capture: (url, windowId) => captureLink(url, "", windowId),
     // A thin capture (links.js capThin) is read again.
     isCaptured: async url => (await getCaptures()).some(c => keyOf(c.url) === keyOf(url) && !capThin(c)),
     load: async () => (await browser.storage.session.get("captureQueue")).captureQueue || null,
