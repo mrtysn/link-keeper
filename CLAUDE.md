@@ -2,6 +2,47 @@
 
 A Firefox extension (`extension/`) and the tools around it (`tools/`). The README describes both.
 
+## Layout: where each capability lives
+
+Search the whole repo before saying a capability is missing. `extension/` is only the display and
+capture side; fetching, transcribing and importing happen outside it. README.md's Layout table lists
+every script with its purpose; every script's second line is `# DESC:`.
+
+| Folder | Holds | Kind |
+|---|---|---|
+| `extension/` | the Firefox add-on: Links, popup, capture queue, stash, extractors | code |
+| `tools/` | `refresh.zsh` (the rebuild), `watch-reel.zsh`, `reels-to-captures.py`, `link-keeper.mjs` (agents' CLI), `release.zsh`, all tests and checkers | code |
+| `importers/` | export parsers and link enrichers: Telegram, Instagram, X archive, x.com and web lookups | code |
+| `native/` | helpers Firefox starts: the bridge (backups, shell socket, refresh) and the local-file opener | code |
+| `receiver/` | HTTP endpoint on an always-on box; the phone's shares land in its inbox | code |
+| `android/` | the share-sheet app that posts to the receiver | code |
+| `docs/` | handoffs, format notes, chat-page surveys | docs |
+| `assets/` | icon variants | data, committed |
+| `data/` | built-in default DATA_DIR: rebuilt JSONL, HTML views, reel packs | data, gitignored |
+| `TODO.md`, `config.local.sh(.example)` | open work; machine paths and settings (the `.example` is committed, the real file is not) | |
+
+Pipeline, in order:
+
+1. **In:** phone share sheet (`android/` to `receiver/` inbox), Telegram (export or `importers/telegram-pull.py`
+   for Saved Messages), Instagram "Download your information" export, X archive DMs, and the browser itself
+   (stash import, popup, chat grab in `extension/chat-grab.js`).
+2. **`tools/refresh.zsh`:** finds the newest exports; mirrors the phone inbox; runs the importers and the
+   x.com/web enrichers; merges `link-captures-extra.jsonl` (hand-recovered records, never overwritten);
+   downloads new Instagram reels into watch-packs; suggests tags; rebuilds the HTML views; then serves the
+   result on loopback. `--offline` skips everything that touches the network.
+3. **Watch-packs:** `tools/watch-reel.zsh` downloads a reel or carousel and builds a pack (video, whisper
+   transcript, keyframes, contact sheet, slides) under `REELS_DIR` (default `data/reels`). It is Instagram only.
+   `tools/reels-to-captures.py` folds the packs into capture records (`link-captures-reels.jsonl`).
+4. **Into the extension:** Links pulls the served JSONL and skips links it already holds. Links still
+   without a capture go through the extension's capture queue (`extension/capture-queue.js`), which reads
+   pages in a minimised Firefox window, paced per site, and stops a site at a wall.
+5. **Out:** `native/link-keeper-bridge.py` backs the add-on's storage up to disk; `tools/link-keeper.mjs`
+   reads and edits it for agents.
+
+Video and transcript work lives in `tools/watch-reel.zsh` and `tools/reels-to-captures.py` (Instagram
+only today). Grep `tools/` and `importers/` as well as `extension/` before telling the owner something
+does not exist.
+
 ## Releases: once per finished batch
 
 - **Commit and push every change** as it lands, as usual.
