@@ -7,7 +7,7 @@ already holds what was said (transcript.txt) and what was shown (onscreen.txt, O
 frames); this asks Haiku to turn the two into a short list, and reels-to-captures.py puts that list
 at the top of the reel's capture. Text only: no frame leaves the machine.
 
-Every call spends Claude tokens. A pack is skipped while its resources.json was written from the same
+Every call spends Claude tokens. A pack is skipped while its resources.json was written from the same instructions and
 input (a hash of caption, transcript and on-screen text), so a stopped run resumes and a rerun costs
 nothing.
 
@@ -36,9 +36,11 @@ MODEL = "haiku"
 PARALLEL_CALLS = 3
 MAX_CHARS = 6000   # per part: a long transcript or a screen-recorded README is cut here
 
-SYSTEM = """You read what a short video (an Instagram reel or post) says and shows, and list the \
-resources it points the viewer to: tools, apps, code repositories, websites, products, services, \
-courses, books, people or accounts to follow, places.
+SYSTEM = """You read what a short video (an Instagram reel or post) says and shows, and list what a \
+viewer would want to note down from it: tools, apps, code repositories, websites, products, services, \
+courses; titles (films, series, anime, books, games, songs) and their makers (author, studio, director); \
+people or accounts it features, credits or recommends; places. A product named as the one to replace \
+or compare against counts too.
 
 The input has the caption, the speech transcript (machine transcribed: names may be misheard) and the \
 on-screen text (OCR of the frames, "[12s] text": fragments and misreads are common).
@@ -48,7 +50,9 @@ shown) is the same resource: keep the on-screen spelling and drop the misheard o
 appear. Never guess one. Otherwise null.
 - where: "shown" if it appears in the on-screen text at all, else "said", else "caption".
 - Skip the reel's own author unless the reel recommends following them, and skip generic words \
-(AI, coding, the app store).
+(AI, coding, the app store), organisations only mentioned in passing, and the creator's own other \
+products flashed as an advert.
+- Every name in your "about" sentence that is one of the kinds above belongs in the list.
 - about: one plain sentence on what the video is about.
 An empty list is a correct answer for a video that points to nothing."""
 
@@ -63,7 +67,7 @@ SCHEMA = {
                 "properties": {
                     "name": {"type": "string"},
                     "kind": {"type": "string", "enum": ["tool", "repo", "site", "app", "product", "service",
-                                                       "course", "book", "media", "person", "place", "other"]},
+                                                       "course", "book", "title", "media", "person", "place", "other"]},
                     "url": {"type": ["string", "null"]},
                     "where": {"type": "string", "enum": ["shown", "said", "caption"]},
                 },
@@ -142,7 +146,8 @@ def pack_input(pack: Path) -> str | None:
 
 
 def digest(prompt: str) -> str:
-    return hashlib.sha256(prompt.encode()).hexdigest()[:16]
+    """The input and the instructions: a pack is asked again when either changes."""
+    return hashlib.sha256((SYSTEM + json.dumps(SCHEMA, sort_keys=True) + prompt).encode()).hexdigest()[:16]
 
 
 def needs_work(pack: Path, force: bool) -> str | None:
