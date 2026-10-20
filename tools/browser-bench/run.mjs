@@ -13,7 +13,8 @@
  * and a page that takes over TIMEOUT_MS counts as an error. The owner's rule on traffic applies: a site
  * that refuses is not asked again, and nothing here retries.
  *
- * Usage: run.mjs --browser NAME [--sample FILE] [--limit N] -- ADAPTER [ARGS...]
+ * Usage: run.mjs --browser NAME [--sample FILE] [--limit N] [--rotate K] -- ADAPTER [ARGS...]
+ *   --rotate K starts at the K-th link and wraps, so browsers run side by side never ask one site together
  *   writes $DATA_DIR/browser-bench/results-NAME.jsonl, one line per link, and prints a summary
  */
 
@@ -30,11 +31,13 @@ const adapter = dash < 0 ? [] : process.argv.slice(dash + 1);
 const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dflt; };
 const browser = opt("--browser");
 if (!browser || !adapter.length || args.includes("--help")) {
-  console.log("run.mjs --browser NAME [--sample FILE] [--limit N] -- ADAPTER [ARGS...]");
+  console.log("run.mjs --browser NAME [--sample FILE] [--limit N] [--rotate K] -- ADAPTER [ARGS...]");
   process.exit(browser && adapter.length ? 0 : 1);
 }
 const dir = join(process.env.DATA_DIR || join(repo, "data"), "browser-bench");
-const sample = readFileSync(opt("--sample", join(dir, "sample.jsonl")), "utf8").trim().split("\n").map(l => JSON.parse(l));
+const loaded = readFileSync(opt("--sample", join(dir, "sample.jsonl")), "utf8").trim().split("\n").map(l => JSON.parse(l));
+const rot = (+opt("--rotate", 0) || 0) % loaded.length;
+const sample = [...loaded.slice(rot), ...loaded.slice(0, rot)];
 const limit = +opt("--limit", 0) || sample.length;
 const out = join(dir, `results-${browser}.jsonl`);
 const THIN = 200, PACE_MS = 3000, TIMEOUT_MS = 60000;
