@@ -28,7 +28,8 @@ same files. Commit only these hunks (`git add -p`), never the other session's.
 `node tools/test-bridge.mjs` and `node tools/test-capture-queue.mjs` pass. `tools/test-extractors.zsh` is not
 confirmed: the machine's load average was 75 to 90 (other sessions' Godot jobs) and random checks timed out
 ("never finished loading", "stopped answering") even where nothing changed. The last clean run failed only the
-"does not answer" check, before the bare-address title fix.
+"does not answer" check, before the bare-address title fix. None of the fixes was tried against a real site
+(Instagram, a dead self-hosted service); only the fixtures. The owner's next capture run is the first real test.
 
 ## Next steps
 
