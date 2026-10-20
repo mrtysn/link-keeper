@@ -9,6 +9,8 @@ const until = async (what, test, ms = 20000) => {
 };
 const tagsOf = async url => (await browser.storage.local.get("linkTags")).linkTags?.[keyOf(url)] || [];
 const CAP = "https://example.org/cap";
+// Over 40 characters, so the capture is not almost empty (links.js capThin) and lists as captured.
+const CAP_TEXT = "captured text, long enough not to count as almost empty";
 
 await check("the bridge connects and names the backup folder", async () => {
   await until("the bridge", () => bridge.state === "on");
@@ -24,7 +26,7 @@ await check("a fresh profile with no backup gets a storageId and nothing restore
 // entries into stashes. Seeded before they finish, the test's own entry was sometimes moved under it.
 await applyDataPatches();
 await browser.storage.local.set({
-  captures: [{ url: CAP, title: "Cap", text: "captured text", captured_at: "2026-10-01T10:00:00Z" }],
+  captures: [{ url: CAP, title: "Cap", text: CAP_TEXT, captured_at: "2026-10-01T10:00:00Z" }],
   items: [{ url: "https://example.org/listed", status: "pending", added_at: "2026-10-01T10:00:00Z" }],
 });
 const made = await writeStash([{ url: "https://example.org/s1", title: "S1" }, { url: "https://example.org/s2", title: "S2" }], { name: "e2e stash" });
@@ -33,7 +35,7 @@ await check("a backup writes latest.json with storage and stashes", async () => 
   const res = await backupNow("agent");
   if (!res.ok || !/latest\.json$/.test(res.file)) throw new Error(JSON.stringify(res));
   const back = await hostCall("read-backup", { name: "latest.json" });
-  if (back.data.storage.captures[0].text !== "captured text") throw new Error("the capture is not in it");
+  if (back.data.storage.captures[0].text !== CAP_TEXT) throw new Error("the capture is not in it");
   if (!back.data.sessions.some(s => s.name === "e2e stash" && s.tabs.length === 2)) throw new Error("the stash is not in it");
 });
 
@@ -147,7 +149,7 @@ await check("wiped storage comes back from the latest backup by itself", async (
   await browser.storage.local.clear();
   await restoreIfEmpty();
   const got = await browser.storage.local.get(["captures", "stashMeta", "storageId", "restoredFrom"]);
-  if (got.captures?.[0]?.text !== "captured text") throw new Error("captures did not come back");
+  if (got.captures?.[0]?.text !== CAP_TEXT) throw new Error("captures did not come back");
   if (!Object.values(got.stashMeta?.stashes || {}).some(m => m.group_key?.startsWith("day:"))) throw new Error("the groups' details did not come back");
   if (!got.storageId || !got.restoredFrom) throw new Error("not marked restored");
 });

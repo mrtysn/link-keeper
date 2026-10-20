@@ -243,7 +243,8 @@ await kase("Links, its detail pane and Cards load in Firefox with the bar, the s
   };
   const list = await open("list.html?group=stash", (d, v) => v.location.pathname === "/list.html" && hasGroups(d));
   const d = list.doc;
-  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), [], "one page: no viewer tabs in the bar");
+  // The bar holds Links and the Capture page (the capture queue's run), and no viewer tabs.
+  eq([...d.querySelectorAll(".app-pages a")].map(a => a.textContent), ["Links", "Capture"], "the bar: Links and Capture, no viewer tabs");
   eq(d.querySelectorAll(".app-sources").length, 0, "one pile: no source chips");
   yes(d.querySelectorAll("ul.rows.stash > li").length > 300, "stash rows listed");
   yes([...d.querySelectorAll(".group > h2 .n")].some(n => /\d+ tabs?/.test(n.textContent)), "each stash heading counts its tabs");
