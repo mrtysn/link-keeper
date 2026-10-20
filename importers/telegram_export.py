@@ -16,7 +16,7 @@ NOT in the export, so a bare `x.com/i/status/123` stays bare — resolving that 
 links here, matching the original behaviour of every script this was extracted from: only
 Telegram's auto-detected `link` entities are extracted.
 
-Used by importers/telegram.py, tools/telegram-saved-links.py and tools/chat-to-watchlist.py.
+Used by importers/telegram.py, tools/build-link-triage-page.py and tools/chat-to-watchlist.py.
 """
 
 from __future__ import annotations

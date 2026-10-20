@@ -3,7 +3,7 @@
 #
 # After exporting from Telegram (and, optionally, Instagram or X), run this. Nothing else. It picks the
 # newest Telegram export and the newest Instagram export that actually contains messages, resolves
-# every link it can without a browser, rebuilds the two HTML views, and then puts the result behind a
+# every link it can without a browser, rebuilds the safe-to-delete and link-triage pages, and then puts the result behind a
 # loopback URL — the extension's list page pulls it in by itself, so there is no file to choose and
 # nothing to paste.
 #
@@ -28,8 +28,9 @@
 # link-captures-extra.jsonl in the output directory is merged and never overwritten: that is where
 # records recovered by hand belong, and without it a rerun would silently drop them.
 #
-# The message view is written to a fixed filename because its per-message marks live in browser
-# storage keyed to that file — a new name each time would strand your record of what you deleted.
+# The safe-to-delete and link-triage pages cover every source and are written to fixed filenames, since
+# their marks and decisions live in browser storage keyed to the file; each is rebuilt only when its
+# input changed.
 
 set -euo pipefail
 
@@ -165,9 +166,8 @@ ig_jsonl=$outdir/link-captures-ig.jsonl
 all_jsonl=$outdir/link-captures-all.jsonl
 extra_jsonl=$outdir/link-captures-extra.jsonl
 unresolved=$outdir/link-unresolved.tsv
-messages_html=$outdir/saved-messages.html
-triage_html=$outdir/telegram-saved-links.html
-triage_json=$outdir/telegram-links-triage.json
+safe_html=$outdir/safe-to-delete.html
+triage_html=$outdir/link-triage.html
 
 [[ -n $export_json ]] && print "export : ${export_json/#$HOME/~}"
 for (( i = 1; i <= ${#ig_paths}; i++ )); do
@@ -342,20 +342,19 @@ if (( ${#origins_files} )); then
 fi
 print "  $(grep -c . "$all_jsonl") captures → ${all_jsonl:t}"
 
-print "\n6/7  message view"
-if [[ -n $export_json ]]; then
-  "$repo/tools/telegram-messages-to-html.py" "$export_json" -c "$all_jsonl" -o "$messages_html"
-else
-  print "  no Telegram export on disk — the message replica keeps its last build"
-fi
+# The two pages cover every source (Telegram, Instagram DMs, X DMs, the phone inbox) and are rebuilt only
+# when their input changed: each keeps a fingerprint beside it, and says so when it skips. The triage page
+# reads its decisions from $outdir/link-triage-decisions.json (or the telegram-links-triage.json it replaced).
+page_inputs=(--instagram "$ig_jsonl" --x "$xdm_jsonl" --inbox "$inbox" -c "$all_jsonl" --only-if-changed)
+[[ -n $export_json ]] && page_inputs=("$export_json" "${page_inputs[@]}")
 
-print "\n7/7  saved-links triage"
-if [[ -n $export_json ]]; then
-  DATA_DIR=$outdir "$repo/tools/telegram-saved-links.py" "$export_json" \
-    -c "$all_jsonl" -t "$triage_json" -o "$triage_html"
-else
-  print "  no Telegram export on disk — the triage page keeps its last build"
-fi
+print "\n6/7  safe-to-delete page"
+DATA_DIR=$outdir "$repo/tools/build-safe-to-delete-page.py" "${page_inputs[@]}" -o "$safe_html" \
+  || print "  ! the safe-to-delete page was not built; see above"
+
+print "\n7/7  link-triage page"
+DATA_DIR=$outdir "$repo/tools/build-link-triage-page.py" "${page_inputs[@]}" -o "$triage_html" \
+  || print "  ! the link-triage page was not built; see above"
 
 # --- hand it over ---------------------------------------------------------------
 
