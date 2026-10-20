@@ -2791,7 +2791,10 @@ async function handleMessage(msg) {
           byId.set(key, rec);
           fresh.push(rec);
           added++;
-        } else if (!existing.text && rec.text) {
+        } else if ((!existing.text && rec.text)
+          // A reel's watch-pack record (caption, transcript, on-screen text, what it points to) holds
+          // all a page read of the reel has and more, and grows as the pack does: it replaces both.
+          || (rec.via === "watch-reel" && rec.text && rec.text !== existing.text)) {
           Object.assign(existing, rec);
           enriched++;
         } else {

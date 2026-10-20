@@ -846,6 +846,21 @@ await check("a DM link with no page read is not captured, keeps its origin and d
     "capturing it again keeps who sent it");
 });
 
+await check("a reel's watch-pack record replaces its caption-only read, and a newer pack replaces the old one", async () => {
+  const { browser } = makeBrowser([]);
+  await load(browser);
+  const cap = async url => plain(await browser.handle({ type: "links" })).links.find(x => x.url === url).cap;
+  const url = "https://www.instagram.com/reel/ABC123/";
+  await browser.handle({ type: "import-captures", records: [{ url, kind: "reel", text: "the caption", via: "instagram-export",
+    thread: ["@friend"] }] });
+  await browser.handle({ type: "import-captures", records: [{ url, kind: "reel", text: "the caption\n\n— transcript —\nsaid", via: "watch-reel" }] });
+  assert.match((await cap(url)).text, /— transcript —/, "the pack's record wins over the caption");
+  await browser.handle({ type: "import-captures", records: [{ url, kind: "reel", text: "— about — x\n\nthe caption", via: "watch-reel" }] });
+  assert.match((await cap(url)).text, /^— about —/, "a grown pack replaces the earlier pack record");
+  await browser.handle({ type: "import-captures", records: [{ url, kind: "reel", text: "a page read", via: "fxtwitter" }] });
+  assert.match((await cap(url)).text, /^— about —/, "any other record still never overwrites text");
+});
+
 await check("a chat grab: one record per link with every sender and the first sending, merged into what is held", async () => {
   const { browser, store } = makeBrowser([]);
   const bg = await load(browser);
