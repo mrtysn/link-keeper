@@ -39,8 +39,9 @@ MAX_CHARS = 6000   # per part: a long transcript or a screen-recorded README is 
 SYSTEM = """You read what a short video (an Instagram reel or post) says and shows, and list what a \
 viewer would want to note down from it: tools, apps, code repositories, websites, products, services, \
 courses; titles (films, series, anime, books, games, songs) and their makers (author, studio, director); \
-people or accounts it features, credits or recommends; places. A product named as the one to replace \
-or compare against counts too.
+people or accounts it features, credits or recommends (an @handle named as where the idea came from \
+counts); places. A product shown being used or bought, or named as the one to replace or compare \
+against, counts too.
 
 The input has the caption, the speech transcript (machine transcribed: names may be misheard) and the \
 on-screen text (OCR of the frames, "[12s] text": fragments and misreads are common).
@@ -49,10 +50,12 @@ shown) is the same resource: keep the on-screen spelling and drop the misheard o
 - url: only a URL or domain that appears in the input, or a GitHub repo whose owner and name both \
 appear. Never guess one. Otherwise null.
 - where: "shown" if it appears in the on-screen text at all, else "said", else "caption".
-- Skip the reel's own author unless the reel recommends following them, and skip generic words \
+- Skip the account that posted the reel, unless the reel is about that person or recommends following \
+them, and skip generic words \
 (AI, coding, the app store), organisations only mentioned in passing, and the creator's own other \
 products flashed as an advert.
-- Every name in your "about" sentence that is one of the kinds above belongs in the list.
+- Every person, account, title or product named in your "about" sentence belongs in the list; check the list \
+against it before answering.
 - about: one plain sentence on what the video is about.
 An empty list is a correct answer for a video that points to nothing."""
 
