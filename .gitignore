@@ -29,4 +29,5 @@ tools/preview-pages/out/
 # Playwright for tools/preview-pages/test-keys.zsh, installed on first run.
 tools/preview-pages/.deps/
 tools/browser-bench/.deps/
+tools/agent-browser/.deps/
 

@@ -421,6 +421,49 @@ def watch_status(after: int) -> dict:
             "records": records, "next": len(lines)}
 
 
+# --- the agent browser -------------------------------------------------------------------------------
+# A public link is read in Obscura (tools/agent-browser/install-obscura.zsh), a headless browser with no
+# logins, instead of a tab in the owner's Firefox. It runs the extension's own readers: extractors.js and
+# the call readOnce makes in background.js, wrapped in one expression, since --eval takes an expression.
+# Answers {ok, record}, {ok: false, wall: {kind, reason}} or {ok: false, error}; the extension falls back
+# to a Firefox tab for anything but a record.
+OBSCURA = REPO / "tools" / "agent-browser" / ".deps" / "obscura" / "obscura"
+_reader_expr = None
+
+
+def reader_expr() -> str:
+    global _reader_expr
+    if _reader_expr is None:
+        src = (REPO / "extension" / "extractors.js").read_text(encoding="utf-8")
+        _reader_expr = ("(() => {\n" + src + "\nconst w = LK.wall();\n"
+                        "return JSON.stringify(w ? { kind: 'page', title: document.title || null, url: location.href, wall: w }"
+                        " : LK.extract());\n})()")
+    return _reader_expr
+
+
+def read_page(url: str) -> dict:
+    if not re.match(r"^https?://", url or ""):
+        return {"ok": False, "error": "only web pages"}
+    if not OBSCURA.exists():
+        return {"ok": False, "error": "the agent browser is not installed (tools/agent-browser/install-obscura.zsh)"}
+    try:
+        done = subprocess.run([str(OBSCURA), "fetch", url, "--quiet", "--timeout", "40", "--eval", reader_expr()],
+                              capture_output=True, text=True, timeout=55)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "the agent browser took over 55 s"}
+    out = done.stdout.strip()
+    try:
+        record = json.loads(out.splitlines()[-1]) if out else None
+    except ValueError:
+        record = None
+    if not isinstance(record, dict):
+        err = (done.stderr.strip().splitlines() or [out or f"exit {done.returncode}"])[-1]
+        return {"ok": False, "error": f"the agent browser read nothing: {err[:200]}"}
+    if record.get("wall"):
+        return {"ok": False, "wall": record["wall"]}
+    return {"ok": True, "record": record}
+
+
 # --- phone inbox -----------------------------------------------------------------------------------
 # Links pulls the phone-share inbox when it opens: tools/pull-phone-inbox.zsh mirrors it over ssh and
 # prints the lines new since the last mirror (by Links or by an import), which the page adds.
@@ -459,6 +502,7 @@ HOST_OPS = {
     "refresh-start": lambda m: import_start(bool(m.get("offline")), m.get("watch") is not False),
     "refresh-status": lambda m: import_status(),
     "inbox-pull": lambda m: inbox_pull(),
+    "read-page": lambda m: read_page(str(m.get("url") or "")),
     "watch-start": lambda m: watch_start(m.get("urls") or []),
     "watch-status": lambda m: watch_status(int(m.get("after") or 0)),
 }
