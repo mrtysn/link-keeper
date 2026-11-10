@@ -1,8 +1,9 @@
 #!/bin/zsh
 # DESC: Screenshot a preview page (Cards, List, ...) at chosen widths into the gitignored out/ folder.
 #
-# Usage: shoot-page.zsh PAGE [--widths 600,1200] [--name NAME] [--deal VALUE] [--until SELECTOR] [--click SELECTOR]... [--port 8768]
+# Usage: shoot-page.zsh PAGE [--widths 600,1200] [--name NAME] [--captures FILE] [--deal VALUE] [--until SELECTOR] [--click SELECTOR]... [--port 8768]
 #   PAGE      page path with its query flags, e.g. "cards.html?suggest" (see preview.zsh --help)
+#   --captures   build the preview from this capture JSONL instead of the real one (for shots shown to others)
 #   --deal    Cards only: the deck selector's option: "suggested" (the Suggested deck), else its value
 #   --until   Cards only: press S until this CSS selector matches, e.g. ".card.top .suggestrow .src"
 #   --click   click this CSS selector before the shot; repeat it to click several, in order
@@ -21,10 +22,12 @@ widths=600,1200
 name=${page%%[.?]*}
 port=8768
 extra=()
+build=(--no-serve)
 while (( $# )); do
   case $1 in
     --widths) widths=${2:?--widths needs a list}; shift 2 ;;
     --name) name=${2:?--name needs a name}; shift 2 ;;
+    --captures) build+=(--captures "${2:?--captures needs a file}"); shift 2 ;;
     --port) port=${2:?--port needs a number}; shift 2 ;;
     --deal) extra+=(--deal "${2:?--deal needs a value}"); shift 2 ;;
     --until) extra+=(--until "${2:?--until needs a selector}"); shift 2 ;;
@@ -40,7 +43,7 @@ if [[ ! -d $deps/node_modules/playwright ]]; then
   "$deps/node_modules/.bin/playwright" install chromium >/dev/null
 fi
 
-"$here/preview.zsh" --no-serve >/dev/null
+"$here/preview.zsh" $build >/dev/null
 python3 -m http.server "$port" --bind 127.0.0.1 -d "$here/out" >/dev/null 2>&1 &
 server=$!
 trap 'kill $server 2>/dev/null' EXIT
