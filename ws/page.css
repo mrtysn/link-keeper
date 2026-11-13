@@ -564,11 +564,11 @@ fieldset {
 textarea:hover,
 input:not([type="checkbox"]):not([type*="ra"]):hover,
 select:hover {
-  border: 1.5px solid var(--cemph);
+  border-color: var(--cemph);
 }
 textarea:focus,
 input:not([type="checkbox"]):not([type*="ra"]):focus {
-  border: 1.5px solid var(--clink);
+  border-color: var(--clink);
   box-shadow: 0 0 5px var(--clink);
 }
 p > button {
@@ -1330,6 +1330,57 @@ body.ws-wide {
   break-inside: avoid;
   margin: 0 0 14px;
 }
+.ws-board--stack {
+  columns: 1;
+  max-width: 60rem;
+}
+.ws-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 0.6rem;
+}
+@media (max-width: 44rem) {
+  .ws-compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ws-compare__side {
+  padding: 10px 12px;
+  border: 1px solid var(--ws-rule);
+  border-radius: var(--ws-radius);
+  background: var(--cbg);
+}
+.ws-compare__side[data-side="proposed"] {
+  border-color: var(--cemph);
+}
+.ws-compare__label {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cdark);
+}
+.ws-compare__side[data-side="proposed"] .ws-compare__label {
+  color: var(--cemph);
+}
+.ws-compare__side > :last-child {
+  margin-bottom: 0;
+}
+.ws-compare__side img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.ws-compare__none {
+  color: var(--cdark);
+  font-style: italic;
+}
+.ws-compare__note {
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+  color: var(--cdark);
+}
 .ws-card[data-tone] {
   border-top: 3px solid var(--ws-tone);
 }
@@ -1560,6 +1611,7 @@ body.ws-wide {
   background: color-mix(in srgb, var(--ws-state) 15%, transparent);
 }
 .ws-progress > li[data-state="waiting"] { --ws-state: var(--cdark); }
+.ws-progress > li[data-state="live"] { --ws-state: var(--cmed); }
 .ws-progress > li[data-state="stalled"],
 .ws-progress > li[data-state="stale"] { --ws-state: var(--cemph); }
 .ws-progress > li[data-state="done"] { --ws-state: var(--ws-good); }
@@ -2100,9 +2152,12 @@ body.ws-deck > main > section.ws-slide--quote cite {
   }
 }
 @media print {
-  @page {
+  @page deck {
     size: landscape;
     margin: 0;
+  }
+  body.ws-deck {
+    page: deck;
   }
   html:has(body.ws-deck) {
     font-size: 15pt !important;
@@ -2134,6 +2189,34 @@ body.ws-deck > main > section.ws-slide--quote cite {
   }
   .ws-deck__bar,
   .ws-deck__notes {
+    display: none;
+  }
+}
+.ws-copy {
+  display: block;
+  margin: 0 0 0.3rem auto;
+  padding: 0.1rem 0.6rem;
+  border: var(--border);
+  border-radius: 0.4rem;
+  background: var(--clight);
+  color: var(--cdark);
+  font: 12px/1.4 system-ui, sans-serif;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.ws-copy:hover,
+.ws-copy:focus-visible {
+  opacity: 1;
+}
+.ws-copy-buffer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  opacity: 0;
+}
+@media print {
+  .ws-copy {
     display: none;
   }
 }
@@ -2171,6 +2254,62 @@ body.ws-deck > main > section.ws-slide--quote cite {
   .ws-fontpick {
     display: none;
   }
+}
+.ws-sort {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.ws-sort:hover,
+.ws-sort:focus-visible {
+  color: var(--clink);
+}
+.ws-sort-mark {
+  min-width: 0.8em;
+  font-size: 0.7em;
+  color: var(--clink);
+}
+.ws-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.3rem;
+  font: 12px/1.4 system-ui, sans-serif;
+  color: var(--cfg);
+}
+.ws-filter input[type="search"][placeholder] {
+  width: 14rem;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.15rem 0.5rem;
+  font: inherit;
+}
+@media print {
+  .ws-filter {
+    display: none;
+  }
+  .ws-sort-mark {
+    display: none;
+  }
+}
+td > img:first-child {
+  display: block;
+  width: 4.5rem;
+  height: 4.5rem;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 0.6rem;
+  padding: 0.3rem;
+  margin-bottom: 0.4rem;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
 }
 
 /* web-shared src/styles/house-font.css */

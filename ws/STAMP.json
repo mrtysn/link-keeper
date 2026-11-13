@@ -1,7 +1,7 @@
 {
  "sha256": {
-  "page.css": "1f12cee251a4508a75ad2192de49f80443f2d7eb448f2753e7bcde24b77001ef",
-  "page.js": "605f0a5af2d63b06745f7a41f70c7a7aa36d34b942086b2dd9967507e9254f9e"
+  "page.css": "57f59724760a4bcf9d4749fadce285155e6714f58c7cae66bb70daa46ea0b470",
+  "page.js": "767a0f0a33206d8092eefa17db9617121e02303e82b8409947c069436d16102f"
  },
- "web_shared_revision": "366255a28cbc"
+ "web_shared_revision": "610f5083759c"
 }
