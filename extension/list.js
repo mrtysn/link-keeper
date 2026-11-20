@@ -536,7 +536,7 @@ LinkActions.setup({
   data: () => data,
   say,
   // In card mode the editor opens over the card, which redraws with each tag saved.
-  tags: (t, anchor) => (cardMode ? anchoredPopover($("detail").querySelector(".cm-card.top .cm-head") || anchor, tagEditor(t.link, () => load()))
+  tags: (t, anchor) => (cardMode ? anchoredPopover($("detail").querySelector(".cm-card.top .cm-head") || anchor, tagEditor(t.link, () => { paintCounts(countLinks(data.links, data.filteredLinks)); load(); }))
     : $("detail").querySelector(".tagger input")?.focus()),
   tagNext: () => { walk(1); onRow("tags")(); },
   // A removal shows at once: its row dims and the Remove button says so, until the reload redraws them.
@@ -547,8 +547,14 @@ LinkActions.setup({
       if (r.target.link.key === target.link.key && (r.target.stash?.id || null) === (stash?.id || null)) r.li.classList.add("leaving");
     }
     for (const b of $("detail").querySelectorAll('.lk-bar > button[data-cmd="remove"]')) { b.textContent = "Removing…"; b.disabled = true; }
+    // The counts move now when this takes the link's last place, without waiting for the redraw.
+    const l = target.link;
+    const places = new Set(l.copies.map(c => c.tab)).size + (l.list && !l.list.loose ? 1 : 0);
+    if (places <= 1 && !l.cap && data.links.includes(l)) paintCounts(countsWithout(l.key));
   },
   async after(cmd, target, res) {
+    // A tag the editor saved changed the link in memory: the Untagged count follows before the reload.
+    if (cmd === "tags") paintCounts(countLinks(data.links, data.filteredLinks));
     if (res.ok === false) { if (cmd === "remove") render(); return; }
     // In card mode, accepting a card's suggested tags deals the next card, as removing does.
     const leaves = ["move", "remove", ...(cardMode ? ["accept"] : [])].includes(cmd);
@@ -557,8 +563,18 @@ LinkActions.setup({
       const next = cardMode ? cardAfter(rowsOnPage[i]) : rowsOnPage[i + 1] || rowsOnPage[i - 1];
       if (next) cursorId = next.id;
       if (cardMode && cmd === "remove") cardTally.removed++;
+      if (cardMode && leaves) {
+        const gk = groupKey(groupOf(rowsOnPage[i]));
+        groupTally(gk).gone++;
+        cardLeftFrom.set(target.link.key, gk);
+      }
     }
     if (cmd === "undo" && res.cmd === "remove") cardTally.removed = Math.max(0, cardTally.removed - 1);
+    if (cmd === "undo" && ["remove", "accept", "move"].includes(res.cmd) && cardLeftFrom.has(target?.link.key)) {
+      const t = groupTally(cardLeftFrom.get(target.link.key));
+      t.gone = Math.max(0, t.gone - 1);
+      cardLeftFrom.delete(target.link.key);
+    }
     if (res.local) render();
     else await load();
     // In card mode an undone removal or accept comes back on top, where it was dealt.
@@ -1315,12 +1331,44 @@ function render() {
   foldGroups();
   renderOnly();
   markHeads();
+  markProgress();
   // The chip rows and the tag bar above the panes change height as they draw: measure again after.
   requestAnimationFrame(() => { fitPanes(); drawNextHead(); });
   if (!pane) return;
   // The pane always shows a link: the cursor's, else the first row's.
   if (cursorAt() === -1 && rowsOnPage.length) setCursor(rowsOnPage[0].id, false);
   else renderDetail();
+}
+
+/* The numbers over the filter bar and under the title, from the links given. A change that
+ * shows at once calls countLinks on the links as they will be, and paintCounts alone: the rows
+ * come on the reload that follows, and the counts it paints agree. */
+function countLinks(links, filteredLinks) {
+  return {
+    all: links.length,
+    uncaptured: links.filter(l => isWeb(l.url) && !hasRead(l) && !l.fail).length,
+    failed: links.filter(l => isWeb(l.url) && !hasRead(l) && l.fail).length,
+    local: links.filter(l => !isWeb(l.url)).length,
+    filtered: filteredLinks.length,
+    captured: links.filter(l => isWeb(l.url) && hasRead(l)).length,
+    untagged: links.filter(l => !l.tags.length).length,
+    dups: dupKeys.size,
+  };
+}
+
+function paintCounts(counts) {
+  const stashBit = data.stashes.length ? ` · ${data.stashes.length === 1 ? "1 stash" : `${data.stashes.length} stashes`}` : "";
+  $("sub").textContent = counts.all
+    ? `${plural(counts.all, "link")} · ${counts.captured} captured · ${counts.untagged} untagged${stashBit}`
+    : "Nothing to show";
+  drawBar(counts);
+}
+
+/* A removal of a link's only copy: the counts without it, before the removal is written. */
+function countsWithout(key) {
+  const counts = countLinks(data.links.filter(l => l.key !== key), data.filteredLinks);
+  counts.dups = dupKeys.size - (dupKeys.has(key) ? 1 : 0);
+  return counts;
 }
 
 function renderRows() {
@@ -1333,21 +1381,8 @@ function renderRows() {
   renderDuplicates();
   const term = $("q").value.trim().toLowerCase();
   const total = data.links.length;
-  const counts = {
-    all: total,
-    uncaptured: data.links.filter(l => isWeb(l.url) && !hasRead(l) && !l.fail).length,
-    failed: data.links.filter(l => isWeb(l.url) && !hasRead(l) && l.fail).length,
-    local: data.links.filter(l => !isWeb(l.url)).length,
-    filtered: data.filteredLinks.length,
-    captured: data.links.filter(l => isWeb(l.url) && hasRead(l)).length,
-    untagged: data.links.filter(l => !l.tags.length).length,
-    dups: (dupKeys = new Set(duplicateSets().map(s => s.link.key))).size,
-  };
-  const stashBit = data.stashes.length ? ` · ${data.stashes.length === 1 ? "1 stash" : `${data.stashes.length} stashes`}` : "";
-  $("sub").textContent = total
-    ? `${plural(total, "link")} · ${counts.captured} captured · ${counts.untagged} untagged${stashBit}`
-    : "Nothing to show";
-  drawBar(counts);
+  dupKeys = new Set(duplicateSets().map(s => s.link.key));
+  paintCounts(countLinks(data.links, data.filteredLinks));
   $("groupby").value = group;
 
   const out = $("out");
@@ -1406,6 +1441,26 @@ const CARDS_KEY = "listCards", SHUFFLE_KEY = "listCardsShuffle", CARD_THRESHOLD 
 let cardMode = pref(CARDS_KEY, false);
 let cardShuffle = pref(SHUFFLE_KEY, false);
 const cardTally = { removed: 0, skipped: 0 };
+/* Per group, as dealt this session: how many cards left it (removed, accepted, moved) and which
+ * ones were skipped. A group's progress is those over its cards still there plus the ones that left. */
+const cardGroups = new Map();      // group key → { gone: n, skipped: Set of row bases }
+const cardLeftFrom = new Map();    // link key → the group key its card left from, for undo
+const groupTally = key => { let t = cardGroups.get(key); if (!t) cardGroups.set(key, t = { gone: 0, skipped: new Set() }); return t; };
+function groupProgress(key, rows) {
+  const t = cardGroups.get(key);
+  if (!t) return { done: 0, total: rows.length };
+  return { done: t.gone + rows.filter(r => t.skipped.has(r.base)).length, total: rows.length + t.gone };
+}
+/* A "3 done" badge on each group heading that has any, so the other stashes show how far along they are. */
+function markProgress() {
+  for (const old of document.querySelectorAll("#out section.group > h2 .prog")) old.remove();
+  for (const sec of document.querySelectorAll("#out section.group")) {
+    const h2 = sec.querySelector(":scope > h2");
+    if (!h2) continue;
+    const { done, total } = groupProgress(groupKey(sec), rowsOnPage.filter(r => groupOf(r) === sec));
+    if (done) h2.append(el("span", { className: "prog", textContent: `${done} of ${total} done`, title: "Cards in this group dealt, removed or skipped so far" }));
+  }
+}
 const shuffledOrder = new Map();   // a group's key → its row ids in the order they were shuffled into
 let cardFlying = false;
 
@@ -1471,8 +1526,11 @@ async function cardSkip() {
   await cardFly(0, -1);
   cardTally.skipped++;
   const from = row.id;
+  const tally = groupTally(groupKey(groupOf(row)));
+  tally.skipped.add(row.base);
   LinkActions.push({ label: "Skip", cmd: "later", target: row.target, local: true, run: () => {
     cardTally.skipped = Math.max(0, cardTally.skipped - 1);
+    tally.skipped.delete(row.base);
     cursorId = from;
   } });
   cardStep(1);
@@ -1542,6 +1600,11 @@ function renderCards(row) {
     el("span", {}, "removed ", el("b", { textContent: cardTally.removed })),
     el("span", {}, "skipped ", el("b", { textContent: cardTally.skipped })),
     shuffleB));
+  markProgress();
+  const { done, total } = groupProgress(groupKey(groupOf(row)), deck);
+  box.append(el("div", { className: "cm-progress", title: "Cards of this group removed, accepted or skipped so far" },
+    el("progress", { max: total, value: done, ariaLabel: "Progress through this group" }),
+    el("span", { textContent: `${done} of ${total} done` })));
   const stage = el("div", { className: "cm-stage" });
   deck.slice(at, at + 3).reverse().forEach((r, i, arr) => {
     const depth = arr.length - 1 - i;

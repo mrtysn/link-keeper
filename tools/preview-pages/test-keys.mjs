@@ -919,6 +919,55 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   await p.close();
 }
 
+// Card mode: each group's own progress, and the counters move without the rows being redrawn
+{
+  const p = await page("list.html?group=stash&cards");
+  const prog = () => p.$eval(".cm-progress span", e => e.textContent.match(/(\d+) of (\d+) done/).slice(1).map(Number));
+  const bar = () => p.$eval(".cm-progress progress", e => [e.value, e.max]);
+  const [d0, t0] = await prog();
+  ok(d0 === 0 && t0 > 1, `progress: a fresh group is 0 of ${t0} done`);
+  ok(JSON.stringify(await bar()) === JSON.stringify([d0, t0]), "progress: the bar carries the same two numbers");
+  await key(p, "s"); await p.waitForTimeout(250);
+  let [d1, t1] = await prog();
+  ok(d1 === 1 && t1 === t0, `progress: a skip is one done, the total stays (${d1} of ${t1})`);
+  ok(await p.$$eval("#out section.group > h2 .prog", l => l.some(e => /^1 of \d+ done$/.test(e.textContent))), "progress: the group's heading says so too");
+  await key(p, "Meta+z"); await p.waitForTimeout(250);
+  ok((await prog())[0] === 0, "progress: undoing the skip takes it back");
+  // Remove one card that can be removed: it leaves the deck and counts as done, the total stays.
+  let removed = false;
+  for (let i = 0; i < 12 && !removed; i++) {
+    await key(p, "q"); await p.waitForTimeout(300);
+    const [d, t] = await prog();
+    removed = d >= 1 && !/locked|Nothing to remove/.test(await msg(p));
+    if (!removed) await key(p, "s");
+    else ok(t === t0, `progress: a removal is done and the group's total stays (${d} of ${t})`);
+  }
+  ok(removed, "progress: a card could be removed");
+  ok(!p.errs.length, "progress: no errors " + p.errs.join("; "));
+  await p.close();
+}
+{
+  const p = await page("list.html?group=stash");
+  const sub = () => p.$eval("#sub", e => e.textContent);
+  const n0 = +(await sub()).match(/(\d+) untagged/)[1];
+  // paintCounts moves the numbers from the links in memory, with no row drawn.
+  const t = await p.evaluate(() => {
+    const link = data.links.find(l => !l.tags.length);
+    const rows = document.querySelectorAll("#out li").length, first = document.querySelector("#out li");
+    link.tags = ["x"];
+    const t0 = performance.now();
+    paintCounts(countLinks(data.links, data.filteredLinks));
+    const ms = performance.now() - t0;
+    const t1 = performance.now();
+    render();
+    return { ms, full: performance.now() - t1, rows, same: first === document.querySelector("#out li") };
+  });
+  ok(+(await sub()).match(/(\d+) untagged/)[1] === n0 - 1, "counters: one tag less untagged, in the title line");
+  ok(t.ms < t.full, `counters: repainting counts takes ${t.ms.toFixed(1)} ms; a full render of ${t.rows} rows takes ${t.full.toFixed(1)} ms`);
+  ok(!p.errs.length, "counters: no errors " + p.errs.join("; "));
+  await p.close();
+}
+
 // A tag picked shows its counts in each layer, and makes it yours on the links it is only suggested for
 {
   const p = await page("list.html?tag=post");
