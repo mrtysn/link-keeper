@@ -1751,6 +1751,16 @@ async function putBack(stash, tabs) {
 
 /* Take tabs out of a stash — all of them, or the bookmark ids given, which must be in it. A stash
  * left empty goes with them. Returns what was taken. */
+/* Append what was removed to the helper's removals.jsonl, one line each, as the removal happens.
+ * A moved bookmark or an undo's take-back passes through with trash: false and is not a removal.
+ * A helper that is not running loses the lines; the removal itself goes ahead. */
+function logRemovals(kind, entries) {
+  const at = new Date().toISOString();
+  const lines = entries.map(e => ({ at, kind, key: keyOf(e.url), url: e.url, title: e.title || null, ...e.where }));
+  if (!lines.length) return;
+  hostCall("removal-log", { entries: lines }).catch(() => {});
+}
+
 async function dropFromStash(id, ids, { trash = true } = {}) {
   const session = await findStash(id);
   if (!session) return [];
@@ -1762,6 +1772,7 @@ async function dropFromStash(id, ids, { trash = true } = {}) {
     stash: { id, name: session.name, created_at: session.created_at, source: session.source, format: session.format },
     tab: { index: session.tabs.indexOf(t), ...Object.fromEntries(TAB_META.filter(k => t[k] != null).map(k => [k, t[k]])) },
   }))) : [];
+  if (trash) logRemovals("stash-tab", taken.map(t => ({ url: t.url, title: t.title, where: { stash: id, stash_name: session.name } })));
   for (const t of taken) await browser.bookmarks.remove(t.id);
   // Only an empty folder goes: one the user put anything else in stays.
   const emptied = !(await browser.bookmarks.getChildren(id)).length;
@@ -2619,6 +2630,10 @@ async function handleMessage(msg) {
         await setCaptures(captures.filter(c => !drop.has(keyOf(c.url))));
       }
       // A move's undo passes trash: false; so does anything that is putting the entry somewhere else.
+      if (msg.trash !== false) {
+        logRemovals("list", removed.map(i => ({ url: i.url, title: i.title })));
+        logRemovals("capture", gone.map(c => ({ url: c.url, title: c.title })));
+      }
       const trashed = msg.trash === false ? [] : await addToTrash([
         ...removed.map(i => ({ kind: "item", url: i.url, title: i.title, item: i })),
         ...gone.map(c => ({ kind: "capture", url: c.url, title: c.title, capture: c })),

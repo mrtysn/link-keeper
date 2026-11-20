@@ -276,6 +276,26 @@ def journal_drop(entry_id: str) -> dict:
     return {"ok": True}
 
 
+# --- removal log: every removal, appended as it happens, never rewritten ---------------------------
+
+REMOVAL_LOG = "removals.jsonl"
+
+
+def removal_log(entries: list) -> dict:
+    """Append one JSON line per removal to removals.jsonl in the state folder, flushed to disk."""
+    state_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
+    lines = "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries if isinstance(e, dict))
+    if not lines:
+        return {"ok": True, "logged": 0}
+    fd = os.open(state_dir() / REMOVAL_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        os.write(fd, lines.encode("utf-8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    return {"ok": True, "logged": lines.count("\n")}
+
+
 # --- import --------------------------------------------------------------------------------------
 # Links' "Import from exports" button: tools/import-links.zsh, run detached so it outlives this helper,
 # with the PATH an app started outside a shell lacks (asdf's shims, Homebrew). Only that script runs;
@@ -516,6 +536,7 @@ HOST_OPS = {
     "journal-last": lambda m: journal_last(),
     "journal-list": lambda m: journal_list(),
     "journal-drop": lambda m: journal_drop(m.get("entry_id") or ""),
+    "removal-log": lambda m: removal_log(m.get("entries") or []),
     "import-start": lambda m: import_start(bool(m.get("offline"))),
     "import-status": lambda m: import_status(),
     # The names before 5.79; an add-on not yet updated still sends them.
