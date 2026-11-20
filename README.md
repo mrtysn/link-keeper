@@ -49,6 +49,10 @@ the way the pages do. With Firefox closed it reads the latest backup instead. Ea
 makes is journaled with what it replaced; `link-keeper undo` puts the last one back, and refuses
 if you changed the same data since. Nothing an agent sends opens, closes, captures or navigates a
 tab. The open connection keeps the add-on's background page awake while Firefox runs.
+Every removal, by an agent or from the pages, is also appended as it happens to `removals.jsonl` in
+the helper's state folder, one JSON line each (`at`, `kind`, `key`, `url`, `title`); unlike the undo
+journal it is never trimmed or rewritten. `link-keeper remove URL ... --dry-run` says what would go and
+changes nothing, and `links --json` / `link --json` carry `key`, the add-on's own link key.
 
 ## After an export: one button
 
