@@ -11,7 +11,7 @@ every script with its purpose; every script's second line is `# DESC:`.
 | Folder | Holds | Kind |
 |---|---|---|
 | `extension/` | the Firefox add-on: Links, popup, capture queue, stash, extractors | code |
-| `tools/` | `import-links.zsh` (the import: Links' Import from exports), `build-safe-to-delete-page.py`, `build-link-triage-page.py`, `watch-reel.zsh`, `read-frame-text.swift`, `extract-reel-resources.py`, `reels-to-captures.py`, `link-keeper.mjs` (agents' CLI), `release.zsh`, all tests and checkers | code |
+| `tools/` | `import-links.zsh` (the import: Links' Import from exports), `build-safe-to-delete-page.py`, `link-pile-sources.py` and `drop-list.mjs` (behind `link-keeper pile` and `drop`), `watch-reel.zsh`, `read-frame-text.swift`, `extract-reel-resources.py`, `reels-to-captures.py`, `link-keeper.mjs` (agents' CLI), `release.zsh`, all tests and checkers | code |
 | `importers/` | export parsers and link enrichers: Telegram, Instagram, X archive, x.com and web lookups | code |
 | `native/` | helpers Firefox starts: the bridge (backups, shell socket, import, watch) and the local-file opener | code |
 | `receiver/` | HTTP endpoint on an always-on box; the phone's shares land in its inbox | code |
@@ -28,8 +28,8 @@ Pipeline, in order:
    (stash import, popup, chat grab in `extension/chat-grab.js`).
 2. **`tools/import-links.zsh`:** finds the newest exports; mirrors the phone inbox; runs the importers and the
    x.com/web enrichers; merges `link-captures-extra.jsonl` (hand-recovered records, never overwritten);
-   folds the watch-packs already built into records; rebuilds the safe-to-delete and link-triage pages (`tools/build-safe-to-delete-page.py`,
-   `tools/build-link-triage-page.py`, every source, only when their input changed); then serves the
+   folds the watch-packs already built into records; rebuilds the safe-to-delete page (`tools/build-safe-to-delete-page.py`, every source, only when its input
+   changed); leaves out links on the drop list (`link-keeper drop`); then serves the
    result on loopback. `--offline` skips everything that touches the network. It saves links; it does not
    watch videos.
 3. **Watch-packs (part of capture):** `tools/watch-reel.zsh` downloads a reel or carousel and builds a pack (video, whisper
@@ -74,7 +74,7 @@ release, not a release per change.
 ## Before a release
 
 Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tools/test-stash.mjs`, `node tools/test-link-search.mjs` (for `extension/link-search.js` or the Links filter box), `tools/test-extractors.zsh` (for the extractors or a capture), `node tools/test-capture-queue.mjs` (for the capture queue), `tools/test-instagram-export.py` and
-`tools/test-import-instagram-accounts.zsh` (for the Instagram importer, `attach-dm-origin.py` or the import), `tools/test-x-archive.py` (for the X archive importer), `tools/test-source-pages.py` (for the safe-to-delete and link-triage pages), `node tools/test-chat-grab.mjs` (for grabbing links from a chat page), `tools/test-bridge-import.py` (for the helper's import), `tools/test-agent-browser.py` (for the agent browser, Obscura through the helper's read-page), `tools/test-reel-resources.py` (for watch-reel's OCR, `extract-reel-resources.py` or `reels-to-captures.py`), `tools/test-bridge-socket.py` (for the helper's shell socket), `tools/test-bridge-owner.py` (for which profile owns the backups),
+`tools/test-import-instagram-accounts.zsh` (for the Instagram importer, `attach-dm-origin.py` or the import), `tools/test-x-archive.py` (for the X archive importer), `tools/test-source-pages.py` (for the safe-to-delete page), `node tools/test-pile.mjs` (for `link-keeper pile`, `drop`, `tools/drop-list.mjs`, `tools/link-pile-sources.py` or the import's drop-list filter), `node tools/test-chat-grab.mjs` (for grabbing links from a chat page), `tools/test-bridge-import.py` (for the helper's import), `tools/test-agent-browser.py` (for the agent browser, Obscura through the helper's read-page), `tools/test-reel-resources.py` (for watch-reel's OCR, `extract-reel-resources.py` or `reels-to-captures.py`), `tools/test-bridge-socket.py` (for the helper's shell socket), `tools/test-bridge-owner.py` (for which profile owns the backups),
 `node tools/test-bridge.mjs`, for stashing or the live preview `tools/run-in-headless-firefox.zsh
 --extension extension tools/e2e-stash.js` and `tools/preview-frames/test-preview-frames.zsh`, and
 for the bridge or storage `tools/test-bridge-firefox.zsh`.

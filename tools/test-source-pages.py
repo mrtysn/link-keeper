@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-# DESC: Check the safe-to-delete and link-triage pages against made-up input from all four sources, and that an unchanged input is not rebuilt.
-"""Build both pages in a temp folder from a fake Telegram export, Instagram and X link records and a phone inbox.
+# DESC: Check the safe-to-delete page against made-up input from all four sources, and that an unchanged input is not rebuilt.
+"""Build the page in a temp folder from a fake Telegram export, Instagram and X link records and a phone inbox.
 
-Covers: every source shows on both pages with its thread; the safe/not-safe marks follow what a stand-in
+Covers: every source shows on the page with its thread; the safe/not-safe marks follow what a stand-in
 `link-keeper` says the add-on holds (a link held under another path of the same X post counts); Telegram's
 own categories (a note you wrote, a plain note, media) stay on Telegram rows; the page says whether the add-on,
-a backup or the import's capture file decided; the capture file decides when the add-on cannot be read; one link
-saved in two sources is one card with both origins; decisions saved under the old sidecar name still load;
-and a second build with unchanged input is skipped, while a changed input, a changed holding or a plain run
-(no `--only-if-changed`) builds. No network, no Firefox.
+a backup or the import's capture file decided; the capture file decides when the add-on cannot be read; and a second build with
+unchanged input is skipped, while a changed input, a changed holding or a plain run (no `--only-if-changed`) builds. No network, no Firefox.
 
     tools/test-source-pages.py
 """
@@ -26,7 +24,6 @@ from pathlib import Path
 
 repo = Path(__file__).resolve().parent.parent
 SAFE = repo / "tools" / "build-safe-to-delete-page.py"
-TRIAGE = repo / "tools" / "build-link-triage-page.py"
 
 # Telegram
 TG_HELD = "https://held.example/a"
@@ -90,7 +87,7 @@ def build_inputs(tmp: Path) -> dict:
         {"kind": "tweet", "url": X_HELD, "saved_at": "2026-03-01", "thread": ["yourself"], "senders": ["@me"]},
         {"kind": "tweet", "url": X_MISSING, "saved_at": "2026-03-02", "thread": ["@carol"], "senders": ["@carol"]},
     ]) + "\n", encoding="utf-8")
-    # The phone inbox also holds a link Telegram has: one card on the triage page, two rows on the safe page.
+    # The phone inbox also holds a link Telegram has: two rows on the page.
     (d / "link-inbox.tsv").write_text(f"{PH_HELD}\t2026-04-01\n{PH_MISSING}\t2026-04-02\n{TG_HELD}\t2026-04-03\n", encoding="utf-8")
     (d / "link-captures-all.jsonl").write_text("\n".join(json.dumps({"url": u, "kind": "page", "title": "T " + u})
                                                           for u in CAPTURE_FILE) + "\n", encoding="utf-8")
@@ -129,17 +126,13 @@ def rows_of(page: str) -> list:
     return out
 
 
-def triage_data(page: str) -> dict:
-    return json.loads(re.search(r'<script id="data" type="application/json">(.*?)</script>', page, re.S).group(1).replace("<\\/", "</"))
-
-
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         paths = build_inputs(tmp)
         data = paths["data"]
         export = str(paths["export"])
-        safe, triage = data / "safe-to-delete.html", data / "link-triage.html"
+        safe = data / "safe-to-delete.html"
 
         # --- the safe-to-delete page ---
         res = run(SAFE, paths, export, "-o", str(safe))
@@ -202,42 +195,6 @@ def main() -> None:
         check("...held links are then those of that file",
               (fallback[("telegram", "1")], fallback[("instagram", IG_HELD)], fallback[("instagram", IG_MISSING)], fallback[("phone", PH_MISSING)])
               == ("migrated", "uncaptured", "migrated", "migrated"), str(fallback))
-
-        # --- the triage page ---
-        (data / "telegram-links-triage.json").write_text(json.dumps({"decisions": {TG_MISSING: "drop", "https://gone.example/": "keep"}}), encoding="utf-8")
-        res = run(TRIAGE, paths, export, "-o", str(triage))
-        page = triage.read_text(encoding="utf-8")
-        d = triage_data(page)
-        links = {l["u"]: l for l in d["links"]}
-        sources = {o["s"] for l in d["links"] for o in l["o"]}
-        check("every source has cards", sources == {"telegram", "instagram", "x", "phone"}, str(sources))
-        check("a link saved in two sources is one card with both origins",
-              sorted(o["s"] for o in links[TG_HELD]["o"]) == ["phone", "telegram"], str(links[TG_HELD]["o"]))
-        check("...so eleven saved links (the inbox has grown by one) make ten cards", len(d["links"]) == 10, str(len(d["links"])))
-        check("...dated by the earliest saving", links[TG_HELD]["d"] == "2026-01-01", links[TG_HELD]["d"])
-        ig = next(o for o in links[IG_MISSING]["o"])
-        check("a card carries its thread, senders and account",
-              (ig["t"], ig["b"]) == (["alice", "bob"], ["me", "Bob"]) and next(o for o in links[IG_HELD]["o"])["a"] == ["main"], str(ig))
-        check("...Telegram's its chat", links[TG_MISSING]["o"][0]["t"] == ["Saved Messages"])
-        check("a link takes its title from the import's capture file, and one without a capture has none",
-              links[IG_MISSING].get("x", {}).get("t") == "T " + IG_MISSING and "x" not in links[IG_HELD], str(links[IG_MISSING]))
-        check("the page offers a filter by source and a grouping by source",
-              all(f'data-src="{k}"' in page for k in ("all", "telegram", "instagram", "x", "phone")) and 'value="source"' in page)
-        check("decisions saved under the old sidecar name still load, only for links that are there, and save under the new name",
-              d["seeded"] == {TG_MISSING: "drop"} and d["triageName"] == "link-triage-decisions.json", str((d["seeded"], d["triageName"])))
-        check("every card is in the queue", sorted(d["queue"]) == sorted(links))
-
-        before = triage.stat().st_mtime_ns
-        res = run(TRIAGE, paths, export, "-o", str(triage), "--only-if-changed")
-        check("a second triage build with unchanged input is skipped, with one line saying so",
-              "skipped" in res.stdout and len(res.stdout.strip().splitlines()) == 1 and triage.stat().st_mtime_ns == before, res.stdout)
-        (data / "link-triage-decisions.json").write_text(json.dumps({"decisions": {X_MISSING: "keep"}}), encoding="utf-8")
-        res = run(TRIAGE, paths, export, "-o", str(triage), "--only-if-changed")
-        d = triage_data(triage.read_text(encoding="utf-8"))
-        check("saved decisions changing rebuilds it, and the new sidecar name wins over the old",
-              "skipped" not in res.stdout and d["seeded"] == {X_MISSING: "keep"} and d["triageName"] == "link-triage-decisions.json", res.stdout)
-        res = run(TRIAGE, paths, export, "-o", str(triage))
-        check("without the flag it builds again", "skipped" not in res.stdout and "wrote" in res.stdout, res.stdout)
 
         # --- without a Telegram export, the other sources alone ---
         res = run(SAFE, paths, "-o", str(data / "no-telegram.html"))
