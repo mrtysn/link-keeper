@@ -3,7 +3,7 @@
 #
 # After exporting from Telegram (and, optionally, Instagram or X), run this. Nothing else. It picks the
 # newest Telegram export and the newest Instagram export that actually contains messages, resolves
-# every link it can without a browser, rebuilds the safe-to-delete and link-triage pages, and then puts the result behind a
+# every link it can without a browser, rebuilds the safe-to-delete page, and then puts the result behind a
 # loopback URL — the extension's list page pulls it in by itself, so there is no file to choose and
 # nothing to paste.
 #
@@ -27,9 +27,11 @@
 # link-captures-extra.jsonl in the output directory is merged and never overwritten: that is where
 # records recovered by hand belong, and without it a rerun would silently drop them.
 #
-# The safe-to-delete and link-triage pages cover every source and are written to fixed filenames, since
-# their marks and decisions live in browser storage keyed to the file; each is rebuilt only when its
-# input changed.
+# The safe-to-delete page covers every source and is written to a fixed filename, since its marks live in
+# browser storage keyed to the file; it is rebuilt only when its input changed.
+#
+# Links on the drop list (`link-keeper drop URL`; DROP_LIST in config.local.sh, else link-drops.jsonl in the
+# output folder) are left out: before the lookups, and from the handover to the extension.
 
 set -euo pipefail
 
@@ -61,7 +63,7 @@ done
 # value is captured before sourcing the config, which would otherwise clobber it.
 
 env_tg=${TELEGRAM_EXPORT_DIR:-} env_ig=${INSTAGRAM_EXPORT_DIR:-} env_data=${DATA_DIR:-} env_port=${SERVE_PORT:-}
-env_igacc=${INSTAGRAM_ACCOUNTS_DIR:-} env_x=${X_ARCHIVE_DIR:-}
+env_igacc=${INSTAGRAM_ACCOUNTS_DIR:-} env_x=${X_ARCHIVE_DIR:-} env_drop=${DROP_LIST:-}
 typeset -A IG_ACCOUNTS    # account folder -> the thread slugs to read besides the self-thread
 [[ -r $repo/config.local.sh ]] && source "$repo/config.local.sh"
 INSTAGRAM_ACCOUNTS_DIR=${env_igacc:-${INSTAGRAM_ACCOUNTS_DIR:-}}
@@ -70,6 +72,7 @@ INSTAGRAM_EXPORT_DIR=${env_ig:-${INSTAGRAM_EXPORT_DIR:-$HOME/Downloads}}
 DATA_DIR=${env_data:-${DATA_DIR:-$repo/data}}
 SERVE_PORT=${env_port:-${SERVE_PORT:-8790}}
 X_ARCHIVE_DIR=${env_x:-${X_ARCHIVE_DIR:-$HOME/Downloads}}
+DROP_LIST=${env_drop:-${DROP_LIST:-}}
 
 # --- what to read, what to write ------------------------------------------------
 
@@ -91,6 +94,7 @@ else
   [[ -d $outdir ]] || { print -u2 "no such directory: $outdir"; exit 1 }
 fi
 inbox=$outdir/link-inbox.tsv
+drop_list=${DROP_LIST:-$outdir/link-drops.jsonl}
 
 # Every run leaves a log, however it was started: a terminal run used to leave none, and a reel step
 # that skipped 291 reels on 2026-10-15 could not be told apart from one that died.
@@ -166,7 +170,6 @@ all_jsonl=$outdir/link-captures-all.jsonl
 extra_jsonl=$outdir/link-captures-extra.jsonl
 unresolved=$outdir/link-unresolved.tsv
 safe_html=$outdir/safe-to-delete.html
-triage_html=$outdir/link-triage.html
 
 [[ -n $export_json ]] && print "export : ${export_json/#$HOME/~}"
 for (( i = 1; i <= ${#ig_paths}; i++ )); do
@@ -180,7 +183,7 @@ print "output : ${outdir/#$HOME/~}\n"
 if (( offline )); then
   print "--offline: no internet steps (phone inbox, Saved Messages, lookups, reel downloads)"
 elif [[ -n ${LINK_INBOX_REMOTE:-} ]]; then
-  print "0/7  links shared from the phone"
+  print "0/6  links shared from the phone"
   DATA_DIR=$outdir LINK_INBOX_REMOTE=$LINK_INBOX_REMOTE "$repo/tools/pull-phone-inbox.zsh" || true
 fi
 
@@ -190,11 +193,11 @@ session=${XDG_CONFIG_HOME:-$HOME/.config}/link-keeper/telegram.session
 if (( offline )); then
   :
 elif [[ -n ${TELEGRAM_API_ID:-} && -f $session ]]; then
-  print "0/7  new links from Saved Messages, no export needed"
+  print "0/6  new links from Saved Messages, no export needed"
   "$repo/importers/telegram-pull.py" --inbox "$inbox" \
     || print "  ! pull failed — continuing with what is already on disk"
 elif [[ -n ${TELEGRAM_API_ID:-} ]]; then
-  print "0/7  Saved Messages puller configured but not logged in"
+  print "0/6  Saved Messages puller configured but not logged in"
   print "  run once: $repo/importers/telegram-pull.py --login"
 fi
 
@@ -228,29 +231,37 @@ if [[ -z ${worklist//$'\n'/} ]] && (( ! ${#ig_paths} )) && [[ -z $x_archive ]] &
   exit 1
 fi
 
+# Links on the drop list are never looked up.
+if [[ -s $drop_list ]] && command -v node >/dev/null; then
+  before=$(print -r -- "$worklist" | grep -c . || true)
+  worklist=$(print -r -- "$worklist" | node "$repo/tools/drop-list.mjs" filter-lines --drops "$drop_list")
+  after=$(print -r -- "$worklist" | grep -c . || true)
+  (( before == after )) || print "  $(( before - after )) links on the drop list left out of the worklist"
+fi
+
 # Instagram post/reel urls skip the enrichers entirely — the reels step below owns them, and a
 # generic fetch of instagram.com yields a login wall or a stub record at best.
 enrich_input=$(print -r -- "$worklist" | grep -vE '^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/' || true)
 
 if (( offline )); then
-  print "1/7  x.com via FxTwitter — skipped (--offline), keeping the last run's records"
-  print "\n2/7  everything else via og: tags and free APIs — skipped (--offline), keeping the last run's records"
+  print "1/6  x.com via FxTwitter — skipped (--offline), keeping the last run's records"
+  print "\n2/6  everything else via og: tags and free APIs — skipped (--offline), keeping the last run's records"
   [[ -e $x_jsonl ]] || : > "$x_jsonl"
   [[ -e $web_jsonl ]] || : > "$web_jsonl"
 else
-  print "1/7  x.com via FxTwitter"
+  print "1/6  x.com via FxTwitter"
   # The previous run's records are reused, so only new ids are fetched and a transient failure
   # cannot erase a capture that already exists. The output must not be the reuse file itself.
   x_prev=$outdir/link-captures-x.prev.jsonl
   [[ -s $x_jsonl ]] && cp "$x_jsonl" "$x_prev"
   print -r -- "$enrich_input" | "$repo/importers/enrich-x.py" --reuse "$x_prev" > "$x_jsonl"
 
-  print "\n2/7  everything else via og: tags and free APIs"
+  print "\n2/6  everything else via og: tags and free APIs"
   print -r -- "$enrich_input" \
     | "$repo/importers/enrich-web.py" --failed-to "$unresolved" > "$web_jsonl"
 fi
 
-print "\n3/7  instagram, from its own export"
+print "\n3/6  instagram, from its own export"
 : > "$ig_jsonl"
 if (( ${#ig_paths} )); then
   for (( i = 1; i <= ${#ig_paths}; i++ )); do
@@ -276,7 +287,7 @@ else
   : > "$xdm_jsonl"
 fi
 
-print "\n4/7  videos — records from the packs already built"
+print "\n4/6  videos — records from the packs already built"
 # The import does not watch videos: watching is part of capture, and Links' capture queue hands a video
 # read but not watched to the watcher (tools/watch-links.zsh). The packs it has built are folded in here,
 # so a fresh profile gets them too.
@@ -308,7 +319,7 @@ if [[ -n $reel_urls ]] && (( ! offline )); then
   done <<< "$reel_urls"
 fi
 
-print "\n5/7  merging"
+print "\n5/6  merging"
 # reels last, so a pack-backed record wins over a caption-only one for the same url on import; the
 # bare X DM records first, so any record with text fills them in.
 if [[ -s $extra_jsonl ]]; then
@@ -323,19 +334,15 @@ if (( ${#origins_files} )); then
 fi
 print "  $(grep -c . "$all_jsonl") captures → ${all_jsonl:t}"
 
-# The two pages cover every source (Telegram, Instagram DMs, X DMs, the phone inbox) and are rebuilt only
-# when their input changed: each keeps a fingerprint beside it, and says so when it skips. The triage page
-# reads its decisions from $outdir/link-triage-decisions.json (or the telegram-links-triage.json it replaced).
+# The page covers every source (Telegram, Instagram DMs, X DMs, the phone inbox) and is rebuilt only
+# when its input changed: it keeps a fingerprint beside it, and says so when it skips. Judging the links
+# is `swipe-sort serve --type link`, which reads them with `link-keeper pile`.
 page_inputs=(--instagram "$ig_jsonl" --x "$xdm_jsonl" --inbox "$inbox" -c "$all_jsonl" --only-if-changed)
 [[ -n $export_json ]] && page_inputs=("$export_json" "${page_inputs[@]}")
 
-print "\n6/7  safe-to-delete page"
+print "\n6/6  safe-to-delete page"
 DATA_DIR=$outdir "$repo/tools/build-safe-to-delete-page.py" "${page_inputs[@]}" -o "$safe_html" \
   || print "  ! the safe-to-delete page was not built; see above"
-
-print "\n7/7  link-triage page"
-DATA_DIR=$outdir "$repo/tools/build-link-triage-page.py" "${page_inputs[@]}" -o "$triage_html" \
-  || print "  ! the link-triage page was not built; see above"
 
 # --- hand it over ---------------------------------------------------------------
 
@@ -375,6 +382,7 @@ with open(out_path, "w", encoding="utf-8") as fh:
     json.dump({"captures": captures, "queue": queue}, fh, ensure_ascii=False)
 print(f"  handover: {len(captures)} captures, {len(queue)} for the browser")
 PY
+[[ -s $drop_list ]] && node "$repo/tools/drop-list.mjs" filter-handoff --drops "$drop_list" "$handoff"
 
 # Hold the file on loopback and let the add-on's own page collect it. Firefox records the internal
 # uuid of each install in its profile, so that page's URL can be looked up and opened — which removes

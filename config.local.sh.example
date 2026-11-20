@@ -47,6 +47,11 @@ SERVE_PORT=8790
 #TELEGRAM_API_ID=123456
 #TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef
 
+# The drop list: links dropped before they were ever saved (`link-keeper drop URL`, which swipe-sort's
+# apply script calls). The import leaves them out and `link-keeper pile` does not list them. Optional;
+# defaults to link-drops.jsonl in DATA_DIR.
+#DROP_LIST="$HOME/notes/link-data/link-drops.jsonl"
+
 # Phone that android/build.zsh --install targets: its hardware serial (adb shell getprop
 # ro.serialno) or its name in ADB Reconnect's devices.json. adb-reconnect resolves it to a live
 # adb serial. ANDROID_SERIAL, when set, wins over this.

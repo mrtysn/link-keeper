@@ -1,7 +1,7 @@
 #!/bin/zsh
 # DESC: Run import-links.zsh on made-up Instagram exports for two accounts, and a made-up X archive, and check what it reads.
 #
-# Copies this repo's tools/ and importers/ into a temporary repo, with its own config.local.sh, so the
+# Copies this repo's tools/, importers/ and extension/links.js into a temporary repo, with its own config.local.sh, so the
 # real config (phone inbox, Telegram session) is never read and nothing leaves the machine. Every config
 # names an X archive folder of its own, so the default (~/Downloads) and a real archive there are never read. The fake
 # exports hold no links to other sites, so no fetching happens.
@@ -18,6 +18,7 @@ trap 'rm -rf "$work"' EXIT
 fake=$work/repo
 mkdir -p "$fake" "$work/accounts/main" "$work/accounts/side" "$work/data"
 cp -R "$repo/tools" "$repo/importers" "$fake/"
+mkdir "$fake/extension" && cp "$repo/extension/links.js" "$fake/extension/"   # the drop-list filter loads its keyOf
 find "$fake" -name __pycache__ -prune -exec rm -rf {} +
 
 "$repo/tools/test-instagram-export.py" --write-fixture "$work/accounts/main/instagram-main"
@@ -52,6 +53,15 @@ check "...naming both accounts" test "$(count '(.url | test("AAA111")) and .acco
 check "...with the senders of both" test "$(count '(.url | test("BBB222")) and .senders == ["Me","Alice"]')" = 1
 check "origin survives the merge (account and thread on every record)" test "$(count '.account != null and (.thread | length) > 0')" = "$(count 'true')"
 check "origins files written per account" test -s "$work/data/link-dm-origins-main.jsonl" -a -s "$work/data/link-dm-origins-side.jsonl"
+
+# A link on the drop list is left out of the worklist, so it is never looked up (offline here, so nothing is fetched either way).
+print -r -- $'https://dropped.example/a\t2026-01-01\nhttps://kept.example/b\t2026-01-02' > "$work/data/link-inbox.tsv"
+print -r -- '{"at":"2026-01-03T00:00:00Z","key":"dropped.example/a","url":"https://dropped.example/a"}' > "$work/drops.jsonl"
+out_drop=$(DROP_LIST="$work/drops.jsonl" "$fake/tools/import-links.zsh" --offline --no-serve --no-open 2>&1) || true
+check "a link on the drop list is left out of the worklist" grep -q "1 links on the drop list left out of the worklist" <<< "$out_drop"
+out_keep=$("$fake/tools/import-links.zsh" --offline --no-serve --no-open 2>&1) || true
+check "...and only when the list names it" test -z "$(grep 'on the drop list' <<< "$out_keep" || true)"
+rm "$work/data/link-inbox.tsv"
 
 # An account in IG_ACCOUNTS with no export of its own is reported, not silently skipped.
 mkdir "$work/accounts/ghost"
