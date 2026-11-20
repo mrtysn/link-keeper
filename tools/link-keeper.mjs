@@ -12,7 +12,9 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { appendDrops, readDrops, readDropKeys } from "./drop-list.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FILTER_TAG = "filtered-out";
@@ -37,6 +39,12 @@ Reading
   agent-tags [--json]             links carrying agent tags (tags a Claude agent wrote, a layer apart from yours),
                                   then each agent tag with how many links carry it
   filter-rules                    the filtered-out rules, one per line
+  pile [--json] [--data-dir DIR] [--telegram result.json]
+                                  every link link-keeper holds plus every link the import found and link-keeper
+                                  does not hold (Telegram export, Instagram and X messages, the phone's share
+                                  inbox), one entry per link key: held, origins, capture, tags, suggestions;
+                                  links on the drop list that link-keeper does not hold are left out
+  drops [--json]                  the drop list: links dropped before they were saved, and its file
 
 Changing (needs Firefox running; each change is journaled)
   tag URL --add a,b | --remove a | --set a,b | --clear
@@ -51,6 +59,8 @@ Changing (needs Firefox running; each change is journaled)
                                   them in an "agent" row of outlined chips after yours
   tag-create NAME [--hue 0-359]   tag-rename OLD NEW   tag-delete NAME   tag-recolor NAME HUE
   add URL... [--note TEXT]        put links on the reading list
+  drop URL... [--dry-run]         put links on the drop list: the import skips them and pile leaves them out.
+                                  Needs no Firefox; DROP_LIST in config.local.sh, else link-drops.jsonl in DATA_DIR
   remove URL --stash ID | --list | --capture | --everywhere [--dry-run]
                                   one copy unless told otherwise; --capture also takes the list entry and the capture;
                                   everything removed waits 30 days in the Trash (Links page);
@@ -71,6 +81,13 @@ links --json and link --json carry key per link: the string the extension itself
 apart (extension/links.js keyOf), so "www." and trailing-slash spellings of one link share one key.
 Every removal, from the CLI or the pages, is appended to removals.jsonl in the state folder as it
 happens, one JSON line each: at, kind (list, capture, stash-tab), key, url, title, and stash for a tab.
+
+pile --json is {total, held, unheld, dropped, source, dataDir, files, schemeless, links}. Each link: key (as above), url,
+held, heldIn (tabs, import, list; held links only), date, title, tags (yours, without filtered-out), suggested
+[{tag, p, by}], filteredOut, origins [{source, thread, senders, accounts}], context (text typed beside it),
+capture {title, author, text, quote, links (inside the page), note, posted} or null. Held links carry the
+extension's own capture, else the importers' read of the page. Newest first. The import's files come from
+DATA_DIR (or --data-dir); --telegram names an export's result.json.
 
 A link shows [] for tags and, while it has suggestions, "suggested: tag 82%, …" after them; links --json
 carries them per link as suggested: [{tag, p, by}]. Agent tags show as "agent(haiku): a, b" and travel
@@ -96,6 +113,8 @@ function configValue(name) {
 }
 const stateDir = () => configValue("LINK_KEEPER_STATE_DIR") || path.join(os.homedir(), ".local/state/link-keeper");
 const backupDir = () => configValue("LINK_KEEPER_BACKUP_DIR");
+/* The drop list: DROP_LIST, else link-drops.jsonl beside the import's files (--data-dir, DATA_DIR, data/). */
+const dropFile = opt => configValue("DROP_LIST") || path.join(opt["data-dir"] || configValue("DATA_DIR") || path.join(REPO, "data"), "link-drops.jsonl");
 
 /* --- the live extension, or the backup ------------------------------------------------- */
 
@@ -384,6 +403,89 @@ const commands = {
   async "tag-rename"({ pos, opt }) { done(opt, await call("rename-tag", { from: need(pos[0], "old name"), to: need(pos[1], "new name") }), r => `renamed on ${r.links} links`); },
   async "tag-delete"({ pos, opt }) { done(opt, await call("delete-tag", { tag: need(pos[0], "tag name") }), r => `deleted from ${r.links} links`); },
   async "tag-recolor"({ pos, opt }) { done(opt, await call("recolor-tag", { tag: need(pos[0], "tag name"), hue: need(pos[1], "hue") }), () => "recolored"); },
+
+  async pile({ opt }) {
+    const d = await getData();
+    const dataDir = opt["data-dir"] || configValue("DATA_DIR") || path.join(REPO, "data");
+    const sourcesArgs = [path.join(REPO, "tools/link-pile-sources.py"), "--data-dir", dataDir, ...(opt.telegram ? ["--telegram", opt.telegram] : [])];
+    let sources;
+    try {
+      sources = JSON.parse(execFileSync("python3", sourcesArgs, { encoding: "utf8", maxBuffer: 1 << 30, stdio: ["ignore", "pipe", "pipe"] }));
+    } catch (e) {
+      throw new Error(`reading the import's files failed: ${String(e.stderr || e.message).trim().split("\n").pop()}`);
+    }
+    const captureIndex = new Map();
+    for (const c of sources.captures) {
+      const { url, source_url, status_id, ...view } = c;
+      for (const k of [keyOf(url), source_url && keyOf(source_url), status_id && `status:${status_id}`]) if (k) captureIndex.set(k, view);
+    }
+    const byKey = new Map();
+    const self = (key, links) => (links || []).filter(u => u && keyOf(u) !== key);
+    for (const l of d.links) {
+      const own = l.cap && !l.cap.thin ? {
+        title: l.cap.title || null, author: l.cap.handle || l.cap.name || null, text: l.cap.text || null,
+        links: self(l.key, l.cap.links), note: l.cap.note || null, posted: l.cap.posted || null } : null;
+      byKey.set(l.key, {
+        key: l.key, url: l.url, held: true, heldIn: l.sources, date: l.date || null, title: l.title || l.cap?.title || null,
+        tags: l.tags.filter(t => t !== FILTER_TAG), suggested: l.suggested || [], filteredOut: l.tags.includes(FILTER_TAG),
+        origins: [], context: "", capture: own, _origin: l.origin });
+    }
+    for (const r of sources.rows) {
+      const key = keyOf(r.url);
+      let e = byKey.get(key);
+      if (!e) {
+        e = { key, url: r.url, held: false, date: r.date || null, title: null, tags: [], suggested: [], filteredOut: false, origins: [], context: "", capture: null };
+        byKey.set(key, e);
+      }
+      if (r.date && !e.held && (!e.date || r.date < e.date)) e.date = r.date;
+      if (r.context && !e.context) e.context = r.context;
+      const same = e.origins.find(o => o.source === r.origin.source);
+      if (!same) e.origins.push({ ...r.origin });
+      else for (const f of ["thread", "senders", "accounts"]) same[f].push(...r.origin[f].filter(v => !same[f].includes(v)));
+    }
+    const drops = readDropKeys(dropFile(opt));
+    let dropped = 0;
+    const links = [];
+    for (const e of byKey.values()) {
+      if (!e.held && drops.has(e.key)) { dropped++; continue; }
+      const read = captureIndex.get(e.key);
+      if (!e.capture && read) e.capture = { ...read, links: self(e.key, read.links) };
+      if (e.capture && !e.capture.links?.length) delete e.capture.links;
+      if (e.capture) { for (const k of Object.keys(e.capture)) if (!e.capture[k]) delete e.capture[k]; }
+      if (e.capture && !Object.keys(e.capture).length) e.capture = null;
+      if (!e.title) e.title = e.capture?.title || null;
+      if (!e.origins.length && e._origin) {
+        e.origins.push({ source: "link-keeper", thread: e._origin.thread || [], senders: e._origin.senders || [], accounts: e._origin.account ? [e._origin.account] : [] });
+      }
+      delete e._origin;
+      links.push(e);
+    }
+    links.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const heldCount = links.filter(l => l.held).length;
+    note();
+    const pile = { total: links.length, held: heldCount, unheld: links.length - heldCount, dropped, source, dataDir: sources.dir, files: sources.files, schemeless: sources.schemeless, links };
+    if (opt.json) return json(pile);
+    out(`${pile.total} links: ${pile.held} held by link-keeper, ${pile.unheld} found by the import and not held${dropped ? `, ${dropped} on the drop list left out` : ""}`);
+    out(`from ${source}; import files in ${sources.dir}: ${sources.files.join(", ") || "none"}`);
+  },
+
+  async drop({ pos, opt }) {
+    if (!pos.length) throw new Error("missing URL");
+    const file = dropFile(opt);
+    const have = readDropKeys(file);
+    const fresh = [...new Set(pos.filter(u => !have.has(keyOf(u))))];
+    if (opt["dry-run"]) return opt.json ? json({ dryRun: true, file, would: fresh.length, already: pos.length - fresh.length })
+      : out(`dry run, nothing changed: would drop ${fresh.length}, ${pos.length - fresh.length} already on the drop list`);
+    const r = appendDrops(file, pos);
+    opt.json ? json({ ...r, file }) : out(`${r.added} dropped, ${r.already} already on the drop list`);
+  },
+
+  async drops({ opt }) {
+    const file = dropFile(opt);
+    const rows = readDrops(file);
+    if (opt.json) return json({ file, drops: rows });
+    out(`${rows.length} on the drop list (${file})`);
+  },
 
   async add({ pos, opt }) {
     if (!pos.length) throw new Error("missing URL");
