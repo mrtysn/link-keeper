@@ -89,7 +89,8 @@ Every removal, from the CLI or the pages, is appended to removals.jsonl in the s
 happens, one JSON line each: at, kind (list, capture, stash-tab), key, url, title, and stash for a tab.
 
 pile --json is {total, held, unheld, dropped, source, dataDir, files, schemeless, links}. Each link: key (as above), url,
-held, heldIn (tabs, import, list; held links only), date, title, tags (yours, without filtered-out), suggested
+held, heldIn (tabs, import, list; held links only), date, title, note (the one saved with it; an extracted
+link's reads "from <original>"), tags (yours, without filtered-out), suggested
 [{tag, p, by}], filteredOut, origins [{source, thread, senders, accounts}], context (text typed beside it),
 capture {title, author, text, quote, links (inside the page), note, posted} or null. Held links carry the
 extension's own capture, else the importers' read of the page. Newest first. The import's files come from
@@ -449,7 +450,7 @@ const commands = {
         title: l.cap.title || null, author: l.cap.handle || l.cap.name || null, text: l.cap.text || null,
         links: self(l.key, l.cap.links), note: l.cap.note || null, posted: l.cap.posted || null } : null;
       byKey.set(l.key, {
-        key: l.key, url: l.url, held: true, heldIn: l.sources, date: l.date || null, title: l.title || l.cap?.title || null,
+        key: l.key, url: l.url, held: true, heldIn: l.sources, date: l.date || null, title: l.title || l.cap?.title || null, note: l.note || null,
         tags: l.tags.filter(t => t !== FILTER_TAG), suggested: l.suggested || [], filteredOut: l.tags.includes(FILTER_TAG),
         origins: [], context: "", capture: own, _origin: l.origin });
     }
@@ -457,7 +458,7 @@ const commands = {
       const key = keyOf(r.url);
       let e = byKey.get(key);
       if (!e) {
-        e = { key, url: r.url, held: false, date: r.date || null, title: null, tags: [], suggested: [], filteredOut: false, origins: [], context: "", capture: null };
+        e = { key, url: r.url, held: false, date: r.date || null, title: null, note: null, tags: [], suggested: [], filteredOut: false, origins: [], context: "", capture: null };
         byKey.set(key, e);
       }
       if (r.date && !e.held && (!e.date || r.date < e.date)) e.date = r.date;

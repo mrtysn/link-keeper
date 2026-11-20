@@ -57,7 +57,7 @@ if kill -0 $run 2>/dev/null; then
   cli_check "extract" lk extract https://example.org/cli-from2 https://example.org/cli-to2
   cli_check "link shows the kept link with FROM's tag and the note" zsh -c "node '$here/link-keeper.mjs' link https://example.org/cli-to2 --json | grep -q 'from https://example.org/cli-from2' && node '$here/link-keeper.mjs' link https://example.org/cli-to2 --json | grep -q carried"
   cli_check "FROM left the pile" zsh -c "! node '$here/link-keeper.mjs' link https://example.org/cli-from2"
-  cli_check "pile --json lists the kept link" zsh -c "node '$here/link-keeper.mjs' pile --json --data-dir '$work/nodata' | grep -q 'cli-to2'"
+  cli_check "pile --json carries the kept link with its note" zsh -c "node '$here/link-keeper.mjs' pile --json --data-dir '$work/nodata' | grep -q '\"note\": \"from https://example.org/cli-from2\"'"
   cli_check "undo puts FROM back and takes TO out" zsh -c "node '$here/link-keeper.mjs' undo && node '$here/link-keeper.mjs' link https://example.org/cli-from2 && ! node '$here/link-keeper.mjs' link https://example.org/cli-to2"
   lk tag-create cli-done > /dev/null
 fi
