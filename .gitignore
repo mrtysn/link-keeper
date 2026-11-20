@@ -1,6 +1,7 @@
 # Captured data and its token never belong in the repo.
 link-captures.jsonl
 *.jsonl
+!tools/preview-pages/fixtures/*.jsonl
 *.token
 
 # This repo's own working data — the built-in default for DATA_DIR.
