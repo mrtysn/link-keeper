@@ -45,6 +45,7 @@ Reading
                                   inbox), one entry per link key: held, origins, capture, tags, suggestions;
                                   links on the drop list that link-keeper does not hold are left out
   drops [--json]                  the drop list: links dropped before they were saved, and its file
+  keys [--json]                   URLs on stdin, one per line, to their link keys: "URL<TAB>key" lines, or a JSON object
 
 Changing (needs Firefox running; each change is journaled)
   tag URL --add a,b | --remove a | --set a,b | --clear
@@ -478,6 +479,12 @@ const commands = {
       : out(`dry run, nothing changed: would drop ${fresh.length}, ${pos.length - fresh.length} already on the drop list`);
     const r = appendDrops(file, pos);
     opt.json ? json({ ...r, file }) : out(`${r.added} dropped, ${r.already} already on the drop list`);
+  },
+
+  async keys({ opt }) {
+    const urls = fs.readFileSync(0, "utf8").split("\n").map(u => u.trim()).filter(Boolean);
+    if (opt.json) return json(Object.fromEntries(urls.map(u => [u, keyOf(u)])));
+    for (const u of urls) out(`${u}\t${keyOf(u)}`);
   },
 
   async drops({ opt }) {

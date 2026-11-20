@@ -151,6 +151,15 @@ await check("an X status joins its capture whichever address it was saved under"
   assert(l.key === "status:777" && l.capture.text === "a tweet text" && l.capture.quote === "quoted words", JSON.stringify(l));
 });
 
+await check("keys maps urls on stdin to link keys", () => {
+  const r = spawnSync("node", [path.join(REPO, "tools/link-keeper.mjs"), "keys", "--json"], { env, input: `${YT_A}\n${REEL_B}\n\n`, encoding: "utf8" });
+  assert(r.status === 0, r.stderr);
+  const got = JSON.parse(r.stdout);
+  assert(got[YT_A] === "yt:abcdefghijk" && got[REEL_B] === "ig:AAA111", r.stdout);
+  const plain = spawnSync("node", [path.join(REPO, "tools/link-keeper.mjs"), "keys"], { env, input: `${PAGE}\n`, encoding: "utf8" });
+  assert(plain.stdout === `${PAGE}\t${keyOf(PAGE)}\n`, plain.stdout);
+});
+
 await check("a link with no capture has capture null", () => {
   assert(byUrl(pile(), YT_A).capture === null, "expected null");
 });
