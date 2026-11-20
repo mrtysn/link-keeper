@@ -51,10 +51,11 @@ Changing (needs Firefox running; each change is journaled)
                                   them in an "agent" row of outlined chips after yours
   tag-create NAME [--hue 0-359]   tag-rename OLD NEW   tag-delete NAME   tag-recolor NAME HUE
   add URL... [--note TEXT]        put links on the reading list
-  remove URL --stash ID | --list | --capture | --everywhere
+  remove URL --stash ID | --list | --capture | --everywhere [--dry-run]
                                   one copy unless told otherwise; --capture also takes the list entry and the capture;
                                   everything removed waits 30 days in the Trash (Links page);
-                                  with no flag, works only when the link is held in one place
+                                  with no flag, works only when the link is held in one place;
+                                  --dry-run says what would go and changes nothing (works from the backup too)
   stash-rename ID NAME
   stash-delete ID                 the whole stash, into the Trash
   filter-rules --add RULE | --remove RULE
@@ -65,6 +66,11 @@ Backups
   backup                          write latest.json now
   backups                         the backup files
   restore NAME                    replace the data with that file (the current state is saved first)
+
+links --json and link --json carry key per link: the string the extension itself uses to tell links
+apart (extension/links.js keyOf), so "www." and trailing-slash spellings of one link share one key.
+Every removal, from the CLI or the pages, is appended to removals.jsonl in the state folder as it
+happens, one JSON line each: at, kind (list, capture, stash-tab), key, url, title, and stash for a tab.
 
 A link shows [] for tags and, while it has suggestions, "suggested: tag 82%, …" after them; links --json
 carries them per link as suggested: [{tag, p, by}]. Agent tags show as "agent(haiku): a, b" and travel
@@ -155,7 +161,7 @@ function parse(argv) {
     if (!a.startsWith("--")) { pos.push(a); continue; }
     const name = a.slice(2);
     const flag = ["json", "text", "all", "untagged", "force", "list", "capture", "everywhere", "clear",
-      "lock", "unlock", "star", "unstar", "replace", "help"].includes(name);
+      "lock", "unlock", "star", "unstar", "replace", "dry-run", "help"].includes(name);
     const value = flag ? true : argv[++i];
     if (value === undefined) throw new Error(`--${name} needs a value`);
     if (name === "tag") (opt.tag ||= []).push(value);
@@ -242,7 +248,7 @@ const commands = {
     }).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     const shown = opt.all ? hits : hits.slice(0, +(opt.limit || 50));
     note();
-    if (opt.json) return json({ total: hits.length, links: shown.map(l => (opt.text ? l : { ...l, cap: l.cap && { ...l.cap, text: undefined, replies: undefined } })) });
+    if (opt.json) return json({ total: hits.length, links: shown.map(l => ({ ...(opt.text ? l : { ...l, cap: l.cap && { ...l.cap, text: undefined, replies: undefined } }), key: keyOf(l.url) })) });
     for (const l of shown) out(linkLine(l));
     if (shown.length < hits.length) out(`… ${hits.length - shown.length} more (--limit N or --all)`);
   },
@@ -251,7 +257,7 @@ const commands = {
     const d = await getData();
     const l = findLink(d, need(pos[0], "URL"));
     const names = new Map(d.stashes.map(s => [s.id, s]));
-    const view = { ...l, copies: l.copies.map(c => ({ ...c, stash_name: names.get(c.stash)?.name, stash_date: names.get(c.stash)?.created_at })) };
+    const view = { ...l, key: keyOf(l.url), copies: l.copies.map(c => ({ ...c, stash_name: names.get(c.stash)?.name, stash_date: names.get(c.stash)?.created_at })) };
     if (view.cap && !opt.text) view.cap = { ...view.cap, text: view.cap.text ? `${view.cap.text.length} characters (--text to show)` : null, replies: undefined };
     note();
     if (opt.json) return json(view);
@@ -389,7 +395,7 @@ const commands = {
   async remove({ pos, opt }) {
     const url = need(pos[0], "URL");
     const d = await getData();
-    if (source !== "live") throw new Error("Firefox is not running Link Keeper; changes need the live extension");
+    if (source !== "live" && !opt["dry-run"]) throw new Error("Firefox is not running Link Keeper; changes need the live extension");
     const l = findLink(d, url);
     const places = [...new Set(l.copies.map(c => c.stash))].map(s => `--stash ${s}`);
     if (l.list && !l.list.loose) places.push("--list");
@@ -402,6 +408,18 @@ const commands = {
     else if (places.length === 1) [stashIds, fromList, capture] = [l.copies.map(c => c.stash).slice(0, 1), places[0] === "--list", places[0] === "--capture"];
     else throw new Error(`${l.url} is held in ${places.length} places; say which: ${places.join(", ")}, or --everywhere`);
     const results = [];
+    if (opt["dry-run"]) {
+      const plan = stashIds.map(id => {
+        const all = l.copies.filter(c => c.stash === id).map(c => c.tab);
+        if (!all.length) throw new Error(`${l.url} is not in stash ${id}`);
+        return { stash: id, tabs: opt.everywhere ? all : all.slice(0, 1) };
+      });
+      const would = { key: keyOf(l.url), url: l.url, stashes: plan, list: fromList || capture, capture };
+      note();
+      if (opt.json) return json({ dryRun: true, ...would });
+      const parts = [...plan.map(p => `${p.tabs.length} from stash ${p.stash}`), ...(fromList || capture ? [capture ? "capture and list entry" : "list entry"] : [])];
+      return out(`dry run, nothing changed: would remove ${parts.join(", ")}`);
+    }
     for (const id of stashIds) {
       // Two tabs of one URL in a stash are two copies: one goes, unless --everywhere.
       const all = l.copies.filter(c => c.stash === id).map(c => c.tab);

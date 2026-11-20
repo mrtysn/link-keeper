@@ -57,4 +57,10 @@ fi
 wait $run && ff=0 || ff=$?
 run=""
 cat "$work/report"
+# The agent's removal of one stash copy, made in the script, is a line in the append-only removal log.
+if grep -q '"kind": "stash-tab".*example.org/s1' "$LINK_KEEPER_STATE_DIR/removals.jsonl" 2>/dev/null; then
+  print "ok   removals.jsonl holds the stash copy the agent removed"
+else
+  print "FAIL removals.jsonl lacks the stash copy the agent removed"; cli_failed=1
+fi
 (( ff == 0 && cli_failed == 0 ))

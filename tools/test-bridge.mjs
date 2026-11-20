@@ -328,6 +328,40 @@ await check("agents may send set-agent-tags, and the journal covers the key it w
   assert(keys.includes('"agentTags"'), "agentTags is not a journaled key");
 });
 
+await check("links --json and link --json carry key, the extension's own keyOf, a string per link", async () => {
+  const got = JSON.parse((await cli("links", "--json", "--all")).out);
+  assert(got.links.length && got.links.every(l => typeof l.key === "string" && l.key === LINKS.keyOf(l.url)), JSON.stringify(got.links.map(l => l.key)));
+  assert(new Set(got.links.map(l => l.key)).size === got.links.length, "two links share a key");
+  const one = JSON.parse((await cli("link", "https://www.example.org/a/", "--json")).out);
+  assert(one.key === LINKS.keyOf("https://example.org/a") && one.key === LINKS.keyOf("https://www.example.org/a/"), one.key);
+  const route = [LINKS.keyOf("https://mail.google.com/mail/u/0/#inbox/aaa"), LINKS.keyOf("https://mail.google.com/mail/u/0/#inbox/bbb"),
+    LINKS.keyOf("https://mail.google.com/mail/u/0/#frag")];
+  assert(route[0] !== route[1], "route fragments fold together");
+});
+
+await check("CLI remove --dry-run says what would go and sends nothing", async () => {
+  const before = sent.length;
+  const r = await cli("remove", "https://example.org/b", "--everywhere", "--dry-run");
+  assert(r.code === 0 && /dry run, nothing changed: would remove 1 from stash s1, capture and list entry/.test(r.out), r.out);
+  const j = JSON.parse((await cli("remove", "https://example.org/b", "--stash", "s1", "--dry-run", "--json")).out);
+  assert(j.dryRun === true && j.key === LINKS.keyOf("https://example.org/b") && JSON.stringify(j.stashes) === '[{"stash":"s1","tabs":["t2"]}]', JSON.stringify(j));
+  const refused = await cli("remove", "https://example.org/b", "--dry-run");
+  assert(refused.code === 1 && /2 places/.test(refused.out), refused.out);
+  const gone = await cli("remove", "https://example.org/nowhere", "--dry-run");
+  assert(gone.code === 1 && /not held/.test(gone.out), gone.out);
+  assert(sent.length === before, `a dry run sent ${sent.slice(before).map(m => m.type)}`);
+});
+
+await check("removal-log appends one line per removal, flushed, never rewritten", async () => {
+  const file = path.join(env.LINK_KEEPER_STATE_DIR, "removals.jsonl");
+  const r1 = (await host("removal-log", { entries: [{ at: "1", kind: "list", key: "k1", url: "https://example.org/a" }] })).result;
+  const r2 = (await host("removal-log", { entries: [{ at: "2", kind: "stash-tab", key: "k2", url: "https://example.org/b", stash: "s1" }, "junk"] })).result;
+  assert(r1.logged === 1 && r2.logged === 1, JSON.stringify([r1, r2]));
+  const lines = fs.readFileSync(file, "utf8").trim().split("\n").map(l => JSON.parse(l));
+  assert(lines.length === 2 && lines[0].kind === "list" && lines[1].stash === "s1", JSON.stringify(lines));
+  assert((fs.statSync(file).mode & 0o777) === 0o600, "the log is not private");
+});
+
 await check("CLI remove refuses a link held in two places unless told which", async () => {
   const r = await cli("remove", "https://example.org/b");
   assert(r.code === 1 && /2 places/.test(r.out) && /--stash s1/.test(r.out) && /--capture/.test(r.out), r.out);
