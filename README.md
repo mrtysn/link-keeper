@@ -54,6 +54,17 @@ the helper's state folder, one JSON line each (`at`, `kind`, `key`, `url`, `titl
 journal it is never trimmed or rewritten. `link-keeper remove URL ... --dry-run` says what would go and
 changes nothing, and `links --json` / `link --json` carry `key`, the add-on's own link key.
 
+**Keeping one link instead of another.** `link-keeper extract FROM TO` saves TO like `add` (on the
+reading list), gives it FROM's tags and the note "from FROM" (when TO is already saved, the tags and the
+note are merged into it, not duplicated), and moves FROM to the Trash. FROM goes as `remove` takes it:
+one copy, refused with the places named when FROM is held in several, unless `--stash ID`, `--list`,
+`--capture` or `--everywhere` says which. The whole step is one journaled change, so one `link-keeper
+undo` puts FROM back and takes TO (or what was merged into it) out again; the removal also lands in
+`removals.jsonl`. `--dry-run` says what would happen and changes nothing, and works from the backup.
+`--json` prints `{ok, from, to, saved ("added" or "merged"), tags (TO's, after), note, removed {stashes
+[{stash, tabs}], list, capture}, trashed, undo}`. `pile --json` and `link --json` then show TO with
+`note` "from FROM" and FROM held nowhere. Card mode's **Keep this instead** is the same step.
+
 ## After an export: one button
 
 Links → **Import** → **Import from exports**, with **Offline** ticked to read only the exports on
@@ -380,6 +391,12 @@ address, so capturing first makes a card worth looking at.
 
 Removing takes out only the copy the card stands for, into the Trash, and `⌘Z` puts it back on top.
 Skipping records nothing.
+
+When a captured page links to others (a post that points at a repo), the card lists up to four of
+those links, each with **Keep this instead**: it saves that link, gives it the card's tags and a note
+"from <the card's address>", and moves the card's copy to the Trash, as one step. The card is dealt
+away like a removal and `⌘Z` undoes the whole step. It has no key of its own, since a card can list
+several links.
 
 ### Stashing tabs
 
