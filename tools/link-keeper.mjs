@@ -62,6 +62,11 @@ Changing (needs Firefox running; each change is journaled)
   add URL... [--note TEXT]        put links on the reading list
   drop URL... [--dry-run]         put links on the drop list: the import skips them and pile leaves them out.
                                   Needs no Firefox; DROP_LIST in config.local.sh, else link-drops.jsonl in DATA_DIR
+  extract FROM TO [--stash ID | --list | --capture | --everywhere] [--dry-run]
+                                  keep TO instead of FROM: TO is saved like add (when it is already saved, the
+                                  tags and note merge into it), gets FROM's tags and the note "from <FROM>", and
+                                  FROM goes to the Trash: one copy unless told otherwise, as remove; one undo
+                                  puts all of it back. --dry-run says what would happen and changes nothing
   remove URL --stash ID | --list | --capture | --everywhere [--dry-run]
                                   one copy unless told otherwise; --capture also takes the list entry and the capture;
                                   everything removed waits 30 days in the Trash (Links page);
@@ -225,6 +230,23 @@ function findLink(data, url) {
   const link = data.links.find(l => l.key === keyOf(url));
   if (!link) throw new Error(`${url} is not held anywhere`);
   return link;
+}
+
+/* Which copies of a link a removal takes: one place unless told otherwise, refused when the link is held
+ * in several and no flag says which. Shared by remove and extract. */
+function removalPlan(l, opt) {
+  const places = [...new Set(l.copies.map(c => c.stash))].map(s => `--stash ${s}`);
+  if (l.list && !l.list.loose) places.push("--list");
+  if (l.cap) places.push("--capture");
+  let stashIds = [], fromList = false, capture = false;
+  if (opt.everywhere) { stashIds = [...new Set(l.copies.map(c => c.stash))]; fromList = !!l.list; capture = !!l.cap; }
+  else if (opt.stash) stashIds = [opt.stash];
+  else if (opt.list) fromList = true;
+  else if (opt.capture) capture = true;
+  else if (places.length === 1) [stashIds, fromList, capture] = [l.copies.map(c => c.stash).slice(0, 1), places[0] === "--list", places[0] === "--capture"];
+  else if (!places.length) throw new Error(`${l.url} is held nowhere that can be removed`);
+  else throw new Error(`${l.url} is held in ${places.length} places; say which: ${places.join(", ")}, or --everywhere`);
+  return { stashIds, fromList, capture };
 }
 
 /* --- commands ------------------------------------------------------------------------------ */
@@ -501,21 +523,39 @@ const commands = {
       r => `${r.added} added, ${r.skipped + r.updated} already on the list`);
   },
 
+  async extract({ pos, opt }) {
+    const from = need(pos[0], "FROM URL"), to = need(pos[1], "TO URL");
+    if (pos.length > 2) throw new Error("extract takes two links: FROM, the one that goes to the Trash, and TO, the one to keep");
+    if (keyOf(from) === keyOf(to)) throw new Error("FROM and TO are the same link");
+    const d = await getData();
+    if (source !== "live" && !opt["dry-run"]) throw new Error("Firefox is not running Link Keeper; changes need the live extension");
+    const l = findLink(d, from);
+    const { stashIds, fromList, capture } = removalPlan(l, opt);
+    const stashes = stashIds.map(id => {
+      const all = l.copies.filter(c => c.stash === id).map(c => c.tab);
+      if (!all.length) throw new Error(`${l.url} is not in stash ${id}`);
+      return { id, ids: opt.everywhere ? all : all.slice(0, 1) };
+    });
+    const target = d.links.find(x => x.key === keyOf(to));
+    const tags = [...new Set([...(target?.tags || []), ...l.tags.filter(t => t !== FILTER_TAG)])];
+    const plan = { from: l.url, to, saved: target ? "merged" : "added", tags, note: `from ${l.url}`,
+      removed: { stashes: stashes.map(s => ({ stash: s.id, tabs: s.ids.length })), list: fromList || capture, capture } };
+    if (opt["dry-run"]) {
+      note();
+      if (opt.json) return json({ dryRun: true, ...plan });
+      return out(`dry run, nothing changed: would ${target ? "merge the tags and note into" : "save"} ${to} and move ${l.url} to the Trash`);
+    }
+    const res = await call("extract", { from: l.url, to, stashes, list: fromList, capture });
+    if (opt.json) return json(res);
+    out(`${res.saved === "added" ? "saved" : "merged into"} ${to} (tags: ${res.tags.join(", ") || "none"}; note "${res.note}"); ${l.url} is in the Trash; link-keeper undo puts it all back`);
+  },
+
   async remove({ pos, opt }) {
     const url = need(pos[0], "URL");
     const d = await getData();
     if (source !== "live" && !opt["dry-run"]) throw new Error("Firefox is not running Link Keeper; changes need the live extension");
     const l = findLink(d, url);
-    const places = [...new Set(l.copies.map(c => c.stash))].map(s => `--stash ${s}`);
-    if (l.list && !l.list.loose) places.push("--list");
-    if (l.cap) places.push("--capture");
-    let stashIds = [], fromList = false, capture = false;
-    if (opt.everywhere) { stashIds = [...new Set(l.copies.map(c => c.stash))]; fromList = !!l.list; capture = !!l.cap; }
-    else if (opt.stash) stashIds = [opt.stash];
-    else if (opt.list) fromList = true;
-    else if (opt.capture) capture = true;
-    else if (places.length === 1) [stashIds, fromList, capture] = [l.copies.map(c => c.stash).slice(0, 1), places[0] === "--list", places[0] === "--capture"];
-    else throw new Error(`${l.url} is held in ${places.length} places; say which: ${places.join(", ")}, or --everywhere`);
+    const { stashIds, fromList, capture } = removalPlan(l, opt);
     const results = [];
     if (opt["dry-run"]) {
       const plan = stashIds.map(id => {

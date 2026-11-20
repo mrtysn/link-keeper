@@ -58,6 +58,52 @@ await check("an agent's removal of one stash copy is undone into its place", asy
   if (after?.tabs.map(t => t.url).join() !== "https://example.org/s1,https://example.org/s2") throw new Error(after?.tabs.map(t => t.url).join());
 });
 
+await check("extract saves TO with FROM's tags and a note, trashes FROM's copy, and one undo reverses all of it", async () => {
+  const TO = "https://example.org/kept";
+  const stashNow = async () => (await getSessions()).find(s => s.id === made.id);
+  const tab = (await stashNow()).tabs.find(t => t.url === "https://example.org/s2");
+  await setTags("https://example.org/s2", ["from-tag"]);
+  const trashBefore = (await getTrash()).length;
+  const wrong = await agentRequest("call", { message: { type: "extract", from: "https://example.org/s2", to: TO, stashes: [{ id: made.id, ids: ["no-such-tab"] }] } });
+  if (wrong.ok || (await getLinks()).links.some(l => l.url === TO)) throw new Error(`a bad plan changed something: ${JSON.stringify(wrong)}`);
+  const res = await agentRequest("call", { message: { type: "extract", from: "https://example.org/s2", to: TO, stashes: [{ id: made.id, ids: [tab.id] }] } });
+  if (!res.ok || res.saved !== "added" || res.tags.join() !== "from-tag" || !res.undo || res.trashed.length !== 1) throw new Error(JSON.stringify(res));
+  let links = (await getLinks()).links;
+  const kept = links.find(l => l.url === TO);
+  if (!kept || kept.tags.join() !== "from-tag" || kept.note !== "from https://example.org/s2" || !kept.copies.length) throw new Error(JSON.stringify(kept));
+  if (links.find(l => l.url === "https://example.org/s2")?.copies.length) throw new Error("FROM is still in the stash");
+  if ((await getTrash()).length !== trashBefore + 1) throw new Error("FROM is not in the Trash");
+  const u = await agentRequest("undo", {});
+  if (!u.ok || u.undone !== "extract" || u.putBack !== 1) throw new Error(JSON.stringify(u));
+  links = (await getLinks()).links;
+  if (links.some(l => l.url === TO)) throw new Error("TO is still saved after undo");
+  if (!(await stashNow()).tabs.some(t => t.url === "https://example.org/s2")) throw new Error("FROM did not come back");
+  if ((await getTrash()).length !== trashBefore) throw new Error("undo left FROM in the Trash");
+  if ((await tagsOf(TO)).length) throw new Error("TO kept FROM's tags after undo");
+  await setTags("https://example.org/s2", []);
+});
+
+await check("extract into a link that is already saved merges tags and note, and undo restores them", async () => {
+  const TO = "https://example.org/listed";
+  await setTags(TO, ["mine"]);
+  await setTags("https://example.org/s1", ["carried", "mine"]);
+  const stash = (await getSessions()).find(s => s.id === made.id);
+  const tab = stash.tabs.find(t => t.url === "https://example.org/s1");
+  const before = (await getSessions()).flatMap(s => s.tabs).length;
+  const res = await agentRequest("call", { message: { type: "extract", from: "https://example.org/s1", to: TO, stashes: [{ id: made.id, ids: [tab.id] }] } });
+  if (!res.ok || res.saved !== "merged" || res.tags.join() !== "mine,carried") throw new Error(JSON.stringify(res));
+  const link = (await getLinks()).links.find(l => l.url === TO);
+  if (link.note !== "from https://example.org/s1" || link.tags.join() !== "mine,carried") throw new Error(JSON.stringify([link.note, link.tags]));
+  if ((await getSessions()).flatMap(s => s.tabs).length !== before - 1) throw new Error("TO was saved twice, or FROM stayed");
+  const again = await agentRequest("call", { message: { type: "extract", from: "https://example.org/s1", to: TO, list: true } });
+  if (again.ok) throw new Error("a link not on the reading list was taken from it");
+  const u = await agentRequest("undo", {});
+  if (!u.ok || (await getLinks()).links.find(l => l.url === TO).note) throw new Error(JSON.stringify(u));
+  if ((await tagsOf(TO)).join() !== "mine") throw new Error(`TO's tags ${await tagsOf(TO)}`);
+  await setTags(TO, []);
+  await setTags("https://example.org/s1", []);
+});
+
 await check("undo refuses to overwrite a change made after the agent's, unless forced", async () => {
   await agentRequest("call", { message: { type: "set-tags", url: CAP, tags: ["agent"] } });
   await setTags(CAP, ["by-hand"]);

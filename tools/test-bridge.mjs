@@ -107,6 +107,7 @@ function answer(m) {
       }
       result = { ok: true, count: Object.keys(storage.agentTags).length };
     }
+    else if (msg.type === "extract") result = { ok: true, from: msg.from, to: msg.to, saved: "added", tags: ["ai"], note: `from ${msg.from}`, removed: { stashes: msg.stashes.map(x => ({ stash: x.id, tabs: x.ids.length })), list: !!msg.list, capture: !!msg.capture }, trashed: [] };
     else if (msg.type === "delete-stash") result = { ok: true, removed: msg.ids.length };
     else if (msg.type === "filter-rules") result = { rules: ["reddit.com"] };
     else result = { ok: true };
@@ -377,6 +378,40 @@ await check("CLI remove takes a link held in one place without a flag", async ()
   assert(sent.at(-1).type === "delete-stash" && sent.at(-1).ids[0] === "t1", JSON.stringify(sent.at(-1)));
 });
 
+await check("CLI extract --dry-run says what would change and sends nothing", async () => {
+  const before = sent.length;
+  const r = await cli("extract", "https://example.org/c", "https://github.com/a/b", "--dry-run");
+  assert(r.code === 0 && /dry run, nothing changed: would save https:\/\/github.com\/a\/b and move https:\/\/example.org\/c to the Trash/.test(r.out), r.out);
+  const j = JSON.parse((await cli("extract", "https://example.org/b", "https://example.org/a", "--stash", "s1", "--dry-run", "--json")).out);
+  assert(j.dryRun === true && j.saved === "merged" && j.tags.includes("ai") && j.note === "from https://example.org/b", JSON.stringify(j));
+  assert(JSON.stringify(j.removed) === '{"stashes":[{"stash":"s1","tabs":1}],"list":false,"capture":false}', JSON.stringify(j.removed));
+  assert(sent.length === before, `a dry run sent ${sent.slice(before).map(m => m.type)}`);
+});
+
+await check("CLI extract refuses a FROM held in two places, the same link twice, and a third link", async () => {
+  const before = sent.length;
+  const held = await cli("extract", "https://example.org/b", "https://github.com/a/b");
+  assert(held.code === 1 && /2 places/.test(held.out) && /--stash s1/.test(held.out), held.out);
+  const same = await cli("extract", "https://example.org/b", "https://www.example.org/b/");
+  assert(same.code === 1 && /same link/.test(same.out), same.out);
+  const three = await cli("extract", "https://example.org/c", "https://github.com/a/b", "https://x.org");
+  assert(three.code === 1 && /two links/.test(three.out), three.out);
+  const none = await cli("extract", "https://example.org/nowhere", "https://github.com/a/b");
+  assert(none.code === 1 && /not held/.test(none.out), none.out);
+  assert(sent.length === before, "a refusal sent something");
+});
+
+await check("CLI extract sends one extract message naming the copy that goes", async () => {
+  const r = await cli("extract", "https://example.org/c", "https://github.com/a/b");
+  assert(r.code === 0 && /saved https:\/\/github.com\/a\/b/.test(r.out) && /undo puts it all back/.test(r.out), r.out);
+  const msg = sent.at(-1);
+  assert(msg.type === "extract" && msg.from === "https://example.org/c" && msg.to === "https://github.com/a/b"
+    && JSON.stringify(msg.stashes) === '[{"id":"s1","ids":["t1"]}]' && !msg.list && !msg.capture, JSON.stringify(msg));
+  const w = await cli("extract", "https://example.org/b", "https://github.com/a/b", "--capture", "--json");
+  assert(w.code === 0 && JSON.parse(w.out).removed.capture === true, w.out);
+  assert(sent.at(-1).type === "extract" && sent.at(-1).capture === true && sent.at(-1).stashes.length === 0, JSON.stringify(sent.at(-1)));
+});
+
 await check("with the bridge gone, the CLI reads the latest backup and refuses changes", async () => {
   await host("backup", { reason: "change", data: backupData() });
   bridge.stdin.end();
@@ -395,6 +430,10 @@ await check("with the bridge gone, the CLI reads the latest backup and refuses c
   assert(ag.code === 0 && ag.out.includes("2 links with agent tags") && /from the backup of/.test(ag.out), ag.out);
   const w = await cli("tag", "https://example.org/b", "--add", "x");
   assert(w.code === 1 && /not running/.test(w.out), w.out);
+  const x = await cli("extract", "https://example.org/c", "https://github.com/a/b");
+  assert(x.code === 1 && /not running/.test(x.out), x.out);
+  const xd = await cli("extract", "https://example.org/c", "https://github.com/a/b", "--dry-run");
+  assert(xd.code === 0 && /dry run/.test(xd.out), xd.out);
 });
 
 await check("a failure an older reader recorded is tried again; a wall, and one the current reader recorded, stay failures", async () => {

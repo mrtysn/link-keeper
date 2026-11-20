@@ -51,6 +51,14 @@ if kill -0 $run 2>/dev/null; then
   cli_check "suggest-set" lk suggest-set "$work/suggestions.json"
   cli_check "suggestions counts the link with no tags of its own" zsh -c "node '$here/link-keeper.mjs' suggestions | grep -q '^1 links with suggestions'"
   cli_check "tabs stay out of reach" zsh -c "! node '$here/link-keeper.mjs' call stash"
+  lk add https://example.org/cli-from2 > /dev/null
+  lk tag https://example.org/cli-from2 --add carried > /dev/null
+  cli_check "extract --dry-run" zsh -c "node '$here/link-keeper.mjs' extract https://example.org/cli-from2 https://example.org/cli-to2 --dry-run | grep -q 'would save'"
+  cli_check "extract" lk extract https://example.org/cli-from2 https://example.org/cli-to2
+  cli_check "link shows the kept link with FROM's tag and the note" zsh -c "node '$here/link-keeper.mjs' link https://example.org/cli-to2 --json | grep -q 'from https://example.org/cli-from2' && node '$here/link-keeper.mjs' link https://example.org/cli-to2 --json | grep -q carried"
+  cli_check "FROM left the pile" zsh -c "! node '$here/link-keeper.mjs' link https://example.org/cli-from2"
+  cli_check "pile --json lists the kept link" zsh -c "node '$here/link-keeper.mjs' pile --json --data-dir '$work/nodata' | grep -q 'cli-to2'"
+  cli_check "undo puts FROM back and takes TO out" zsh -c "node '$here/link-keeper.mjs' undo && node '$here/link-keeper.mjs' link https://example.org/cli-from2 && ! node '$here/link-keeper.mjs' link https://example.org/cli-to2"
   lk tag-create cli-done > /dev/null
 fi
 
@@ -62,5 +70,10 @@ if grep -q '"kind": "stash-tab".*example.org/s1' "$LINK_KEEPER_STATE_DIR/removal
   print "ok   removals.jsonl holds the stash copy the agent removed"
 else
   print "FAIL removals.jsonl lacks the stash copy the agent removed"; cli_failed=1
+fi
+if grep -q '"kind": "stash-tab".*example.org/cli-from2' "$LINK_KEEPER_STATE_DIR/removals.jsonl" 2>/dev/null; then
+  print "ok   removals.jsonl holds the copy extract moved to the Trash"
+else
+  print "FAIL removals.jsonl lacks the copy extract moved to the Trash"; cli_failed=1
 fi
 (( ff == 0 && cli_failed == 0 ))

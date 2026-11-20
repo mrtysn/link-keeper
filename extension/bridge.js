@@ -193,7 +193,7 @@ async function bridgeStatus() {
 const AGENT_READS = new Set(["status", "page-info", "filter-rules", "link-counts", "sessions", "links", "export",
   "export-list", "stash-settings", "get-folder", "capture-queue-status"]);
 const AGENT_WRITES = new Set(["set-tags", "set-tag-suggestions", "set-agent-tags", "tag-stash", "rename-tag", "delete-tag", "create-tag", "recolor-tag",
-  "add", "remove", "restore-items", "rename-stash", "delete-stash", "move-stashed",
+  "add", "extract", "remove", "restore-items", "rename-stash", "delete-stash", "move-stashed",
   "put-back", "set-filter-rules", "filter-out-page", "import-captures", "import-stashes",
   "set-stash-settings", "toggle-excluded", "set-folder", "set-capture-fails"]);
 // What an agent's change can touch in storage; the journal keeps the ones it did.
@@ -302,6 +302,8 @@ async function journaled(msg) {
       summary: [Object.keys(hashes).join(", "), removed.size && "stash tabs removed", added.length && "stash tabs added",
         moved.length && "stash tabs moved", renamed.length && "stashes renamed"].filter(Boolean).join("; "),
       storage, absent, hashes, stashes: { removed: [...removed.values()], added, addedFolders, moved, renamed },
+      // What the change put in the Trash: undo takes it out again as it puts the links back.
+      trashed: Array.isArray(result?.trashed) ? result.trashed : [],
     };
     const saved = await hostCall("journal-push", { entry });
     return { ...result, undo: saved.ok ? "link-keeper undo" : `not journaled: ${saved.error}` };
@@ -330,6 +332,7 @@ async function agentUndo(force) {
   for (const { id, title } of st.renamed) await browser.bookmarks.update(id, { title }).catch(() => {});
   let back = 0;
   for (const { stash, tabs } of st.removed) back += (await putBack(stash, tabs)).ids?.length || 0;
+  if (e.trashed?.length) await deleteFromTrash(e.trashed);
   await hostCall("journal-drop", { entry_id: last.id });
   return { ok: true, undone: e.cmd, at: e.at, summary: e.summary, putBack: back };
 }

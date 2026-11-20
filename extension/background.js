@@ -2592,6 +2592,64 @@ function describeGrab(res) {
 
 /* --- messaging ------------------------------------------------------------------ */
 
+/* Keep link `to` instead of link `from`: `to` is saved like an add, carries `from`'s tags and a
+ * note "from <from>" (merged into what `to` already has when it is saved), and the copies of `from`
+ * the plan names go to the Trash. The plan is { stashes: [{ id, ids }], list, capture }: the same
+ * places the CLI's remove names. Everything is checked before anything changes. */
+const joinNote = (old, add) => (!old ? add : old.split("\n").includes(add) ? old : `${old}\n${add}`);
+
+async function extractLink(msg) {
+  const from = String(msg.from || "").trim(), to = String(msg.to || "").trim();
+  if (!from || !to) return { ok: false, error: "extract needs the link to leave and the link to keep" };
+  const fk = keyOf(from), tk = keyOf(to);
+  if (fk === tk) return { ok: false, error: "the two links are the same link" };
+  const stashPlan = Array.isArray(msg.stashes) ? msg.stashes : [];
+  const sessions = await getSessions();
+  for (const p of stashPlan) {
+    const s = sessions.find(x => x.id === p.id);
+    const copies = s ? s.tabs.filter(t => keyOf(t.url) === fk).map(t => t.id) : [];
+    if (!s || !Array.isArray(p.ids) || !p.ids.length || p.ids.some(id => !copies.includes(id))) return { ok: false, error: `${from} is not in stash ${p.id} as named` };
+  }
+  const items = await getItems();
+  if (msg.list && !msg.capture && !items.some(i => keyOf(i.url) === fk)) return { ok: false, error: `${from} is not on the reading list` };
+  if (!stashPlan.length && !msg.list && !msg.capture) return { ok: false, error: "say which copy of the link to move to the Trash" };
+
+  const note = `from ${from}`;
+  const fromTags = ((await read("linkTags", {}))[fk] || []).filter(t => t !== FILTER_TAG);
+  const onList = items.find(i => keyOf(i.url) === tk);
+  const tab = sessions.flatMap(s => s.tabs).find(t => keyOf(t.url) === tk);
+  let saved;
+  if (onList) {
+    onList.note = joinNote(onList.note, note);
+    await setItems(items);
+    saved = "merged";
+  } else if (tab) {
+    await editMeta(m => { m.tabs[tab.id] = { ...(m.tabs[tab.id] || {}), note: joinNote(m.tabs[tab.id]?.note || tab.note, note) }; });
+    saved = "merged";
+  } else {
+    const res = await addItems([{ url: to, saved_at: new Date().toISOString() }], note, dayGroup());
+    if (!res.ok) return res;
+    saved = "added";
+  }
+  const tags = fromTags.length
+    ? await editTags(all => { all[tk] = tagList([...(all[tk] || []), ...fromTags]); return all[tk]; })
+    : (await read("linkTags", {}))[tk] || [];
+
+  const trashed = [], removed = { stashes: [], list: false, capture: false };
+  for (const p of stashPlan) {
+    const r = await handleMessage({ type: "delete-stash", id: p.id, ids: p.ids });
+    trashed.push(...(r.trashed || []));
+    removed.stashes.push({ stash: p.id, tabs: r.removed });
+  }
+  if (msg.list || msg.capture) {
+    const r = await handleMessage({ type: "remove", urls: [from], alsoCaptures: !!msg.capture });
+    trashed.push(...(r.trashed || []));
+    removed.list = true;
+    removed.capture = !!msg.capture;
+  }
+  return { ok: true, from, to, saved, tags, note, removed, trashed };
+}
+
 /* Every page's requests, and the agents' through the bridge (bridge.js), which may send only some. */
 async function handleMessage(msg) {
   switch (msg.type) {
@@ -2882,6 +2940,9 @@ async function handleMessage(msg) {
     case "add":
       // A page's batch (a paste, a refresh's queue) names its own group; anything else joins the day's.
       return addItems(msg.urls, msg.note, msg.group?.name ? { name: String(msg.group.name).slice(0, 200), group_key: msg.group.key ? String(msg.group.key) : undefined } : dayGroup());
+
+    case "extract":
+      return extractLink(msg);
 
     case "queue-active": {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
