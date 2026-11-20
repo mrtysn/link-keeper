@@ -104,6 +104,29 @@ await check("extract into a link that is already saved merges tags and note, and
   await setTags("https://example.org/s1", []);
 });
 
+await check("a page's extract can be undone by extract-undo: the saved link goes and a merged one gets its note and tags back", async () => {
+  const stash = (await getSessions()).find(s => s.id === made.id);
+  const tab = stash.tabs.find(t => t.url === "https://example.org/s2");
+  await setTags("https://example.org/s2", ["page-tag"]);
+  const added = await handleMessage({ type: "extract", from: "https://example.org/s2", to: "https://example.org/page-kept", stashes: [{ id: made.id, ids: [tab.id] }] });
+  if (!added.ok || added.saved !== "added" || !added.before.made) throw new Error(JSON.stringify(added));
+  await handleMessage({ type: "extract-undo", to: "https://example.org/page-kept", saved: added.saved, before: added.before });
+  if ((await getLinks()).links.some(l => l.url === "https://example.org/page-kept")) throw new Error("the saved link stayed");
+  if ((await tagsOf("https://example.org/page-kept")).length) throw new Error("its tags stayed");
+  await putBack({ id: made.id }, [{ url: "https://example.org/s2", title: "S2", index: 1 }]);
+  await deleteFromTrash(added.trashed);
+  const listed = "https://example.org/listed";
+  const stash2 = (await getSessions()).find(s => s.id === made.id);
+  const merged = await handleMessage({ type: "extract", from: "https://example.org/s2", to: listed, stashes: [{ id: made.id, ids: [stash2.tabs.find(t => t.url === "https://example.org/s2").id] }] });
+  if (merged.saved !== "merged" || (await getLinks()).links.find(l => l.url === listed).note !== "from https://example.org/s2") throw new Error(JSON.stringify(merged));
+  await handleMessage({ type: "extract-undo", to: listed, saved: merged.saved, before: merged.before });
+  if ((await getLinks()).links.find(l => l.url === listed).note) throw new Error("the note stayed");
+  if ((await tagsOf(listed)).join()) throw new Error("the tags stayed");
+  await putBack({ id: made.id }, [{ url: "https://example.org/s2", title: "S2", index: 1 }]);
+  await deleteFromTrash(merged.trashed);
+  await setTags("https://example.org/s2", []);
+});
+
 await check("undo refuses to overwrite a change made after the agent's, unless forced", async () => {
   await agentRequest("call", { message: { type: "set-tags", url: CAP, tags: ["agent"] } });
   await setTags(CAP, ["by-hand"]);

@@ -156,6 +156,36 @@ const key = async (p, k) => { await p.keyboard.press(k); await p.waitForTimeout(
   ok(!p.errs.length, "cards: no errors " + p.errs.join("; "));
   await p.close();
 }
+// Cards: "Keep this instead" on a link inside the card's page keeps that link and moves the card to the Trash
+{
+  const p = await page("list.html?group=stash&cards");
+  const href = () => p.$eval(".cm-card.top .cm-open", e => e.href);
+  const removed = () => p.$eval(".cm-tally", e => e.textContent.match(/removed (\d+)/)[1]);
+  const link = url => p.evaluate(async u => (await browser.runtime.sendMessage({ type: "links" })).links.find(l => l.url === u) || null, url);
+  let found = false;
+  for (let i = 0; i < 40 && !(found = !!(await p.$(".cm-card.top .cm-inner button"))); i++) await key(p, "s");
+  ok(found, "extract: a card whose page links to others lists them, each with Keep this instead");
+  if (found) {
+    const from = await href();
+    const to = await p.$eval(".cm-card.top .cm-inner .cm-url", e => e.title);
+    const tagsFrom = (await link(from)).tags;
+    const placesOf = l => (l ? l.copies.length + (l.list && !l.list.loose ? 1 : 0) : 0);
+    const placesBefore = placesOf(await link(from));
+    await p.screenshot({ path: process.env.EXTRACT_SHOT || "/dev/null" }).catch(() => {});
+    await p.click(".cm-card.top .cm-inner button"); await p.waitForTimeout(700);
+    const kept = await link(to), gone = await link(from);
+    ok((await href()) !== from && (await removed()) === "1", `extract: the card is dealt away like a removal (${await msg(p)})`);
+    ok(kept && kept.note === `from ${from}` && tagsFrom.every(t => kept.tags.includes(t)), `extract: the kept link carries the original's tags and the note (${JSON.stringify(kept && [kept.note, kept.tags])})`);
+    ok(placesOf(gone) === placesBefore - 1, `extract: one copy of the original is gone, as a removal takes one (${placesBefore} places before, ${placesOf(gone)} after)`);
+    ok(await p.evaluate(async () => (await browser.runtime.sendMessage({ type: "trash-list" })).entries.length) >= 1, "extract: the original waits in the Trash");
+    await key(p, "Meta+z"); await p.waitForTimeout(500);
+    const back = await link(from);
+    ok((await href()) === from && (await removed()) === "0" && !(await link(to)) && back && (back.copies.length || back.list), "extract: undo brings the card back and takes the kept link out again");
+    ok(!p.errs.length, "extract: no errors " + p.errs.join("; "));
+  }
+  await p.close();
+}
+
 // Stored suggestions: dimmed chips with their source, F accepts them and deals the next card
 {
   const p = await page("list.html?group=stash&cards&suggest");

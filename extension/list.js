@@ -541,7 +541,7 @@ LinkActions.setup({
   tagNext: () => { walk(1); onRow("tags")(); },
   // A removal shows at once: its row dims and the Remove button says so, until the reload redraws them.
   before(cmd, target, opts) {
-    if (cmd !== "remove") return;
+    if (cmd !== "remove" && cmd !== "extract") return;
     const stash = opts.fromList ? null : target.stash || LinkActions.copyOf?.(target)?.stash || null;
     for (const r of rowsOnPage) {
       if (r.target.link.key === target.link.key && (r.target.stash?.id || null) === (stash?.id || null)) r.li.classList.add("leaving");
@@ -557,20 +557,20 @@ LinkActions.setup({
     if (cmd === "tags") paintCounts(countLinks(data.links, data.filteredLinks));
     if (res.ok === false) { if (cmd === "remove") render(); return; }
     // In card mode, accepting a card's suggested tags deals the next card, as removing does.
-    const leaves = ["move", "remove", ...(cardMode ? ["accept"] : [])].includes(cmd);
+    const leaves = ["move", "remove", "extract", ...(cardMode ? ["accept"] : [])].includes(cmd);
     const i = cursorAt();
     if (i !== -1 && rowsOnPage[i].target.link.key === target?.link.key && (leaves || (cmd === "read" && ["out", "failed"].includes(bar.captured)))) {
       const next = cardMode ? cardAfter(rowsOnPage[i]) : rowsOnPage[i + 1] || rowsOnPage[i - 1];
       if (next) cursorId = next.id;
-      if (cardMode && cmd === "remove") cardTally.removed++;
+      if (cardMode && (cmd === "remove" || cmd === "extract")) cardTally.removed++;
       if (cardMode && leaves) {
         const gk = groupKey(groupOf(rowsOnPage[i]));
         groupTally(gk).gone++;
         cardLeftFrom.set(target.link.key, gk);
       }
     }
-    if (cmd === "undo" && res.cmd === "remove") cardTally.removed = Math.max(0, cardTally.removed - 1);
-    if (cmd === "undo" && ["remove", "accept", "move"].includes(res.cmd) && cardLeftFrom.has(target?.link.key)) {
+    if (cmd === "undo" && ["remove", "extract"].includes(res.cmd)) cardTally.removed = Math.max(0, cardTally.removed - 1);
+    if (cmd === "undo" && ["remove", "extract", "accept", "move"].includes(res.cmd) && cardLeftFrom.has(target?.link.key)) {
       const t = groupTally(cardLeftFrom.get(target.link.key));
       t.gone = Math.max(0, t.gone - 1);
       cardLeftFrom.delete(target.link.key);
@@ -578,7 +578,7 @@ LinkActions.setup({
     if (res.local) render();
     else await load();
     // In card mode an undone removal or accept comes back on top, where it was dealt.
-    if (cardMode && cmd === "undo" && ["remove", "accept"].includes(res.cmd) && target) {
+    if (cardMode && cmd === "undo" && ["remove", "extract", "accept"].includes(res.cmd) && target) {
       const back = rowsOnPage.find(r => r.target.link.key === target.link.key && (!target.stash || r.target.stash?.id === target.stash.id));
       if (back) cursorId = back.id;
     }
@@ -1543,6 +1543,12 @@ async function cardRemove() {
   LinkActions.run("remove", row.target);
 }
 
+/* "Keep this instead" on a link inside the card's page: the card goes as a removal does, and the link is kept. */
+async function cardExtract(row, to) {
+  await cardFly(-1);
+  LinkActions.run("extract", row.target, { to });
+}
+
 function setCardMode(on) {
   cardMode = on;
   setPref(CARDS_KEY, on);
@@ -1571,6 +1577,17 @@ function cardEl(row, top) {
   if (body && !(labelOf(link) || "").includes(body.slice(0, 40))) card.append(el("div", { className: "cm-body", textContent: body }));
   const note = cap.note || link.note;
   if (note) card.append(el("div", { className: "cm-note", textContent: note }));
+  const flat = u => shortUrl(u).replace(/\/$/, "");
+  const inner = [...new Set((cap.links || []).filter(u => isWeb(u) && flat(u) !== flat(link.url)))];
+  if (inner.length && LinkActions.canExtract(row.target)) {
+    const rows = inner.slice(0, 4).map(u => {
+      const b = el("button", { type: "button", className: "small", textContent: "Keep this instead", title: "Save this link with this one's tags and a note saying where it came from, and move this one to the Trash" });
+      b.onclick = e => { e.stopPropagation(); cardExtract(row, u); };
+      b.addEventListener("pointerdown", e => e.stopPropagation());
+      return el("div", { className: "cm-inner" }, el("span", { className: "cm-url", textContent: shortUrl(u).slice(0, 60), title: u }), b);
+    });
+    card.append(el("div", { className: "cm-links" }, el("div", { className: "cm-linkshead", textContent: inner.length > 4 ? `Links in it (first 4 of ${inner.length})` : "Links in it" }), ...rows));
+  }
   // The saved preview picture first: it lasts where a captured image's address may have expired.
   const pics = [...(link.preview?.image ? [link.preview.image] : []), ...(cap.shotThumb ? [cap.shotThumb] : []), ...(cap.images || []).slice(0, link.preview?.image ? 2 : 3)];
   if (pics.length) card.append(el("div", { className: "cm-thumbs" }, ...pics.map(src => el("img", { src, loading: "lazy", alt: "" }))));

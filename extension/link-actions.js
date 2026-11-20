@@ -141,6 +141,25 @@ const LinkActions = (() => {
     },
   };
 
+  /* Keep another link instead of this one: `to` is saved with this link's tags and the note "from <this
+   * link>", and the copy on show (else the list entry) goes to the Trash, as one step. Undo puts the
+   * copy back and takes the saved link out again. */
+  ACTIONS.extract = async (t, { to } = {}) => {
+    const copy = copyOf(t);
+    if (!to) return { ok: false, say: "No link to keep" };
+    if (!copy && !(t.link.list && !t.link.list.loose)) return { ok: false, say: "Nothing to move to the Trash" };
+    const res = await send({ type: "extract", from: t.link.url, to, ...(copy ? { stashes: [{ id: copy.stash.id, ids: [copy.tab.id] }] } : { list: true }) });
+    if (!res?.ok) return fail(res, "Unable to keep it instead");
+    return { ok: true, say: `Kept ${shortUrl(to)} instead; the original is in the Trash for 30 days · ⌘Z undoes both`, undo: { label: "Keep instead", run: async () => {
+      const back = copy ? await putBack(copy) : await send({ type: "restore-items", items: res.items || [] });
+      if (back?.ok) {
+        if (res.trashed?.length) await send({ type: "trash-delete", ids: res.trashed });
+        await send({ type: "extract-undo", to, saved: res.saved, before: res.before });
+      }
+      return back;
+    } } };
+  };
+
   let busy = false;
   /* Carry out cmd on target; opts.mark rides along on its undo entry for the page to read back. */
   async function run(cmd, t, opts = {}) {
@@ -287,5 +306,5 @@ const LinkActions = (() => {
     return run(cmd, t);
   }
 
-  return { setup, run, push, undo, canUndo, data: () => page.data(), bar, key, copyOf, moveMenu, tags };
+  return { setup, run, push, undo, canUndo, canExtract: canRemove, data: () => page.data(), bar, key, copyOf, moveMenu, tags };
 })();

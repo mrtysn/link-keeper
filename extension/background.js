@@ -2618,24 +2618,32 @@ async function extractLink(msg) {
   const fromTags = ((await read("linkTags", {}))[fk] || []).filter(t => t !== FILTER_TAG);
   const onList = items.find(i => keyOf(i.url) === tk);
   const tab = sessions.flatMap(s => s.tabs).find(t => keyOf(t.url) === tk);
-  let saved;
+  const tagsBefore = (await read("linkTags", {}))[tk] || [];
+  let saved, made = null, noteBefore = null;
   if (onList) {
+    noteBefore = onList.note || null;
     onList.note = joinNote(onList.note, note);
     await setItems(items);
     saved = "merged";
   } else if (tab) {
+    noteBefore = tab.note || null;
     await editMeta(m => { m.tabs[tab.id] = { ...(m.tabs[tab.id] || {}), note: joinNote(m.tabs[tab.id]?.note || tab.note, note) }; });
     saved = "merged";
   } else {
     const res = await addItems([{ url: to, saved_at: new Date().toISOString() }], note, dayGroup());
     if (!res.ok) return res;
     saved = "added";
+    for (const s of await getSessions()) {
+      const t = s.tabs.find(x => keyOf(x.url) === tk);
+      if (t) made = { stash: s.id, tab: t.id };
+    }
   }
   const tags = fromTags.length
     ? await editTags(all => { all[tk] = tagList([...(all[tk] || []), ...fromTags]); return all[tk]; })
     : (await read("linkTags", {}))[tk] || [];
 
   const trashed = [], removed = { stashes: [], list: false, capture: false };
+  let listItems = [];
   for (const p of stashPlan) {
     const r = await handleMessage({ type: "delete-stash", id: p.id, ids: p.ids });
     trashed.push(...(r.trashed || []));
@@ -2644,10 +2652,29 @@ async function extractLink(msg) {
   if (msg.list || msg.capture) {
     const r = await handleMessage({ type: "remove", urls: [from], alsoCaptures: !!msg.capture });
     trashed.push(...(r.trashed || []));
+    listItems = r.items || [];
     removed.list = true;
     removed.capture = !!msg.capture;
   }
-  return { ok: true, from, to, saved, tags, note, removed, trashed };
+  return { ok: true, from, to, saved, tags, note, removed, trashed, items: listItems,
+    before: { tags: tagsBefore, note: noteBefore, made, onList: !!onList, tab: tab?.id || null } };
+}
+
+/* What a page's undo of an extract does to `to`: the link it saved goes again, and a link that was
+ * already saved gets its tags and note back. The copies of `from` are put back by the page. */
+async function unextractLink(msg) {
+  const { to, saved, before } = msg;
+  if (!to || !before) return { ok: false, error: "nothing to undo" };
+  if (saved === "added" && before.made) await handleMessage({ type: "delete-stash", id: before.made.stash, ids: [before.made.tab], trash: false });
+  else if (before.onList) {
+    const items = await getItems();
+    const i = items.find(x => keyOf(x.url) === keyOf(to));
+    if (i) { if (before.note) i.note = before.note; else delete i.note; await setItems(items); }
+  } else if (before.tab) {
+    await editMeta(m => { if (before.note) m.tabs[before.tab] = { ...(m.tabs[before.tab] || {}), note: before.note }; else if (m.tabs[before.tab]) delete m.tabs[before.tab].note; });
+  }
+  await setTags(to, before.tags || []);
+  return { ok: true };
 }
 
 /* Every page's requests, and the agents' through the bridge (bridge.js), which may send only some. */
@@ -2943,6 +2970,9 @@ async function handleMessage(msg) {
 
     case "extract":
       return extractLink(msg);
+
+    case "extract-undo":
+      return unextractLink(msg);
 
     case "queue-active": {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });

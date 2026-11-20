@@ -406,6 +406,42 @@
             }
             return { ok: true, id: s.id, ids };
           }
+          // Keep `to` instead of `from`, as the background does: `to` is saved with from's tags and a note,
+          // `from`'s copies go to the trash.
+          case "extract": {
+            const at = new Date().toISOString();
+            const trashed = [];
+            for (const p of msg.stashes || []) {
+              const s = findStash(p.id);
+              for (const t of takeTabs(p.id, p.ids)) {
+                const e = { id: `tr${++nextId}`, at, kind: "tab", url: t.url, title: t.title, stash: { id: s.id, name: s.name || s.created_at, created_at: s.created_at }, tab: {} };
+                stored().trash.unshift(e);
+                trashed.push(e.id);
+              }
+            }
+            let items = [];
+            if (msg.list) {
+              items = stored().items.filter(i => keyOf(i.url) === keyOf(msg.from));
+              stored().items = stored().items.filter(i => keyOf(i.url) !== keyOf(msg.from));
+              for (const i of items) {
+                const e = { id: `tr${++nextId}`, at, kind: "item", url: i.url, title: i.title, item: i };
+                stored().trash.unshift(e);
+                trashed.push(e.id);
+              }
+            }
+            const onList = stored().items.some(i => keyOf(i.url) === keyOf(msg.to));
+            const tagsBefore = mockTags[keyOf(msg.to)] || [];
+            if (!onList) stored().items.push({ url: msg.to, added_at: at, note: `from ${msg.from}` });
+            mockTags[keyOf(msg.to)] = [...new Set([...tagsBefore, ...(mockTags[keyOf(msg.from)] || [])])];
+            return { ok: true, from: msg.from, to: msg.to, saved: onList ? "merged" : "added", tags: mockTags[keyOf(msg.to)], note: `from ${msg.from}`, trashed, items,
+              before: { tags: tagsBefore, note: null, made: null, onList } };
+          }
+          case "extract-undo": {
+            if (msg.saved === "added") stored().items = stored().items.filter(i => keyOf(i.url) !== keyOf(msg.to));
+            mockTags[keyOf(msg.to)] = msg.before.tags;
+            if (!msg.before.tags.length) delete mockTags[keyOf(msg.to)];
+            return { ok: true };
+          }
           case "remove": {
             const drop = new Set(msg.urls.map(keyOf));
             const removed = stored().items.filter(i => drop.has(keyOf(i.url)));
