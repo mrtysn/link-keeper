@@ -16,6 +16,8 @@
 # Refuses within 2 hours of the last release unless the owner asked for this one (--owner-asked): an
 # agent's own sense that the owner wants a change installed now is not the end of a batch.
 # Needs a clean tree (the batch committed) and Doppler's firefox-signing project for AMO's keys.
+# With LINK_KEEPER_UPDATES_HOST set in config.local.sh (the updates server's ssh name), the signed xpi and
+# updates.json are published to /opt/updates/link-keeper/ there, and every Mac's Firefox updates itself.
 # If AMO's approval outlasts web-ext's wait, the version is submitted but not downloaded: the script
 # then waits for it (up to 15 minutes) and fetches it with tools/fetch-signed-xpi.py. Still unsigned
 # after that, the manifest keeps the new version and --finish completes the release later; running the
@@ -134,6 +136,32 @@ fi
 xpis=("$ext"/web-ext-artifacts/*-"$next".xpi(N))
 (( ${#xpis} )) || { print -u2 "signed, but no $next xpi in web-ext-artifacts"; exit 1 }
 print "signed: ${xpis[1]}"
+
+# Publish: the xpi and updates.json go to the updates server, where every Mac's Firefox finds the new
+# version by itself (the manifest's update_url, checked about once a day; about:addons → gear → Check for
+# Updates does it at once). LINK_KEEPER_UPDATES_HOST in config.local.sh is the server's ssh name; unset,
+# the release is not published and each Mac installs the xpi by hand.
+updates_host=$(sed -n 's/^LINK_KEEPER_UPDATES_HOST="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$repo/config.local.sh" 2>/dev/null | tail -1)
+update_url=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["browser_specific_settings"]["gecko"].get("update_url",""))' "$manifest")
+if [[ -n $updates_host && -n $update_url ]]; then
+  base=${update_url%/*} remote=/opt/updates/link-keeper name=${xpis[1]:t}
+  python3 - "$next" "$base/$name" <<'EOF' > "$ext/web-ext-artifacts/updates.json"
+import json, sys
+_, version, link = sys.argv
+print(json.dumps({"addons": {"link-keeper@mrtysn.github.io": {"updates": [{"version": version, "update_link": link}]}}}, indent=2))
+EOF
+  # A failed upload must not stop the release commit below: the version is signed and AMO's now.
+  if ssh -o BatchMode=yes "$updates_host" "mkdir -p $remote" &&
+     rsync -a --no-owner --no-group "${xpis[1]}" "$ext/web-ext-artifacts/updates.json" "$updates_host:$remote/" &&
+     curl -sf -H 'Cache-Control: no-cache' "$update_url" | grep -q "\"version\": \"$next\""; then
+    print "published: $update_url offers $next"
+  else
+    print -u2 "NOT published: the upload to $updates_host:$remote or the check of $update_url failed;"
+    print -u2 "copy ${xpis[1]:t} and web-ext-artifacts/updates.json there by hand, or install the xpi on each Mac"
+  fi
+else
+  print "not published (set LINK_KEEPER_UPDATES_HOST in config.local.sh): install ${xpis[1]:t} on each Mac by hand"
+fi
 
 # In front, so Firefox's install prompt is on screen.
 (( no_open )) || open -a Firefox "${xpis[1]}"

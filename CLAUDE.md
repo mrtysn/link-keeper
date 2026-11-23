@@ -60,6 +60,9 @@ does not exist.
 - **The owner trying each change as it lands does not end the batch.** Wanting to put a fix in front
   of them is the reason 5.69 to 5.77 went out nine times in under three hours. `release.zsh` refuses
   within 2 hours of the last release unless the owner asked for this one (`--owner-asked`).
+- **Every Mac updates itself** from the updates server: the manifest's `update_url` points at
+  `/link-keeper/updates.json` there, and `release.zsh` publishes the signed xpi and that file when
+  `LINK_KEEPER_UPDATES_HOST` is set in `config.local.sh`. Only the Mac that signs needs Doppler.
 - **Release with `tools/release.zsh`**: it bumps the version, signs on addons.mozilla.org, opens the
   signed xpi in Firefox, and commits and pushes "ship N as a signed release". `--dry-run` shows the
   next version without changing anything.
