@@ -1,5 +1,51 @@
 # Not done yet
 
+## In progress: sync between Macs (as of 2026-11-23)
+
+The add-on's storage lives in one Firefox profile and does not sync; the backup folder is
+whole-file and owned by one profile, and `.owner.json` records `"default"` on every Mac, so two
+Macs sharing a folder would overwrite each other. Stashes are bookmarks and already travel with
+Firefox Sync. The plan below makes the rest sync through a small server of our own over HTTPS,
+with no VPN on either Mac. The Mac that made this plan holds the newest data and is the seed.
+
+**Decisions.** Server code in `sync-server/`, beside `receiver/`. Python standard library and
+SQLite, in a container behind Caddy on the always-on box. Changes are encrypted in the add-on
+with WebCrypto AES-GCM; the key sits in each Mac's Keychain and the helper hands it over, so the
+server only stores ciphertext and the helper needs no crypto library. Server address, tokens and
+key never enter the repo: `config.local.sh` and the Keychain.
+
+**Phase 1, on the seed Mac.**
+1. Server: `POST /ops` (a batch of encrypted changes, acknowledged in order), `GET /ops?since=`,
+   snapshot upload and download, compaction to the latest snapshot plus later changes; one token
+   per device, stored hashed. Dockerfile, compose and Caddy block matching the box's existing
+   services. Tests.
+2. Helper: push and pull when Links opens, every few minutes while Firefox runs and after wake;
+   an offline queue on disk; token and key read with `security`; `link-keeper sync status`.
+   Device id from hostname and profile replaces the owner record; one backup folder per device.
+3. Add-on: the `storage.onChanged` listener (bridge.js) diffs old and new per record into
+   changes stamped with a hybrid logical clock; remote changes go in through the journaled path,
+   so `link-keeper undo` covers them. Merge: last writer wins per record, tags per tag, a
+   deletion moves the record to the Trash, a newer capture keeps account, thread and senders.
+   Not synced: `favicons`, `thumbs`, `dataPatches`, the capture queue. Reconnect to the helper on
+   startup and when Links or Settings opens, instead of waiting up to 10 minutes after "not
+   installed".
+4. Tests: merge rules alone; a local server and two headless Firefox profiles editing at once
+   converge; offline and back; delete on one while editing on the other; a fresh profile filled
+   from a snapshot; the bridge, storage and stash suites.
+5. Seed and secrets: key and tokens generated here, an encrypted snapshot of this Mac's data.
+6. One signed release, then a bundle for the second Mac: instructions, token hashes, the seed
+   snapshot, its token and the key, the signed xpi.
+
+**Phase 2, on the second Mac** (from the bundle): deploy the server on the box, add its DNS
+record, check it over the public address, install the release, put token and key in the
+Keychain; its first sync replaces its data with the seed after saving `pre-restore-*.json`.
+
+**Phase 3, back here:** point this Mac at the server, check both directions with one test tag.
+
+**Open risks.** Two Macs syncing bookmarks may create two "Link Keeper stashes" folders, since
+the add-on finds the folder by name. Phone shares still reach the box over the VPN; the same
+server could take them later.
+
 ## Waiting on the owner
 
 **Watch the videos captured before watching was part of capture (as of 2026-10-21).** 5.81 counts a
