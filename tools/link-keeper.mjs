@@ -78,6 +78,9 @@ Changing (needs Firefox running; each change is journaled)
   undo [--force]                  put the last agent change back; history lists them
   call TYPE [JSON]                any message the pages send that agents may (see bridge.js)
 
+Sync between Macs (README: Sync between Macs)
+  sync [--now]                    this Mac's sync state; --now syncs first
+
 Backups
   backup                          write latest.json now
   backups                         the backup files
@@ -595,6 +598,17 @@ const commands = {
     if (opt.json) return json(r.entries);
     if (!r.entries.length) return out("no agent changes journaled");
     for (const e of r.entries) out(`${e.at}  ${e.cmd}  ${e.summary || ""}`);
+  },
+
+  async sync({ opt }) {
+    const r = await live("sync", { now: !!opt.now });
+    if (opt.json) return json(r);
+    if (!r.enabled) return out(`sync is off: ${(r.missing || ["not set up"]).join(", ")} (tools/sync-setup.zsh)`);
+    const s = r.state || {};
+    out(`device ${r.device}; ${s.joined ? `joined ${s.seeded ? "as the seed" : "from the server's snapshot"}` : s.waiting || "not joined yet"}`);
+    out(`last sync ${r.last?.at || s.at || "never"}; ${r.pending} changes to send, ${r.outbox ?? "?"} batches in the helper's outbox; at batch ${s.cursor ?? 0} of ${s.last ?? "?"}`);
+    if (r.error) out(`error: ${r.error}`);
+    if (r.result && !r.result.ok) process.exitCode = 1;
   },
 
   async backup({ opt }) { done(opt, await live("backup"), r => `wrote ${r.file} (${Math.round(r.bytes / 1024)} KB)`); },

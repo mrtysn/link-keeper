@@ -65,6 +65,41 @@ undo` puts FROM back and takes TO (or what was merged into it) out again; the re
 [{stash, tabs}], list, capture}, trashed, undo}`. `pile --json` and `link --json` then show TO with
 `note` "from FROM" and FROM held nowhere. Card mode's **Keep this instead** is the same step.
 
+## Sync between Macs
+
+The add-on's storage lives in one Firefox profile, and Firefox Sync does not carry it (stashes are
+bookmarks, so those it does carry). `extension/sync.js` keeps the rest the same on every Mac through
+a small server of your own, over HTTPS, with nothing to install on the Macs beyond this repo.
+
+- **What travels:** captures, the links in no stash, the Trash, your tags (each tag on each link on its
+  own, so tagging on two Macs at once keeps both), agent tags, suggestions, capture failures, stash
+  and tab metadata, and the small settings (tag library, filter rules, folder…). Caches (favicons,
+  thumbnails, previews), per-install bookkeeping and the pages' view settings stay on each Mac.
+  `node tools/test-sync.mjs` fails when a storage key is in neither list.
+- **How:** every change is turned into record-level operations stamped with a hybrid logical clock,
+  encrypted in the add-on (AES-GCM; the key is in each Mac's Keychain and never reaches the server),
+  and queued by the helper in `<state>/sync/outbox` until the server takes it. Each Mac applies the
+  others' operations where they are newer than what it holds: the last writer wins per record, and a
+  deletion is a record too. The server (`sync-server/`) stores and orders ciphertext, one token per
+  device, and folds old batches into an encrypted snapshot.
+- **When:** about 8 s after the helper connects, every 3 minutes while Firefox runs, a few seconds
+  after a change, and when Links opens (which also reconnects a helper registered while Firefox ran).
+- **Joining:** a profile's first sync takes the server's snapshot as its whole synced state, after a
+  `pre-restore-*.json` backup. With no snapshot yet, only the Mac set up as the seed writes the first
+  one; the others wait, so a stale copy never becomes everyone's data.
+- `link-keeper sync` shows this Mac's state; `--now` syncs first. Undo (`link-keeper undo`) covers an
+  agent's own changes; a change that arrived from another Mac since makes it refuse, as any later
+  change does.
+
+**Setting it up.** Run the server (`sync-server/`: `docker compose up -d --build` behind a reverse proxy
+with HTTPS; `route.caddy.example` is a Caddy block). On the seed Mac:
+`tools/sync-setup.zsh seed --url https://HOST --other NAME --out DIR` makes the key and a token per
+Mac, keeps this Mac's in the Keychain and writes `DIR/tokens.json` (into the server's `data/`) and
+`DIR/NAME.secrets` (move it to that Mac by hand). On each other Mac:
+`tools/sync-setup.zsh join --url https://HOST --secrets FILE`. Then `native/install.zsh` on each, and
+open Links. Tests: `python3 sync-server/test_server.py`, `node tools/test-sync.mjs`,
+`tools/test-sync-firefox.zsh` (three headless Firefox profiles, the real helper, a local server).
+
 ## After an export: one button
 
 Links → **Import** → **Import from exports**, with **Offline** ticked to read only the exports on

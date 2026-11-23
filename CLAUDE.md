@@ -15,6 +15,7 @@ every script with its purpose; every script's second line is `# DESC:`.
 | `importers/` | export parsers and link enrichers: Telegram, Instagram, X archive, x.com and web lookups | code |
 | `native/` | helpers Firefox starts: the bridge (backups, shell socket, import, watch) and the local-file opener | code |
 | `receiver/` | HTTP endpoint on an always-on box; the phone's shares land in its inbox | code |
+| `sync-server/` | sync between Macs: stores each Mac's encrypted changes and a snapshot (`extension/sync.js` is the other half) | code |
 | `android/` | the share-sheet app that posts to the receiver | code |
 | `docs/` | handoffs, format notes, chat-page surveys | docs |
 | `assets/` | icon variants | data, committed |
@@ -75,7 +76,7 @@ release, not a release per change.
 
 Run the suites the README lists: `tools/preview-pages/test-keys.zsh`, `node tools/test-stash.mjs`, `node tools/test-link-search.mjs` (for `extension/link-search.js` or the Links filter box), `tools/test-extractors.zsh` (for the extractors or a capture), `node tools/test-capture-queue.mjs` (for the capture queue), `tools/test-instagram-export.py` and
 `tools/test-import-instagram-accounts.zsh` (for the Instagram importer, `attach-dm-origin.py` or the import), `tools/test-x-archive.py` (for the X archive importer), `tools/test-source-pages.py` (for the safe-to-delete page), `node tools/test-pile.mjs` (for `link-keeper pile`, `drop`, `tools/drop-list.mjs`, `tools/link-pile-sources.py` or the import's drop-list filter), `node tools/test-chat-grab.mjs` (for grabbing links from a chat page), `tools/test-bridge-import.py` (for the helper's import), `tools/test-agent-browser.py` (for the agent browser, Obscura through the helper's read-page), `tools/test-reel-resources.py` (for watch-reel's OCR, `extract-reel-resources.py` or `reels-to-captures.py`), `tools/test-bridge-socket.py` (for the helper's shell socket), `tools/test-bridge-owner.py` (for which profile owns the backups),
-`node tools/test-bridge.mjs`, for stashing or the live preview `tools/run-in-headless-firefox.zsh
+`node tools/test-bridge.mjs`, for sync between Macs (`extension/sync.js`, the helper's sync ops, `sync-server/`) `node tools/test-sync.mjs`, `python3 sync-server/test_server.py` and `tools/test-sync-firefox.zsh`, for stashing or the live preview `tools/run-in-headless-firefox.zsh
 --extension extension tools/e2e-stash.js` and `tools/preview-frames/test-preview-frames.zsh`, and
 for the bridge or storage `tools/test-bridge-firefox.zsh`.
 
