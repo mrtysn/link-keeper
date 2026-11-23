@@ -1,0 +1,24 @@
+# Link Keeper's sync server on the always-on box. No public port: the shared Caddy reaches it over
+# the external `proxy` network and serves it over HTTPS. data/ holds sync.db and tokens.json.
+services:
+  link-keeper-sync:
+    build: .
+    container_name: link-keeper-sync
+    restart: unless-stopped
+    expose:
+      - "8791"
+    volumes:
+      - ./data:/app/data
+    networks: [web]
+    mem_limit: 150m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8791/healthz"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  web:
+    external: true
+    name: proxy

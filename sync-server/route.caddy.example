@@ -1,0 +1,10 @@
+# The sync server's route in the shared Caddy's sites/ folder. Copy to <name>.caddy there with the
+# real host name in place of HOST. Public on purpose: every call but /healthz needs a device's
+# bearer token, and the server only ever holds ciphertext.
+# probe: /healthz 200
+HOST {
+    import access_log
+    import favicon link-keeper-sync:8791
+    encode gzip
+    reverse_proxy link-keeper-sync:8791
+}
