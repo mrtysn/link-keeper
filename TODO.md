@@ -14,33 +14,22 @@ with WebCrypto AES-GCM; the key sits in each Mac's Keychain and the helper hands
 server only stores ciphertext and the helper needs no crypto library. Server address, tokens and
 key never enter the repo: `config.local.sh` and the Keychain.
 
-**Phase 1, on the seed Mac.**
-1. Server: `POST /ops` (a batch of encrypted changes, acknowledged in order), `GET /ops?since=`,
-   snapshot upload and download, compaction to the latest snapshot plus later changes; one token
-   per device, stored hashed. Dockerfile, compose and Caddy block matching the box's existing
-   services. Tests.
-2. Helper: push and pull when Links opens, every few minutes while Firefox runs and after wake;
-   an offline queue on disk; token and key read with `security`; `link-keeper sync status`.
-   Device id from hostname and profile replaces the owner record; one backup folder per device.
-3. Add-on: the `storage.onChanged` listener (bridge.js) diffs old and new per record into
-   changes stamped with a hybrid logical clock; remote changes go in through the journaled path,
-   so `link-keeper undo` covers them. Merge: last writer wins per record, tags per tag, a
-   deletion moves the record to the Trash, a newer capture keeps account, thread and senders.
-   Not synced: `favicons`, `thumbs`, `dataPatches`, the capture queue. Reconnect to the helper on
-   startup and when Links or Settings opens, instead of waiting up to 10 minutes after "not
-   installed".
-4. Tests: merge rules alone; a local server and two headless Firefox profiles editing at once
-   converge; offline and back; delete on one while editing on the other; a fresh profile filled
-   from a snapshot; the bridge, storage and stash suites.
-5. Seed and secrets: key and tokens generated here, an encrypted snapshot of this Mac's data.
-6. One signed release, then a bundle for the second Mac: instructions, token hashes, the seed
-   snapshot, its token and the key, the signed xpi.
+**Phase 1, on the seed Mac: done (2026-11-23).** The server (`sync-server/`), the add-on's
+`extension/sync.js`, the helper's sync ops, `tools/sync-setup.zsh`, `link-keeper sync` and the tests
+(`sync-server/test_server.py`, `tools/test-sync.mjs`, `tools/test-sync-firefox.zsh`) are committed
+and pass. The key and both device tokens were made on the seed Mac (`m5`); the second Mac's (`m2`)
+bundle went by hand. Changed from the plan: remote changes are not journaled (undo covers an agent's
+own change, and refuses once another Mac changed the same keys); the backup folder stays one per Mac,
+since nothing shares it now; the seed snapshot is written by the seed's add-on on its first sync, not
+carried in the bundle; the release is signed on the second Mac (the seed has no Doppler login) and
+published to the updates server, where the manifest's `update_url` lets every Mac update itself.
 
-**Phase 2, on the second Mac** (from the bundle): deploy the server on the box, add its DNS
-record, check it over the public address, install the release, put token and key in the
-Keychain; its first sync replaces its data with the seed after saving `pre-restore-*.json`.
+**Phase 2, on the second Mac** (from the bundle's instructions): deploy the server on the box behind
+the shared Caddy (no DNS step: wildcard), commit its route to homelab, sign and publish the release,
+join (its data is replaced by the seed's after a `pre-restore-*.json` backup).
 
-**Phase 3, back here:** point this Mac at the server, check both directions with one test tag.
+**Phase 3, back on the seed Mac:** install the published release once by hand (5.81 has no
+`update_url`), let it seed, check both directions with one test tag.
 
 **Open risks.** Two Macs syncing bookmarks may create two "Link Keeper stashes" folders, since
 the add-on finds the folder by name. Phone shares still reach the box over the VPN; the same
