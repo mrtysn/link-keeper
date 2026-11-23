@@ -2799,6 +2799,7 @@ async function handleMessage(msg) {
       return watchCollect().catch(e => ({ ok: false, error: String(e.message || e) }));
     // Links opening: the links shared from the phone since the last pull.
     case "inbox-pull":
+      if (typeof syncWake === "function") syncWake();   // Links opening also brings in what the other Macs changed (sync.js)
       return inboxPull(!!msg.force).catch(e => ({ ok: false, error: String(e.message || e) }));
 
     case "watch-settings":

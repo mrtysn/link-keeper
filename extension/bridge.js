@@ -39,10 +39,13 @@ function bridgeDown(why) {
   bridge.error = /no such native application/i.test(why) ? "the helper is not installed: run native/install.zsh" : why;
   for (const call of bridge.calls.values()) call.reject(new Error(bridge.error));
   bridge.calls.clear();
-  // Not installed is not going to change soon; anything else is retried sooner, backing off.
+  // Not installed is not going to change soon; anything else is retried sooner, backing off. Links
+  // opening and a new start try again at once (syncWake in sync.js), so a helper registered while
+  // Firefox runs is reached without waiting for this.
   const wait = /not installed/.test(bridge.error) ? 10 * 60e3 : bridge.retry;
   bridge.retry = Math.min(bridge.retry * 2, 10 * 60e3);
-  setTimeout(bridgeConnect, wait);
+  clearTimeout(bridge.retryTimer);
+  bridge.retryTimer = setTimeout(bridgeConnect, wait);
 }
 
 /* An operation the helper does itself: write or read a backup, keep the undo journal. */
@@ -75,6 +78,7 @@ async function bridgeReceive(m) {
       await restoreIfEmpty().catch(e => console.error("restore:", e));
       backupSoon(5e3);
       watchPoll(10e3);   // records a worker finished while the add-on was away
+      if (typeof syncSoon === "function") syncSoon(8e3);   // sync.js
       return;
     case "host-reply": {
       const call = bridge.calls.get(m.id);
@@ -214,6 +218,7 @@ async function agentRequest(cmd, args) {
       return res.ok ? restoreBackup(res.data, "asked for by an agent") : res;
     }
     case "history": return hostCall("journal-list");
+    case "sync": return args.now ? syncNow().then(async r => ({ ...await syncStatus(), result: r })) : syncStatus();
     case "undo": return agentQueue(() => agentUndo(!!args.force));
     case "call": {
       const msg = args.message || {};

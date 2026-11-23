@@ -528,7 +528,135 @@ def inbox_pull() -> dict:
     return {"ok": True, "configured": True, "new": new}
 
 
+# --- sync ------------------------------------------------------------------------------------------
+# Sync between Macs goes through the sync server (sync-server/). The add-on records and encrypts the
+# changes; this helper only holds the secrets and carries ciphertext. The server's address is
+# LINK_KEEPER_SYNC_URL (config.local.sh). The device token ("<device>.<secret>") and the encryption key
+# (base64, 32 bytes) live in the login Keychain, service "link-keeper-sync", accounts "token" and "key";
+# LINK_KEEPER_SYNC_TOKEN and LINK_KEEPER_SYNC_KEY in the environment win, for tests. Batches waiting to
+# go out are files in <state>/sync/outbox, so a change made offline or while the server is down leaves
+# with the next push.
+SYNC_SERVICE = "link-keeper-sync"
+SYNC_TIMEOUT = 60
+
+
+def keychain(account: str) -> str | None:
+    try:
+        done = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", SYNC_SERVICE, "-a", account, "-w"],
+                              capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip() or None if done.returncode == 0 else None
+
+
+def sync_secret(name: str) -> str | None:
+    return os.environ.get(f"LINK_KEEPER_SYNC_{name.upper()}") or keychain(name)
+
+
+def sync_setup() -> dict:
+    url = (config_value("LINK_KEEPER_SYNC_URL") or "").rstrip("/")
+    token, key = sync_secret("token"), sync_secret("key")
+    missing = [what for what, have in (("LINK_KEEPER_SYNC_URL in config.local.sh", url),
+                                       (f"the token in the Keychain ({SYNC_SERVICE}/token)", token),
+                                       (f"the key in the Keychain ({SYNC_SERVICE}/key)", key)) if not have]
+    return {"url": url, "token": token, "key": key, "device": token.split(".", 1)[0] if token and "." in token else None,
+            "missing": missing}
+
+
+def sync_config() -> dict:
+    """What the add-on needs to sync: whether it is set up, this device's name and the key."""
+    s = sync_setup()
+    if s["missing"]:
+        return {"ok": True, "enabled": False, "missing": s["missing"]}
+    # The seed is the one Mac whose data becomes the server's first snapshot; every other Mac waits for it.
+    seed = (config_value("LINK_KEEPER_SYNC_SEED") or "") in ("1", "yes", "true")
+    return {"ok": True, "enabled": True, "device": s["device"], "url": s["url"], "key": s["key"], "seed": seed}
+
+
+def sync_http(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+    import urllib.error
+    import urllib.request
+    s = sync_setup()
+    if s["missing"]:
+        return 0, {"error": "sync is not set up: " + ", ".join(s["missing"])}
+    req = urllib.request.Request(s["url"] + path, method=method,
+                                 data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Authorization": f"Bearer {s['token']}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=SYNC_TIMEOUT) as r:
+            return r.status, json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read() or b"{}")
+        except ValueError:
+            return e.code, {"error": f"HTTP {e.code}"}
+    except (OSError, ValueError) as e:
+        return 0, {"error": f"the sync server did not answer: {e}"}
+
+
+def outbox() -> Path:
+    d = state_dir() / "sync" / "outbox"
+    d.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return d
+
+
+sync_push_lock = threading.Lock()
+
+
+def sync_push(batches: list) -> dict:
+    """Queue the batches on disk, then send everything queued, oldest first."""
+    for b in batches if isinstance(batches, list) else []:
+        if isinstance(b, dict) and re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", str(b.get("id") or "")) and isinstance(b.get("blob"), str):
+            write_atomic(outbox() / f"{b['id']}.json", json.dumps({"id": b["id"], "blob": b["blob"]}))
+    with sync_push_lock:
+        files = sorted(outbox().glob("*.json"))
+        sent, seq = 0, None
+        for i in range(0, len(files), 50):
+            group = files[i:i + 50]
+            code, res = sync_http("POST", "/v1/ops", {"batches": [json.loads(p.read_text()) for p in group]})
+            if code != 200:
+                return {"ok": False, "error": res.get("error") or f"HTTP {code}", "pushed": sent, "queued": len(files) - sent}
+            for p in group:
+                p.unlink(missing_ok=True)
+            sent += len(group)
+            seq = res.get("seq")
+        return {"ok": True, "pushed": sent, "queued": 0, "seq": seq}
+
+
+def sync_pull(since: int, limit: int) -> dict:
+    code, res = sync_http("GET", f"/v1/ops?since={max(since, 0)}&limit={min(max(limit, 1), 1000)}")
+    if code == 409 and res.get("error") == "behind":
+        return {"ok": False, "behind": True, "floor": res.get("floor")}
+    if code != 200:
+        return {"ok": False, "error": res.get("error") or f"HTTP {code}"}
+    return res
+
+
+def sync_snapshot_get() -> dict:
+    code, res = sync_http("GET", "/v1/snapshot")
+    if code == 404:
+        return {"ok": True, "none": True}
+    return res if code == 200 else {"ok": False, "error": res.get("error") or f"HTTP {code}"}
+
+
+def sync_snapshot_put(upto, blob) -> dict:
+    code, res = sync_http("PUT", "/v1/snapshot", {"upto": upto, "blob": blob})
+    return res if code == 200 else {"ok": False, "error": res.get("error") or f"HTTP {code}", "floor": res.get("floor")}
+
+
+def sync_status() -> dict:
+    s = sync_setup()
+    return {"ok": True, "configured": not s["missing"], "missing": s["missing"], "device": s["device"],
+            "url": s["url"] or None, "queued": len(list(outbox().glob("*.json")))}
+
+
 HOST_OPS = {
+    "sync-config": lambda m: sync_config(),
+    "sync-push": lambda m: sync_push(m.get("batches") or []),
+    "sync-pull": lambda m: sync_pull(int(m.get("since") or 0), int(m.get("limit") or 500)),
+    "sync-snapshot-get": lambda m: sync_snapshot_get(),
+    "sync-snapshot-put": lambda m: sync_snapshot_put(m.get("upto"), m.get("blob")),
+    "sync-status": lambda m: sync_status(),
     "backup": lambda m: write_backup(m.get("data") or {}, m.get("reason") or "change"),
     "list-backups": lambda m: list_backups(),
     "read-backup": lambda m: read_backup(m.get("name") or ""),
