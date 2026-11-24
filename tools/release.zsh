@@ -114,7 +114,9 @@ else
 
   set_version "$current" "$next"
 
-  if ! (cd "$ext" && "${signing[@]}" npx web-ext sign --channel unlisted); then
+  # web-ext-artifacts/ sits inside extension/: without the ignore, an unpacked older xpi left there
+  # is packed into the new one (5.82 carried a 5.21 copy).
+  if ! (cd "$ext" && "${signing[@]}" npx web-ext sign --channel unlisted --ignore-files "web-ext-artifacts" "web-ext-artifacts/**"); then
     xpis=("$ext"/web-ext-artifacts/*-"$next".xpi(N))
     if (( ! ${#xpis} )); then
       fetch_signed "$next" && code=0 || code=$?
