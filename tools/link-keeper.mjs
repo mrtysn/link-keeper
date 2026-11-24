@@ -190,7 +190,7 @@ function parse(argv) {
     if (!a.startsWith("--")) { pos.push(a); continue; }
     const name = a.slice(2);
     const flag = ["json", "text", "all", "untagged", "force", "list", "capture", "everywhere", "clear",
-      "lock", "unlock", "star", "unstar", "replace", "dry-run", "help"].includes(name);
+      "lock", "unlock", "star", "unstar", "replace", "dry-run", "help", "now"].includes(name);
     const value = flag ? true : argv[++i];
     if (value === undefined) throw new Error(`--${name} needs a value`);
     if (name === "tag") (opt.tag ||= []).push(value);
