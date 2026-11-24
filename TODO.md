@@ -24,12 +24,9 @@ since nothing shares it now; the seed snapshot is written by the seed's add-on o
 carried in the bundle; the release is signed on the second Mac (the seed has no Doppler login) and
 published to the updates server, where the manifest's `update_url` lets every Mac update itself.
 
-**Phase 2, on the second Mac** (from the bundle's instructions): deploy the server on the box behind
-the shared Caddy (no DNS step: wildcard), commit its route to homelab, sign and publish the release,
-join (its data is replaced by the seed's after a `pre-restore-*.json` backup).
-
-**Phase 3, back on the seed Mac:** install the published release once by hand (5.81 has no
-`update_url`), let it seed, check both directions with one test tag.
+**Phases 2 and 3: done (2026-11-24).** The server runs on the box behind the shared Caddy; 5.82 is
+signed, published to the updates server and installed on both Macs; the seed wrote the first
+snapshot, the second Mac joined, and a test tag went each way and was deleted again.
 
 **Open risks.** Two Macs syncing bookmarks may create two "Link Keeper stashes" folders, since
 the add-on finds the folder by name. Phone shares still reach the box over the VPN; the same
