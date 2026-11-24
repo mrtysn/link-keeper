@@ -199,7 +199,10 @@ function makeTabs(n, windowId = 1, idBase = 0) {
 }
 
 async function load(browser) {
-  const ctx = vm.createContext({ browser, console, crypto, structuredClone, setTimeout, clearTimeout, URL, URLSearchParams, fetch, btoa });
+  // bridge.js is not loaded here, so the helper answers as when it is not running; a check that needs
+  // its answers sets bg.hostCall itself.
+  const ctx = vm.createContext({ browser, console, crypto, structuredClone, setTimeout, clearTimeout, URL, URLSearchParams, fetch, btoa,
+    hostCall: async () => { throw new Error("the helper is not running"); } });
   vm.runInContext(source, ctx);
   return ctx;
 }
