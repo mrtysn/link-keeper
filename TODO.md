@@ -32,6 +32,12 @@ snapshot, the second Mac joined, and a test tag went each way and was deleted ag
 the add-on finds the folder by name. Phone shares still reach the box over the VPN; the same
 server could take them later.
 
+**Sync has no view in the add-on (found 2026-11-24).** Whether a Mac joined, when it last synced and
+what is queued shows only in `link-keeper sync`, which needs the repo's CLI on the PATH. Checking the
+M5 during the Firefox profile move (the notebook repo's `synced/2026-11-21-firefox-move-m2-to-m5.html`)
+meant running `node tools/link-keeper.mjs sync` by hand. The fix belongs in Settings → Backups in
+`extension/list.js` (`loadBackups`), reading the helper's `sync` op (`extension/bridge.js`).
+
 ## Waiting on the owner
 
 **Watch the videos captured before watching was part of capture (as of 2026-10-21).** 5.81 counts a
